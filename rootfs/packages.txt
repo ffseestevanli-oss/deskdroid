@@ -1,0 +1,29 @@
+# Debian trixie packages in the Phase 0 rootfs. One per line, comments allowed.
+# Base
+sudo
+locales
+ca-certificates
+dbus
+dbus-x11
+xauth
+xkb-data
+x11-xserver-utils
+x11-utils
+# Plasma (X11 session, minimal)
+plasma-desktop
+plasma-workspace
+kwin-x11
+systemsettings
+breeze
+konsole
+dolphin
+kate
+fonts-noto-core
+fonts-noto-color-emoji
+# Graphics test tools
+mesa-utils
+mesa-vulkan-drivers
+vulkan-tools
+libgl1-mesa-dri
+# Apps
+firefox-esr

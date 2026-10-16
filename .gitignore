@@ -1,0 +1,9 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+# Fetched by scripts/fetch-prebuilts.sh, never committed
+app/src/main/jniLibs/
+prebuilts-cache/
+rootfs/out/

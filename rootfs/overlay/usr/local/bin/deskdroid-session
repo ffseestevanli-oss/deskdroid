@@ -1,0 +1,27 @@
+#!/bin/sh
+# Starts the Plasma X11 session inside proot. Launched by the DeskDroid app.
+# DESKDROID_GPU: llvmpipe | nocomp | turnip | virgl
+
+export XDG_RUNTIME_DIR=/tmp/runtime-$USER
+mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+export XDG_SESSION_TYPE=x11 XDG_CURRENT_DESKTOP=KDE KDE_FULL_SESSION=true
+export QT_QPA_PLATFORM=xcb
+# Plasma's systemd boot can't work under proot; the rootfs ships ~/.config/startkderc with systemdBoot=false.
+
+case "${DESKDROID_GPU:-llvmpipe}" in
+  llvmpipe)
+    export GALLIUM_DRIVER=llvmpipe ;;
+  nocomp)
+    export GALLIUM_DRIVER=llvmpipe KWIN_COMPOSE=N ;;
+  turnip)
+    # Needs a Mesa build with the kgsl backend (Debian's turnip uses msm DRM). Phase 1.
+    export MESA_LOADER_DRIVER_OVERRIDE=zink TU_DEBUG=noconform ;;
+  virgl)
+    # Needs a virgl server on the Android side listening on /tmp/.virgl_test.
+    export GALLIUM_DRIVER=virpipe ;;
+esac
+
+echo "deskdroid-session: GPU mode ${DESKDROID_GPU}"
+glxinfo -B 2>&1 | grep -E 'renderer|version' || true
+
+exec dbus-launch --exit-with-session startplasma-x11

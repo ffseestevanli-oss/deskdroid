@@ -1,0 +1,30 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install patchelf
+        run: sudo apt-get update && sudo apt-get install -y patchelf
+      - name: Fetch proot prebuilts
+        run: scripts/fetch-prebuilts.sh
+      - name: Build debug APK
+        run: >
+          ./gradlew --no-daemon assembleDebug
+          -PdeskdroidRootfsUrl=https://github.com/${{ github.repository }}/releases/download/rootfs-latest/deskdroid-rootfs-arm64.tar.xz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deskdroid-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
