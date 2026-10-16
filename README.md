@@ -2,7 +2,7 @@
 
 A full KDE Plasma desktop on non-rooted Android phones: one app, tap to start, works on the phone screen and on external monitors. Licensed GPL-3.0.
 
-Architecture and roadmap: see the project plan (`plan/deskdroid-plan.md` in the project files; copy it into `docs/` when this repo is pushed).
+Architecture and roadmap: see [docs/plan.md](docs/plan.md).
 
 ## Status: Phase 0 feasibility spike
 
