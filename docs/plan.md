@@ -17,8 +17,8 @@ _Draft 1 · 2026-10-16_
 | Device requirement | Non-root only | Rooted devices are rare; painless install is the product. |
 | Container | **proot** (ptrace-based, user space) | The only general way to run a full glibc distro without root. |
 | Distro | **Debian 13 "trixie" arm64** | Official arm64 port, stable base, Plasma 6.3 packaged, huge package set, Box64/Wine/Mesa well tested on it by the Termux and Winlator communities. Arch Linux ARM is unofficial, rolling (breaks a prebuilt image often), and harder to ship as a pinned, reproducible rootfs. |
-| Display server | **Termux:X11**, embedded in our APK | Mature, fast X server for Android (renders into an Android Surface, supports pointer capture, IME, DeX, secondary displays). |
-| Desktop session | Plasma 6 **X11 session** for MVP | Works inside Termux:X11 today. See section 6 for the Wayland-only Plasma risk. |
+| Display server | **Termux:X11** for the MVP, then **DeskDroid's own Wayland host** (Phase 2) | Termux:X11 is mature and gets us a desktop fastest. Wayland is the destination because Plasma 6.8+ is Wayland-only (section 6). |
+| Desktop session | Plasma **X11 session** for MVP, **Plasma Wayland** (KWin nested on our host) from Phase 2 | X11 apps keep working through Xwayland in both. |
 | GPU (Adreno) | **Turnip** (Mesa Vulkan) via `/dev/kgsl`, **Zink** for OpenGL | `/dev/kgsl` is reachable from unprivileged apps; this is how Winlator/Mobox get real GPU speed. |
 | GPU (Mali/other) | **llvmpipe** at first, then a Vulkan forwarding layer (Vortek-style) or virgl over Android GLES | No unprivileged path to Panfrost/Mali DRM nodes. |
 | x86 translation | **Box64** (x86_64) + **Box86**/Box64-WOW64 (32-bit) + **Wine** (WoW64 build) | De facto standard on ARM Linux. |
@@ -120,7 +120,7 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 | **No KVM / no real VM** | Can't run x86 VMs; no Docker | Box64/Wine for x86 apps; document clearly. (Android's AVF "Linux Terminal" VM is not open to third-party apps.) |
 | **proot overhead** (ptrace on every syscall) | 10–30% slower syscall-heavy work (compiles, package installs) | Use proot's seccomp acceleration, keep hot paths (rendering, audio) outside ptrace (sockets, shared memory). |
 | **No systemd** | Some services expect it | Simple init script with dbus-launch; systemctl shim for common cases. |
-| **No DRM/KMS, no Wayland compositor on hardware** | X11 only; no real KWin Wayland | X11 session now; nested `kwin_wayland --x11-display` later (see risks). |
+| **No DRM/KMS, no Wayland compositor on hardware** | KWin can't drive the screen directly | KWin runs nested: its Wayland backend draws into a window provided by our Android-side Wayland host (section 6). |
 | **W^X: apps targeting API 29+ can't exec files from app data** | Breaks naive "exec binaries from rootfs" for Play-distributed builds | Ship proot and its loader as `lib*.so` in `jniLibs` (executable `nativeLibraryDir`); proot loads rootfs ELF files via its loader (mmap, not execve), as Winlator/AndroidIDE-style apps do. Must validate on Android 15/16 early (Phase 0). |
 | **Mali/PowerVR GPUs** | No Turnip | Vulkan forwarding to the Android driver (Vortek-style), with Zink on top for OpenGL. **Pulled into Phase 1** because the primary dev device is a Pixel (Tensor: Mali, PowerVR on G5). llvmpipe as last-resort fallback. |
 | **No `/dev/input`, no uinput** | Gamepads/joysticks need a bridge | Userspace bridge (section 4). |
@@ -131,7 +131,10 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 
 ## 6. Biggest risks
 
-1. **KDE is moving to Wayland-only Plasma** (announced for Plasma 6.8). Debian trixie's Plasma 6.3 has the X11 session, which covers us for the life of trixie. Long-term path: run `kwin_wayland` nested on the X11 backend inside Termux:X11, with Xwayland for X apps. Prototype this in Phase 2 so we are not surprised.
+1. **Plasma is now Wayland-only.** Plasma 6.8 dropped the X11 session; 6.7 is the last X11 series, supported into early 2027 ([Phoronix](https://www.phoronix.com/news/KDE-Plasma-68-Wayland-Exclusive)). X11 *apps* keep working through Xwayland. Debian trixie's Plasma 6.3 X11 session is fine for the MVP, but we must be on Wayland before moving the image to Debian 14 (forky). Plan:
+   - **Step A (Phase 2 start, cheap):** run `kwin_wayland` nested inside Termux:X11 using KWin's X11 backend. Proves Plasma Wayland under proot with zero new display code. Costs one extra frame copy.
+   - **Step B (Phase 2 deliverable):** replace Termux:X11 with a **DeskDroid Wayland host** in the APK: a small Android-side compositor that shows one full-screen surface per Android display and implements just what nested KWin needs (`xdg-shell`, `wl_seat`, `wl_shm`, `linux-dmabuf` backed by AHardwareBuffer, relative-pointer and pointer-constraints for games). KWin runs with its Wayland backend on top, Plasma does all real window management, and Xwayland covers X11 and Wine apps. Rotation, monitor hot-plug and any aspect ratio become simple output-size changes.
+   - **Prior art:** [tawc](https://github.com/wmww/tawc), a new rootless Android Wayland compositor with Xwayland, which reaches the GPU through libhybris (Android's own drivers loaded into glibc apps). Experimental and license unchecked, but it proves the approach, and libhybris is a candidate GPU path for the Pixel alongside Vulkan forwarding.
 2. **Play Store policy.** Downloading executable code, W^X, and "all files access" can block Play listing. Plan for GitHub Releases + F-Droid/Obtainium first, Play second.
 3. **Performance expectations.** Plasma + Firefox is fine on recent Snapdragons; Windows games depend heavily on Turnip versions and device. Ship per-device profiles and set expectations clearly.
 4. **Maintenance load** of forks (Termux:X11, proot, Mesa). Keep forks thin and upstream fixes.
@@ -182,7 +185,7 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 - Pointer capture toggle, Meta/Alt-Tab capture, phone-as-touchpad.
 - Shared storage (`~/Android`), "open with Android app" and Android notifications from Linux.
 - Backup/restore of `/home`; immutable A/B base images with automatic rollback (section 3).
-- Nested KWin Wayland prototype.
+- Plasma Wayland: nested KWin on Termux:X11 first (Step A), then the DeskDroid Wayland host replaces Termux:X11 (Step B, section 6).
 
 ### Phase 3: Windows and x86 apps
 - Box64/Box86 + Wine WoW64 preinstalled, `.exe` double-click in Dolphin "just works".
