@@ -92,7 +92,7 @@ The installer offers two main choices, with a third tucked under "...or there's 
 
 - One image per edition, built by CI from shared package lists (`rootfs/packages/{base,plasma,full,ultralite}.txt`) and published together. The installer downloads only the chosen one.
 - Editions are upgradeable in place: Light → Full is just installing the Full package set (a "Get the Full apps" button in the launcher). Ultra-lite → Light/Full swaps the desktop, so it goes through a fresh image with `/home` kept.
-- Discover talks to apt through PackageKit, which needs the system D-Bus. The rootfs now boots through `deskdroid-boot`, which runs under proot's fake root (so sudo, apt and Discover can install software), starts system D-Bus, then drops to the `deskdroid` user. Flatpak in Discover is off (needs user namespaces).
+- Discover talks to apt through PackageKit, which needs the system D-Bus. The rootfs now boots through `deskdroid-boot`, which runs under proot's fake root (so sudo, apt and Discover can install software), starts system D-Bus, then drops to the `deskdroid` user. Flathub is enabled in Discover too (section 5b).
 - Ultra-lite stays on X11 permanently (MATE is X11-only). After the Wayland switch it runs inside rootful Xwayland on the DeskDroid Wayland host, so we never maintain two display stacks.
 - Open question: Light has no web browser. Firefox is one click away in Discover; say if you'd rather Light include it.
 
@@ -140,10 +140,30 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 | **W^X: apps targeting API 29+ can't exec files from app data** | Breaks naive "exec binaries from rootfs" for Play-distributed builds | Ship proot and its loader as `lib*.so` in `jniLibs` (executable `nativeLibraryDir`); proot loads rootfs ELF files via its loader (mmap, not execve), as Winlator/AndroidIDE-style apps do. Must validate on Android 15/16 early (Phase 0). |
 | **Mali/PowerVR GPUs** | No Turnip | Vulkan forwarding to the Android driver (Vortek-style), with Zink on top for OpenGL. **Pulled into Phase 1** because the primary dev device is a Pixel (Tensor: Mali, PowerVR on G5). llvmpipe as last-resort fallback. |
 | **No `/dev/input`, no uinput** | Gamepads/joysticks need a bridge | Userspace bridge (section 4). |
-| **Storage** | Rootfs lives in app-private storage (deleted on uninstall) | Bind `/sdcard` (with All Files Access or SAF) as `~/Android`; backup/export of `/home` built in. |
+| **Storage** | Rootfs lives in app-private storage (deleted on uninstall) | Plain folder, see section 5b. Bind `/sdcard` as `~/Android`; backup/export built in; `hasFragileUserData` gives the "keep app data" choice on uninstall. |
 | **OEM breakage** (e.g. reports of Termux breaking on ColorOS/OxygenOS 15) | Some vendors restrict exec/ptrace | Device test matrix; known-issues list per OEM. |
 
 ---
+
+## 5b. Flatpak, storage, login and the terminal (decided 2026-10-18)
+
+**Flatpak (must have).** Flathub is enabled in Discover next to apt. Flatpak normally sandboxes every app with bubblewrap, which needs Linux user namespaces that Android doesn't give apps. Plan:
+- First check whether unprivileged user namespaces happen to work on the Pixel 10 Pro; if they do, use real bubblewrap.
+- Otherwise ship a **bubblewrap stand-in** (`/usr/bin/bwrap` shim) that translates bubblewrap's arguments (`--bind`, `--ro-bind`, `--symlink`, `--dev`, `--proc`, `--tmpfs`, `--setenv`, `--args FD`, …) into proot bind mounts and ignores the namespace and seccomp flags. Apps run without Flatpak's sandbox, like everything else in DeskDroid, which is already isolated from Android by the app sandbox.
+- Use per-user installs (`flatpak --user`) by default so no system helper or polkit is needed. Many Flathub apps have aarch64 builds; x86_64-only ones can run under FEX later.
+- The same shim also runs Steam's game containers (section 6b), so it is one piece of work for two features. Prove it in Phase 1 with a few popular Flathub apps.
+
+**Where the system lives: a plain folder, not an image file.**
+- The rootfs is a normal folder in the app's private storage (`/data/data/io.deskdroid.app/files/rootfs`). It already grows and shrinks with what's installed, like qcow2, with no fixed size.
+- Not `/sdcard/.DeskDroid`: shared storage has no symlinks, no Unix permissions and no exec, so Linux can't run from it, and other apps could read it.
+- Not a qcow2/ext4 image file: mounting one needs root (loop devices) or FUSE, neither available to apps.
+- Shared storage appears inside Linux as `~/Android` for swapping files with Android apps.
+- Backup/export writes the system (or just `/home`) to one compressed archive on shared storage, and restore reads it back. That covers the "single file you can move around" need.
+- `android:hasFragileUserData="true"` so Android asks whether to keep app data when DeskDroid is uninstalled.
+
+**Login screen (optional).** Real SDDM expects to own the machine (systemd-logind, virtual terminals, starting the X server as root), which proot can't provide. Instead, a "Require password" setting locks the desktop with Plasma's lock screen at every start (themed like a login screen), plus an optional fingerprint/PIN gate in the DeskDroid app before the desktop opens. Data at rest is already protected by Android's file-based encryption of app storage.
+
+**What the terminal can and can't do.** Most things work: apt and sudo, compilers, git, Python/Node, SSH client, networking, editing system files. What doesn't: systemd/`systemctl` (shim for common cases), `mount`, kernel modules, Docker/Podman and KVM, iptables/firewall, binding ports below 1024, raw sockets, and direct hardware access. Syscall-heavy work (big builds, package installs) is slower because of proot.
 
 ## 6. Biggest risks
 
