@@ -197,6 +197,11 @@ Steam ships in the image as a desktop and menu icon, ready on first click. Valve
 
 **Size impact (estimates, to measure in Phase 3):** FEX x86 rootfs about +1.5 to 2 GB on disk (+0.5 to 0.8 GB to the compressed download). Steam client +1 GB on first launch. Each Proton version +1 GB. Total free space recommended goes from ~6 GB to ~10 GB. Phase 1 images can leave the FEX rootfs as a first-click download if the base download size hurts.
 
+**Other launchers (gaming focus for now: Steam, Lutris and similar).**
+- **Lutris** ships in Full next to Steam, from Debian. It manages Wine/Proton, emulators and GOG/Humble installs; its Wine runners go through FEX or Box64, and it uses the same bwrap shim where needed.
+- **Heroic Games Launcher** (Epic and GOG, has arm64 builds) is the candidate for Epic games until Epic ships its own Linux client; offered through Flathub in Discover.
+- **Watch item: Epic Games Store for Linux.** Epic's reported upcoming Linux port of the Epic Games Store (not yet verified by us). Evaluate when it ships; it would likely be x86-only and run under FEX like Steam.
+
 **Hard parts:**
 - **Steam Linux Runtime containers.** Steam runs games (and Proton) inside its pressure-vessel container, which uses bubblewrap and needs user namespaces that Android apps don't get. Fix: a `bwrap` shim that turns bubblewrap's bind-mount arguments into a nested proot, or force games to run outside the container. This is the first thing to prove.
 - **Steam UI speed.** The Steam UI is an emulated Chromium (steamwebhelper). Expect sluggishness on the desktop client; Big Picture mode and launching games directly are the smoother path.
@@ -271,7 +276,7 @@ DeskDroid will not be on Google Play. What that changes:
 - Box64/Box86 + Wine WoW64 preinstalled, `.exe` double-click in Dolphin "just works".
 - Wine prefix manager (per-app prefixes, DXVK/VKD3D/WineD3D choice), device performance profiles.
 - x86_64 Linux apps via FEX/Box64 launcher shims (no binfmt_misc without root).
-- **Steam preinstalled** (section 6b): FEX + x86 rootfs + thunks in our apt repo, bwrap shim for Steam's runtime containers, Proton games launching from Steam.
+- **Steam and Lutris preinstalled** (section 6b): FEX + x86 rootfs + thunks in our apt repo, bwrap shim for Steam's runtime containers, Proton games launching from Steam.
 
 ### Phase 4: Gaming and peripherals
 - Gamepad bridge (Wine XInput + SDL virtual joystick), on-screen controls for touch-only use.

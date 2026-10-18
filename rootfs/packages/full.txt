@@ -10,3 +10,4 @@ okular
 gwenview
 # Phase 3, from DeskDroid's own apt repo (plan section 6b):
 #   box64, wine (WoW64), fex-emu, fex-emu-thunks, deskdroid-fex-rootfs, deskdroid-steam
+# Phase 3, from Debian: lutris
