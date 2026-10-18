@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds libtalloc, proot and proot's loader from the vendored sources in
+# Builds libtalloc, proot, proot's loader and ddtool from the vendored sources in
 # native/ and installs them as lib*.so files, so Android puts them in the
 # app's executable nativeLibraryDir (W^X rule for targetSdk 29+).
 #
@@ -54,8 +54,19 @@ make -C "$WORK/proot" -j"$(nproc)" \
   PROOT_UNBUNDLE_LOADER=/nonexistent \
   proot loader/loader
 
+echo "== ddtool"
+# zstd decoder + minisign check used by the installer (ddtool/ddtool.c).
+mkdir -p "$WORK/ddtool"
+"$CC" -O2 -Wall $REPRO -DZSTD_DISABLE_ASM -DZSTD_LEGACY_SUPPORT=0 -DDEBUGLEVEL=0 \
+  -I"$HERE/zstd" -I"$HERE/zstd/common" -I"$HERE/monocypher" \
+  "$HERE/ddtool/ddtool.c" \
+  "$HERE"/zstd/common/*.c "$HERE"/zstd/decompress/*.c \
+  "$HERE/monocypher/monocypher.c" "$HERE/monocypher/monocypher-ed25519.c" \
+  -Wl,--build-id=none -Wl,-z,noexecstack -o "$WORK/ddtool/ddtool"
+
+install -m 755 "$WORK/ddtool/ddtool" "$OUT/libddtool.so"
 install -m 755 "$WORK/proot/proot" "$OUT/libproot.so"
 install -m 755 "$WORK/proot/loader/loader" "$OUT/libproot-loader.so"
 install -m 644 "$WORK/talloc/libtalloc.so" "$OUT/libtalloc.so"
-"$STRIP" --strip-unneeded "$OUT/libproot.so" "$OUT/libtalloc.so"
+"$STRIP" --strip-unneeded "$OUT/libproot.so" "$OUT/libtalloc.so" "$OUT/libddtool.so"
 ls -l "$OUT"
