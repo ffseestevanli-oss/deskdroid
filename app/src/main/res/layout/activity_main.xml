@@ -36,6 +36,9 @@
         <Spinner android:id="@+id/display" android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <CheckBox android:id="@+id/autoStart" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="Start the desktop when the phone boots" />
+
         <Button android:id="@+id/start" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:text="Start desktop" />
         <Button android:id="@+id/stop" android:layout_width="match_parent"

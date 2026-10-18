@@ -163,6 +163,13 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 
 **Login screen (optional).** Real SDDM expects to own the machine (systemd-logind, virtual terminals, starting the X server as root), which proot can't provide. Instead, a "Require password" setting locks the desktop with Plasma's lock screen at every start (themed like a login screen), plus an optional fingerprint/PIN gate in the DeskDroid app before the desktop opens. Data at rest is already protected by Android's file-based encryption of app storage.
 
+**Start on boot (optional setup toggle).** When on, a `BOOT_COMPLETED` receiver starts the session foreground service, so the desktop is already running when the user opens it.
+- `BOOT_COMPLETED` arrives after the first unlock, which is when Android decrypts app storage and the rootfs becomes readable. `LOCKED_BOOT_COMPLETED` is too early.
+- Android 15 bans starting some foreground service types from a boot receiver (dataSync, camera, mediaPlayback, phoneCall, mediaProjection, microphone). The session uses `specialUse`, which isn't on that list. If audio later needs the microphone type, it's added only when the user opens the desktop, not at boot.
+- Android won't let a background app open a window, so the boot start runs headless. The desktop appears when the user taps the notification or "Start desktop".
+- Needs unrestricted battery (requested when the toggle is turned on) and the phantom-process fix. The app must have been opened once after install, because Android doesn't deliver broadcasts to apps that were never launched.
+- Cost: an idle Plasma session holds roughly 1–1.5 GB of RAM (estimate), so the setup screen says so and the toggle is off by default.
+
 **What the terminal can and can't do.** Most things work: apt and sudo, compilers, git, Python/Node, SSH client, networking, editing system files. What doesn't: systemd/`systemctl` (shim for common cases), `mount`, kernel modules, Docker/Podman and KVM, iptables/firewall, binding ports below 1024, raw sockets, and direct hardware access. Syscall-heavy work (big builds, package installs) is slower because of proot.
 
 ## 6. Biggest risks

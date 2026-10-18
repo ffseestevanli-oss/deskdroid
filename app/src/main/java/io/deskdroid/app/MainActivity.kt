@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.Spinner
 import android.widget.TextView
@@ -65,6 +66,7 @@ class MainActivity : Activity() {
             if (!paths.isInstalled) {
                 AppLog.setStatus("Install the system image first"); return@setOnClickListener
             }
+            Prefs.setGpuMode(this, GPU_MODES[gpu.selectedItemPosition])
             startForegroundService(
                 Intent(this, SessionService::class.java)
                     .putExtra(SessionService.EXTRA_GPU, GPU_MODES[gpu.selectedItemPosition])
@@ -81,6 +83,17 @@ class MainActivity : Activity() {
                 .setPositiveButton("Open Developer options") { _, _ -> Checks.openDeveloperOptions(this) }
                 .setNegativeButton("Later", null).show()
         }
+
+        findViewById<CheckBox>(R.id.autoStart).apply {
+            isChecked = Prefs.autoStart(this@MainActivity)
+            setOnCheckedChangeListener { _, on ->
+                Prefs.setAutoStart(this@MainActivity, on)
+                if (on && !Checks.batteryUnrestricted(this@MainActivity)) {
+                    Checks.requestBatteryUnrestricted(this@MainActivity)
+                }
+            }
+        }
+        gpu.setSelection(GPU_MODES.indexOf(Prefs.gpuMode(this)).coerceAtLeast(0))
 
         AppLog.statusListener = { status.text = it }
         AppLog.listener = { log.text = it }

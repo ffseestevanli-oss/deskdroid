@@ -35,11 +35,14 @@ class SessionService : Service() {
         }
         val gpu = intent?.getStringExtra(EXTRA_GPU) ?: "llvmpipe"
         val display = intent?.getIntExtra(EXTRA_DISPLAY, 0) ?: 0
-        Thread { runSession(gpu, display) }.start()
+        // Started at boot: Android won't let a background app open a window, so run
+        // without showing it; "Start desktop" or the notification brings it up.
+        val headless = intent?.getBooleanExtra(EXTRA_HEADLESS, false) ?: false
+        Thread { runSession(gpu, display, headless) }.start()
         return START_NOT_STICKY
     }
 
-    private fun runSession(gpu: String, displayId: Int) {
+    private fun runSession(gpu: String, displayId: Int, headless: Boolean) {
         val paths = Paths(this)
         try {
             wakeLock = getSystemService(PowerManager::class.java)
@@ -50,7 +53,7 @@ class SessionService : Service() {
             paths.x11Socket.delete()
             xServer = startX11Server(paths).also { pump("x11", it) }
             waitFor(paths.x11Socket, 15_000)
-            showDisplay(displayId)
+            if (!headless) showDisplay(displayId)
 
             AppLog.setStatus("Starting Plasma ($gpu)")
             session = Proot.sessionCommand(paths, gpu).start().also { pump("session", it) }
@@ -122,5 +125,6 @@ class SessionService : Service() {
         const val ACTION_STOP = "io.deskdroid.app.STOP"
         const val EXTRA_GPU = "gpu"
         const val EXTRA_DISPLAY = "display"
+        const val EXTRA_HEADLESS = "headless"
     }
 }
