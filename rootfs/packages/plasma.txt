@@ -1,0 +1,13 @@
+# Light and Full: KDE Plasma desktop with Discover for installing apps.
+plasma-desktop
+plasma-workspace
+kwin-x11
+systemsettings
+breeze
+konsole
+dolphin
+kate
+ark
+plasma-discover
+plasma-discover-backend-packagekit
+fonts-noto-color-emoji

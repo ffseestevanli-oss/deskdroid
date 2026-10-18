@@ -1,0 +1,15 @@
+# Every edition: system basics and X11 plumbing.
+sudo
+locales
+ca-certificates
+dbus
+dbus-x11
+xauth
+xkb-data
+x11-xserver-utils
+x11-utils
+fonts-noto-core
+mesa-utils
+mesa-vulkan-drivers
+vulkan-tools
+libgl1-mesa-dri

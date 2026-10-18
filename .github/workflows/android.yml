@@ -23,7 +23,7 @@ jobs:
       - name: Build debug APK
         run: >
           ./gradlew --no-daemon assembleDebug
-          -PdeskdroidRootfsUrl=https://github.com/${{ github.repository }}/releases/download/rootfs-latest/deskdroid-rootfs-arm64.tar.xz
+          -PdeskdroidRootfsBaseUrl=https://github.com/${{ github.repository }}/releases/download/rootfs-latest/
       - uses: actions/upload-artifact@v4
         with:
           name: deskdroid-debug-apk

@@ -15,8 +15,8 @@ android {
         versionName = "0.0.1-spike"
         ndk { abiFilters += "arm64-v8a" }
         buildConfigField(
-            "String", "ROOTFS_URL",
-            "\"${project.findProperty("deskdroidRootfsUrl")}\""
+            "String", "ROOTFS_BASE_URL",
+            "\"${project.findProperty("deskdroidRootfsBaseUrl")}\""
         )
     }
 

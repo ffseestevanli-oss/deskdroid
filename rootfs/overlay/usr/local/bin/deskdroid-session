@@ -1,5 +1,5 @@
 #!/bin/sh
-# Starts the Plasma X11 session inside proot. Launched by the DeskDroid app.
+# Starts the desktop session as the deskdroid user. Launched by deskdroid-boot.
 # DESKDROID_GPU: llvmpipe | nocomp | turnip | virgl
 
 export XDG_RUNTIME_DIR=/tmp/runtime-$USER
@@ -24,4 +24,10 @@ esac
 echo "deskdroid-session: GPU mode ${DESKDROID_GPU}"
 glxinfo -B 2>&1 | grep -E 'renderer|version' || true
 
-exec dbus-launch --exit-with-session startplasma-x11
+# Light/Full run Plasma; Ultra-lite runs MATE.
+if command -v startplasma-x11 >/dev/null; then
+  exec dbus-launch --exit-with-session startplasma-x11
+else
+  export XDG_CURRENT_DESKTOP=MATE
+  exec dbus-launch --exit-with-session mate-session
+fi

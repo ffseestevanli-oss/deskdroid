@@ -6,6 +6,7 @@ import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Bundle
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -24,7 +25,15 @@ class MainActivity : Activity() {
 
         val status = findViewById<TextView>(R.id.status)
         val log = findViewById<TextView>(R.id.log)
-        val url = findViewById<EditText>(R.id.rootfsUrl).apply { setText(BuildConfig.ROOTFS_URL) }
+        val url = findViewById<EditText>(R.id.rootfsUrl)
+        val edition = findViewById<Spinner>(R.id.edition)
+        edition.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, EDITION_LABELS)
+        edition.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: android.view.View?, pos: Int, id: Long) {
+                url.setText("${BuildConfig.ROOTFS_BASE_URL}deskdroid-rootfs-${EDITIONS[pos]}-arm64.tar.xz")
+            }
+            override fun onNothingSelected(p: AdapterView<*>?) = Unit
+        }
         val gpu = findViewById<Spinner>(R.id.gpuMode)
         val display = findViewById<Spinner>(R.id.display)
 
@@ -115,6 +124,12 @@ class MainActivity : Activity() {
 
     companion object {
         private const val PICK_ROOTFS = 1
+        private val EDITION_LABELS = listOf(
+            "Light: KDE Plasma + Discover",
+            "Full: Plasma + Firefox, LibreOffice, GIMP, VLC (Steam in Phase 3)",
+            "Ultra-lite: MATE, native ARM apps only",
+        )
+        private val EDITIONS = listOf("light", "full", "ultralite")
         private val GPU_LABELS = listOf(
             "Software (llvmpipe), compositing on",
             "Software, compositing off (fastest)",

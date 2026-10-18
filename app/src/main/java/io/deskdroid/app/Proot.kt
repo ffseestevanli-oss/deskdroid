@@ -2,10 +2,8 @@ package io.deskdroid.app
 
 import java.io.File
 
-/** Builds the proot command line that enters the Debian rootfs as the desktop user. */
+/** Builds the proot command line that boots the Debian rootfs and starts the desktop. */
 object Proot {
-    const val USER = "deskdroid"
-    const val UID = 1000
 
     fun sessionCommand(paths: Paths, gpuMode: String): ProcessBuilder {
         paths.prootTmp.mkdirs()
@@ -15,13 +13,13 @@ object Proot {
             "--link2symlink",
             "--sysvipc",
             "-L",
-            "--change-id=$UID:$UID",
+            "-0", // fake root + setuid emulation; deskdroid-boot drops to the user
             "-r", paths.rootfs.path,
             "-b", "/dev",
             "-b", "/proc",
             "-b", "/sys",
             "-b", "${paths.rootfs.path}/tmp:/dev/shm",
-            "-w", "/home/$USER",
+            "-w", "/root",
         )
         // Android hides some /proc files from apps; bind harmless stand-ins.
         for ((name, content) in fakeProcFiles()) {
@@ -34,14 +32,13 @@ object Proot {
         }
         args += listOf(
             "/usr/bin/env", "-i",
-            "HOME=/home/$USER",
-            "USER=$USER",
+            "HOME=/root",
             "LANG=C.UTF-8",
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "TMPDIR=/tmp",
             "DISPLAY=:0",
             "DESKDROID_GPU=$gpuMode",
-            "/bin/sh", "/usr/local/bin/deskdroid-session",
+            "/bin/sh", "/usr/local/bin/deskdroid-boot",
         )
         return ProcessBuilder(args).redirectErrorStream(true).also { pb ->
             pb.environment().apply {

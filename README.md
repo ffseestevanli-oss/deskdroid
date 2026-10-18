@@ -10,7 +10,7 @@ This build answers one question: does the architecture work on real phones (Pixe
 
 What's in it:
 - `app/`: a minimal Android launcher (Kotlin, no AndroidX). Downloads and unpacks the rootfs, starts the X server and Plasma under proot from a foreground service, and shows the desktop on the phone screen or an external display.
-- `rootfs/`: builds the Debian trixie arm64 + Plasma image with `mmdebstrap`.
+- `rootfs/`: builds the Debian trixie arm64 images with `mmdebstrap`, one per edition: Light (Plasma + Discover), Full (Plasma + apps) and Ultra-lite (MATE).
 - `scripts/fetch-prebuilts.sh`: pulls Termux's Android build of proot into `jniLibs` (so it is executable under Android's W^X rule).
 - `.github/workflows/`: CI that builds the APK and publishes the rootfs as the `rootfs-latest` release.
 
@@ -22,7 +22,7 @@ Phase 0 shortcuts (all replaced in Phase 1):
 ## First build
 
 1. Create the GitHub repo and push this folder to `main`.
-2. Actions → **Rootfs image** → Run workflow. Publishes `rootfs-latest` (about 1–1.5 GB).
+2. Actions → **Rootfs images** → Run workflow. Publishes all three editions to the `rootfs-latest` release.
 3. Actions → **Android APK** runs on push. Download the `deskdroid-debug-apk` artifact.
 4. On the phone: install Termux:X11 from https://github.com/termux/termux-x11/releases and the DeskDroid APK.
 5. Follow `docs/spike-checklist.md`.

@@ -13,8 +13,10 @@ Record results for each step (works / fails + log excerpt from the app screen).
 ## Desktop on the phone screen
 - [ ] "Start desktop" with GPU = Software: Termux:X11 opens and Plasma appears
 - [ ] Log shows proot started without `execve` / permission errors (W^X check)
-- [ ] Dolphin, Konsole, Kate, System Settings open
-- [ ] Firefox ESR opens a website (network + DNS work)
+- [ ] Dolphin, Konsole, Kate, System Settings open (Light image first: smallest Plasma)
+- [ ] Firefox ESR opens a website (Full / Ultra-lite) (network + DNS work)
+- [ ] `sudo apt update` works in Konsole, and Discover can install an app (Light)
+- [ ] Ultra-lite image starts a MATE desktop
 - [ ] Touch and Bluetooth/USB mouse + keyboard work
 - [ ] Session survives 10 minutes of use and 5 minutes screen-off
 - [ ] "Software, compositing off" feels faster than compositing on

@@ -1,0 +1,12 @@
+# Full: ready-to-use apps on top of Light.
+firefox-esr
+libreoffice-calc
+libreoffice-writer
+libreoffice-impress
+libreoffice-kf6
+gimp
+vlc
+okular
+gwenview
+# Phase 3, from DeskDroid's own apt repo (plan section 6b):
+#   box64, wine (WoW64), fex-emu, fex-emu-thunks, deskdroid-fex-rootfs, deskdroid-steam

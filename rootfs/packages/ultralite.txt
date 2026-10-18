@@ -1,0 +1,8 @@
+# Ultra-lite: MATE desktop, native ARM apps only (no Box64, FEX, Wine or Steam).
+mate-desktop-environment-core
+mate-terminal
+pluma
+eom
+atril
+engrampa
+firefox-esr

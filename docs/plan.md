@@ -80,6 +80,22 @@ _Draft 1 · 2026-10-16_
 
 ---
 
+## 3a. Editions (chosen at install)
+
+The installer offers two main choices, with a third tucked under "...or there's this":
+
+| Edition | Desktop | What's included | x86 / Windows | Size (estimate: download / on disk) |
+|---|---|---|---|---|
+| **Light** | KDE Plasma | Base desktop only: Dolphin, Konsole, Kate, Ark, System Settings and **Discover** to add anything else. | Added later from Discover (DeskDroid repo) | ~1.2 GB / ~4 GB |
+| **Full** | KDE Plasma | Light plus Firefox, LibreOffice, GIMP, VLC, Okular, Gwenview, and from Phase 3 **Steam**, Box64 + Wine and FEX. | Preinstalled | ~3.5 GB / ~10–12 GB (incl. Steam client) |
+| **Ultra-lite** (under "...or there's this") | **MATE** | Basic native ARM apps: Caja, MATE Terminal, Pluma, Eye of MATE, Atril, Engrampa, Firefox ESR. | None, ARM only | ~0.6 GB / ~2 GB |
+
+- One image per edition, built by CI from shared package lists (`rootfs/packages/{base,plasma,full,ultralite}.txt`) and published together. The installer downloads only the chosen one.
+- Editions are upgradeable in place: Light → Full is just installing the Full package set (a "Get the Full apps" button in the launcher). Ultra-lite → Light/Full swaps the desktop, so it goes through a fresh image with `/home` kept.
+- Discover talks to apt through PackageKit, which needs the system D-Bus. The rootfs now boots through `deskdroid-boot`, which runs under proot's fake root (so sudo, apt and Discover can install software), starts system D-Bus, then drops to the `deskdroid` user. Flatpak in Discover is off (needs user namespaces).
+- Ultra-lite stays on X11 permanently (MATE is X11-only). After the Wayland switch it runs inside rootful Xwayland on the DeskDroid Wayland host, so we never maintain two display stacks.
+- Open question: Light has no web browser. Firefox is one click away in Discover; say if you'd rather Light include it.
+
 ## 4. Display and input pipeline
 
 **Display path:** X clients in proot → Unix socket (`/tmp/.X11-unix` bound into proot) → embedded Termux:X11 server → Android `Surface` (AHardwareBuffer) → SurfaceFlinger → screen.

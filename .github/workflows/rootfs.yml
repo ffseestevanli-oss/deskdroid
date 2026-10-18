@@ -1,4 +1,4 @@
-name: Rootfs image
+name: Rootfs images
 
 on:
   workflow_dispatch:
@@ -12,16 +12,35 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [light, full, ultralite]
     steps:
       - uses: actions/checkout@v4
       - name: Install mmdebstrap
         run: sudo apt-get update && sudo apt-get install -y mmdebstrap xz-utils debian-archive-keyring
-      - name: Build rootfs
-        run: sudo rootfs/build-rootfs.sh "$PWD/out"
+      - name: Build ${{ matrix.edition }} rootfs
+        run: sudo rootfs/build-rootfs.sh ${{ matrix.edition }} "$PWD/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ matrix.edition }}
+          path: out/*
+          compression-level: 0
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
       - name: Publish as the rootfs-latest release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release delete rootfs-latest --yes --cleanup-tag || true
-          gh release create rootfs-latest out/deskdroid-rootfs-arm64.tar.xz out/deskdroid-rootfs-arm64.tar.xz.sha256 \
-            --title "Rootfs (latest)" --notes "Debian trixie arm64 + KDE Plasma, built from ${{ github.sha }}" --prerelease
+          gh release create rootfs-latest out/* \
+            --title "Rootfs (latest)" --notes "Debian trixie arm64: Light, Full and Ultra-lite editions, built from ${{ github.sha }}" --prerelease

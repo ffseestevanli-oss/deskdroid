@@ -16,6 +16,9 @@
             android:textSize="18sp"
             android:paddingBottom="12dp" />
 
+        <Spinner android:id="@+id/edition" android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
         <EditText
             android:id="@+id/rootfsUrl"
             android:layout_width="match_parent"
