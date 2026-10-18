@@ -3,7 +3,7 @@ build/
 local.properties
 .idea/
 *.iml
-# Fetched by scripts/fetch-prebuilts.sh, never committed
+# Never commit binaries: F-Droid builds from source
 app/src/main/jniLibs/
 prebuilts-cache/
 rootfs/out/

@@ -16,10 +16,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - name: Install patchelf
-        run: sudo apt-get update && sudo apt-get install -y patchelf
-      - name: Fetch proot prebuilts
-        run: scripts/fetch-prebuilts.sh
+      - name: Install the pinned NDK
+        run: sdkmanager --install "ndk;$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)"
       - name: Build debug APK
         run: >
           ./gradlew --no-daemon assembleDebug
