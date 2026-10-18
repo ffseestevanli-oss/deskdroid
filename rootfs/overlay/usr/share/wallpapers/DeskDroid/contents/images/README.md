@@ -1,3 +1,3 @@
-Drop the approved DeskDroid gradient wallpaper here as PNG files named by
-resolution (e.g. 3840x2160.png, 2160x3840.png, 5120x1440.png). Plasma picks the
-closest match for each screen. Source: /mnt/project-files/ui/ (mockups thread).
+DeskDroid default wallpaper, the glow background from the approved UI mockups
+(/mnt/project-files/ui/). Plasma picks the closest size for each screen.
+Regenerate with rootfs/wallpaper/make-wallpaper.py (needs numpy and Pillow).
