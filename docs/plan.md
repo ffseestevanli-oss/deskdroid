@@ -159,6 +159,12 @@ Steam ships in the image as a desktop and menu icon, ready on first click. Valve
 - **Steam UI speed.** The Steam UI is an emulated Chromium (steamwebhelper). Expect sluggishness on the desktop client; Big Picture mode and launching games directly are the smoother path.
 - **Anti-cheat** games stay unsupported, same as on Steam Deck without vendor opt-in.
 
+## 6c. Branding and look
+
+- **Product design:** Steven approved the "party" mockup design (2026-10-18). Mockups and the source assets live in `/mnt/project-files/ui/`. The launcher app follows it.
+- **Default KDE wallpaper:** the gradient background from that mockup. It ships in the rootfs as the `DeskDroid` wallpaper package (`/usr/share/wallpapers/DeskDroid/`, one PNG per common resolution and orientation, including ultrawide and portrait) and is set as the default by a Plasma first-start script (`deskdroid-wallpaper.js`). Users can change it as usual.
+- **Next:** match the Plasma color scheme, splash screen and panel accents to the same palette (a DeskDroid Global Theme), so the app and the desktop feel like one product.
+
 ## 7. Licensing when bundling
 
 | Component | License | What it means for us |
