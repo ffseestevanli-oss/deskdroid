@@ -4,6 +4,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.system.Os
+import android.system.OsConstants
 import java.io.File
 import java.io.FileInputStream
 
@@ -26,8 +27,11 @@ class AudioBridge(private val pipe: File) {
 
     fun stop() {
         running = false
-        // Unblock a reader waiting in open() for a writer.
-        try { File(pipe.path).outputStream().close() } catch (_: Exception) {}
+        // Unblock a reader waiting in open() for a writer. Non-blocking, so this
+        // fails fast (ENXIO) instead of hanging when nobody is reading.
+        try {
+            Os.close(Os.open(pipe.path, OsConstants.O_WRONLY or OsConstants.O_NONBLOCK, 0))
+        } catch (_: Exception) {}
         thread?.interrupt()
         thread = null
     }

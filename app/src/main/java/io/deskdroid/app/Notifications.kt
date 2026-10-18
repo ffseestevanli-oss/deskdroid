@@ -28,12 +28,13 @@ object Notifications {
     /** Session notification; tapping it opens the desktop. */
     fun session(c: Context, text: String): Notification {
         channels(c)
-        val show = PendingIntent.getService(
-            c, 1, android.content.Intent(c, SessionService::class.java).setAction(SessionService.ACTION_SHOW),
+        // Straight to the desktop window: an activity PendingIntent may always open UI.
+        val show = PendingIntent.getActivity(
+            c, 1, Intent(c, DesktopActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE
         )
         val stop = PendingIntent.getService(
-            c, 2, android.content.Intent(c, SessionService::class.java).setAction(SessionService.ACTION_STOP),
+            c, 2, Intent(c, SessionService::class.java).setAction(SessionService.ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE
         )
         return Notification.Builder(c, SESSION)
