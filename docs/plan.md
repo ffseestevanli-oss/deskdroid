@@ -54,7 +54,7 @@ _Draft 1 · 2026-10-16_
 **Reuse vs. build:**
 - **Reuse:** Termux:X11 (fork as a module), proot (Termux fork), Box64, Wine, Mesa, DXVK, Debian packages.
 - **Build ourselves:** the launcher/installer app, the rootfs build pipeline, the session init scripts, the input/display bridges, the integration package.
-- **Study (do not copy blindly):** Winlator (bundling, kgsl/Turnip setup, gamepad shim, Wine prefix management), Mobox, termux-desktop scripts, XoDos, AndroidIDE (how to ship Termux-style userland inside a Play-distributable app).
+- **Study (do not copy blindly):** Winlator (bundling, kgsl/Turnip setup, gamepad shim, Wine prefix management), Mobox, termux-desktop scripts, XoDos, AndroidIDE (how to ship Termux-style userland with a modern targetSdk).
 
 ---
 
@@ -137,7 +137,7 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 | **proot overhead** (ptrace on every syscall) | 10–30% slower syscall-heavy work (compiles, package installs) | Use proot's seccomp acceleration, keep hot paths (rendering, audio) outside ptrace (sockets, shared memory). |
 | **No systemd** | Some services expect it | Simple init script with dbus-launch; systemctl shim for common cases. |
 | **No DRM/KMS, no Wayland compositor on hardware** | KWin can't drive the screen directly | KWin runs nested: its Wayland backend draws into a window provided by our Android-side Wayland host (section 6). |
-| **W^X: apps targeting API 29+ can't exec files from app data** | Breaks naive "exec binaries from rootfs" for Play-distributed builds | Ship proot and its loader as `lib*.so` in `jniLibs` (executable `nativeLibraryDir`); proot loads rootfs ELF files via its loader (mmap, not execve), as Winlator/AndroidIDE-style apps do. Must validate on Android 15/16 early (Phase 0). |
+| **W^X: apps targeting API 29+ can't exec files from app data** | Breaks naive "exec binaries from rootfs" with a modern targetSdk | Ship proot and its loader as `lib*.so` in `jniLibs` (executable `nativeLibraryDir`); proot loads rootfs ELF files via its loader (mmap, not execve), as Winlator/AndroidIDE-style apps do. Must validate on Android 15/16 early (Phase 0). Fallback, now open to us since we're not on Play: target API 28 like Termux, which allows exec from app storage. |
 | **Mali/PowerVR GPUs** | No Turnip | Vulkan forwarding to the Android driver (Vortek-style), with Zink on top for OpenGL. **Pulled into Phase 1** because the primary dev device is a Pixel (Tensor: Mali, PowerVR on G5). llvmpipe as last-resort fallback. |
 | **No `/dev/input`, no uinput** | Gamepads/joysticks need a bridge | Userspace bridge (section 4). |
 | **Storage** | Rootfs lives in app-private storage (deleted on uninstall) | Plain folder, see section 5b. Bind `/sdcard` as `~/Android`; backup/export built in; `hasFragileUserData` gives the "keep app data" choice on uninstall. |
@@ -178,7 +178,7 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
    - **Step A (Phase 2 start, cheap):** run `kwin_wayland` nested inside Termux:X11 using KWin's X11 backend. Proves Plasma Wayland under proot with zero new display code. Costs one extra frame copy.
    - **Step B (Phase 2 deliverable):** replace Termux:X11 with a **DeskDroid Wayland host** in the APK: a small Android-side compositor that shows one full-screen surface per Android display and implements just what nested KWin needs (`xdg-shell`, `wl_seat`, `wl_shm`, `linux-dmabuf` backed by AHardwareBuffer, relative-pointer and pointer-constraints for games). KWin runs with its Wayland backend on top, Plasma does all real window management, and Xwayland covers X11 and Wine apps. Rotation, monitor hot-plug and any aspect ratio become simple output-size changes.
    - **Prior art:** [tawc](https://github.com/wmww/tawc), a new rootless Android Wayland compositor with Xwayland, which reaches the GPU through libhybris (Android's own drivers loaded into glibc apps). Experimental and license unchecked, but it proves the approach, and libhybris is a candidate GPU path for the Pixel alongside Vulkan forwarding.
-2. **Play Store policy.** Downloading executable code, W^X, and "all files access" can block Play listing. Plan for GitHub Releases + F-Droid/Obtainium first, Play second.
+2. **F-Droid inclusion rules.** F-Droid builds everything from source, so prebuilt binaries in the APK are not allowed (section 7b). Getting into the main F-Droid repo takes time, so our own F-Droid repo and GitHub Releases come first.
 3. **Performance expectations.** Plasma + Firefox is fine on recent Snapdragons; Windows games depend heavily on Turnip versions and device. Ship per-device profiles and set expectations clearly.
 4. **Maintenance load** of forks (Termux:X11, proot, Mesa). Keep forks thin and upstream fixes.
 
@@ -231,16 +231,27 @@ Steam ships in the image as a desktop and menu icon, ready on first click. Valve
 
 ---
 
+## 7b. Distribution: F-Droid and GitHub only (decided 2026-10-18)
+
+DeskDroid will not be on Google Play. What that changes:
+- **Freed from Play rules:** "All files access" (`MANAGE_EXTERNAL_STORAGE`) for a full `~/Android` view of shared storage, the battery-optimization exemption request, downloading the system image, and a low targetSdk are all fine. We keep a current targetSdk (35+) with proot in `jniLibs`. Targeting API 28 like Termux stays a fallback if the `jniLibs` route fails on the Pixel in Phase 0.
+- **F-Droid builds from source:** no prebuilt binaries in the APK. `scripts/fetch-prebuilts.sh` (Termux's proot .deb) is a Phase 0 shortcut only. In Phase 1, proot, talloc and later the X server, PulseAudio and the Wayland host are compiled from source with the NDK as part of the Gradle build, so F-Droid's build server can reproduce them.
+- **Reproducible builds:** aim for bit-identical APKs so F-Droid can publish our own signed APK. Then GitHub, our F-Droid repo and the main F-Droid repo all ship the same signature, and users can switch between them without reinstalling.
+- **The downloaded system image is fine for F-Droid** as long as it's free software from public sources and built openly in CI. The rootfs uses Debian `main` only (non-free components dropped). Full's Steam download will give the F-Droid listing the "Non-Free Add-ons" anti-feature label; acceptable, and Light/Ultra-lite have none.
+- **Channels:** (1) GitHub Releases with Obtainium support from day one; (2) our own F-Droid repo (fdroidserver on GitHub Pages) for quick updates; (3) main F-Droid repo submission once builds are from source and reproducible.
+- **Updates:** no self-updating APK code; F-Droid and Obtainium handle app updates. The system image updates through apt and the A/B images (section 3).
+
 ## 8. Phased roadmap (MVP first)
 
 ### Phase 0: Feasibility spike
-- Minimal app: embedded Termux:X11 + proot from `jniLibs` + a stock Debian arm64 rootfs, targetSdk current.
+- Minimal app: embedded Termux:X11 + proot from `jniLibs` + a stock Debian arm64 rootfs, targetSdk current (API 28 as fallback).
 - Prove: exec works under W^X on Android 14/15/16, Xfce-or-Plasma starts, Turnip on `/dev/kgsl` runs `vkcube`, audio plays.
 - Test on 3 devices: Steven's Pixel 10 Pro (primary dev device, PowerVR), a Snapdragon flagship, one other Mali/MediaTek.
 - Prove Vulkan forwarding on the Pixel renders a composited Plasma desktop smoothly.
 - **Exit:** a written go/no-go on the architecture above.
 
 ### Phase 1: MVP "Tap to desktop"
+- proot and talloc built from source with the NDK in the Gradle build (replaces the Phase 0 prebuilt download; required for F-Droid).
 - Installer flow (download, verify, extract, progress, resume).
 - CI-built Debian + Plasma rootfs.
 - Session service, phantom-process check and fix flow, battery-optimization prompt.
@@ -268,7 +279,7 @@ Steam ships in the image as a desktop and menu icon, ready on first click. Valve
 - Forwarding-path performance work for games on Mali/PowerVR.
 
 ### Phase 5: Distribution and polish
-- Releases on GitHub + F-Droid/Obtainium; evaluate Play Store.
+- Releases on GitHub (+ Obtainium) and our own F-Droid repo, then submit to the main F-Droid repo (section 7b). No Google Play.
 - Delta rootfs updates, crash reporting (opt-in), OEM known-issues list, docs site.
 - Optional: second distro image (Arch) if users ask.
 

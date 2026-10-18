@@ -22,7 +22,7 @@ PKGS="$(for l in $LISTS; do cat "$HERE/packages/$l.txt"; done | grep -Ev '^\s*(#
 mmdebstrap \
   --arch=arm64 \
   --variant=apt \
-  --components=main,contrib,non-free-firmware \
+  --components=main \
   --aptopt='APT::Install-Recommends "false"' \
   --include="$PKGS" \
   --customize-hook='chroot "$1" useradd -m -u 1000 -s /bin/bash -G sudo deskdroid' \

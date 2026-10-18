@@ -1,6 +1,6 @@
 # DeskDroid
 
-A full KDE Plasma desktop on non-rooted Android phones: one app, tap to start, works on the phone screen and on external monitors. Licensed GPL-3.0.
+A full KDE Plasma desktop on non-rooted Android phones: one app, tap to start, works on the phone screen and on external monitors. Licensed GPL-3.0. Distributed through GitHub Releases and F-Droid (not Google Play).
 
 Architecture and roadmap: see [docs/plan.md](docs/plan.md).
 
@@ -11,7 +11,7 @@ This build answers one question: does the architecture work on real phones (Pixe
 What's in it:
 - `app/`: a minimal Android launcher (Kotlin, no AndroidX). Downloads and unpacks the rootfs, starts the X server and Plasma under proot from a foreground service, and shows the desktop on the phone screen or an external display.
 - `rootfs/`: builds the Debian trixie arm64 images with `mmdebstrap`, one per edition: Light (Plasma + Discover), Full (Plasma + apps) and Ultra-lite (MATE).
-- `scripts/fetch-prebuilts.sh`: pulls Termux's Android build of proot into `jniLibs` (so it is executable under Android's W^X rule).
+- `scripts/fetch-prebuilts.sh`: pulls Termux's Android build of proot into `jniLibs` (so it is executable under Android's W^X rule). Phase 0 only: F-Droid requires building from source, so Phase 1 compiles proot with the NDK instead.
 - `.github/workflows/`: CI that builds the APK and publishes the rootfs as the `rootfs-latest` release.
 
 Phase 0 shortcuts (all replaced in Phase 1):
