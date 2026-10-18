@@ -5,6 +5,7 @@ kwin-x11
 systemsettings
 breeze
 konsole
+plasma-pa
 dolphin
 kate
 ark

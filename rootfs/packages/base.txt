@@ -13,3 +13,6 @@ mesa-utils
 mesa-vulkan-drivers
 vulkan-tools
 libgl1-mesa-dri
+# Sound: PulseAudio writes into a FIFO the app plays (etc/deskdroid/pulse.pa)
+pulseaudio
+pulseaudio-utils

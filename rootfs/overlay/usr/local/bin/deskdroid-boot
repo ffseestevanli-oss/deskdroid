@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs as (proot-faked) root. Starts system services, then the user's desktop.
 # proot -0 emulates root and setuid, so sudo/apt/Discover work for the user later.
+# DESKDROID_* variables come from the app (SessionService.sessionEnv).
 
 mkdir -p /run/dbus
 rm -f /run/dbus/pid
@@ -8,6 +9,6 @@ dbus-daemon --system --fork --nopidfile 2>&1 || echo "deskdroid-boot: system dbu
 
 exec runuser -u deskdroid -- env \
   HOME=/home/deskdroid USER=deskdroid LOGNAME=deskdroid SHELL=/bin/bash \
-  LANG="${LANG:-C.UTF-8}" PATH="$PATH" TMPDIR=/tmp DISPLAY="$DISPLAY" \
-  DESKDROID_GPU="$DESKDROID_GPU" \
+  LANG="${LANG:-C.UTF-8}" PATH="$PATH" TMPDIR=/tmp DISPLAY="$DISPLAY" TZ="$TZ" \
+  DESKDROID_GPU="$DESKDROID_GPU" DESKDROID_SCALE="$DESKDROID_SCALE" \
   /bin/sh /usr/local/bin/deskdroid-session

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds a DeskDroid Debian arm64 rootfs as a .tar.xz plus .sha256.
+# Builds a DeskDroid Debian arm64 rootfs as a .tar.zst plus .sha256 and a
+# .json entry for the image manifest (CI signs the image with minisign).
 # Run as root on an arm64 machine (CI uses GitHub's ubuntu-24.04-arm runner).
 # Usage: sudo rootfs/build-rootfs.sh <light|full|ultralite> [outdir]
 set -euo pipefail
@@ -40,6 +41,15 @@ mmdebstrap \
   --customize-hook='rm -rf "$1"/var/cache/apt/archives/*.deb "$1"/var/lib/apt/lists/* "$1"/usr/share/doc/* "$1"/usr/share/man/*' \
   "$SUITE" "$OUT/$NAME.tar"
 
-xz -T0 -6 -f "$OUT/$NAME.tar"
-( cd "$OUT" && sha256sum "$NAME.tar.xz" > "$NAME.tar.xz.sha256" )
+# zstd unpacks several times faster than xz on a phone. --long=27 (128 MB
+# window) shrinks the image noticeably; the app's decoder allows it.
+UNPACKED=$(stat -c %s "$OUT/$NAME.tar")
+zstd -T0 -17 --long=27 -q -f --rm "$OUT/$NAME.tar" -o "$OUT/$NAME.tar.zst"
+( cd "$OUT" && sha256sum "$NAME.tar.zst" > "$NAME.tar.zst.sha256" )
+SIZE=$(stat -c %s "$OUT/$NAME.tar.zst")
+SHA=$(cut -d' ' -f1 "$OUT/$NAME.tar.zst.sha256")
+FILES=$(tar -tf "$OUT/$NAME.tar.zst" --use-compress-program='zstd -d --long=27' | wc -l)
+cat > "$OUT/$NAME.json" <<JSON
+{"edition": "$EDITION", "file": "$NAME.tar.zst", "size": $SIZE, "unpackedSize": $UNPACKED, "files": $FILES, "sha256": "$SHA"}
+JSON
 ls -lh "$OUT"

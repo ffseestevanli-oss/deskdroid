@@ -5,7 +5,8 @@ import java.io.File
 /** Builds the proot command line that boots the Debian rootfs and starts the desktop. */
 object Proot {
 
-    fun sessionCommand(paths: Paths, gpuMode: String): ProcessBuilder {
+    /** [env] is passed through deskdroid-boot to the session (DESKDROID_* settings). */
+    fun sessionCommand(paths: Paths, env: Map<String, String>): ProcessBuilder {
         paths.prootTmp.mkdirs()
         val args = mutableListOf(
             paths.proot.path,
@@ -37,9 +38,9 @@ object Proot {
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "TMPDIR=/tmp",
             "DISPLAY=:0",
-            "DESKDROID_GPU=$gpuMode",
-            "/bin/sh", "/usr/local/bin/deskdroid-boot",
         )
+        args += env.map { (k, v) -> "$k=$v" }
+        args += listOf("/bin/sh", "/usr/local/bin/deskdroid-boot")
         return ProcessBuilder(args).redirectErrorStream(true).also { pb ->
             pb.environment().apply {
                 clear()

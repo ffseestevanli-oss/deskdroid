@@ -14,9 +14,7 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         if (!Prefs.autoStart(context) || !Paths(context).isInstalled) return
         context.startForegroundService(
-            Intent(context, SessionService::class.java)
-                .putExtra(SessionService.EXTRA_GPU, Prefs.gpuMode(context))
-                .putExtra(SessionService.EXTRA_HEADLESS, true)
+            Intent(context, SessionService::class.java).putExtra(SessionService.EXTRA_HEADLESS, true)
         )
     }
 }

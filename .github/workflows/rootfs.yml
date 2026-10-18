@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install mmdebstrap
-        run: sudo apt-get update && sudo apt-get install -y mmdebstrap xz-utils debian-archive-keyring
+        run: sudo apt-get update && sudo apt-get install -y mmdebstrap zstd debian-archive-keyring
       - name: Build ${{ matrix.edition }} rootfs
         run: sudo rootfs/build-rootfs.sh ${{ matrix.edition }} "$PWD/out"
       - uses: actions/upload-artifact@v4
@@ -36,6 +36,46 @@ jobs:
         with:
           path: out
           merge-multiple: true
+      # The app only installs images signed with the key whose public half is
+      # the deskdroidImagePublicKey Gradle property (README: "Signing key").
+      - name: Sign images and write the manifest
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign jq
+          cd out
+          jq -s '{version: "${{ github.run_number }}", built: (now | todate), commit: "${{ github.sha }}", images: .}' \
+            deskdroid-rootfs-*.json > deskdroid-images.json
+          rm deskdroid-rootfs-*.json
+          if [ -z "$MINISIGN_SECRET_KEY" ]; then
+            echo "::warning::MINISIGN_SECRET_KEY is not set; images are unsigned and release builds of the app will refuse them"
+          else
+            printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
+            for f in deskdroid-rootfs-*.tar.zst; do
+              printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$RUNNER_TEMP/minisign.key" -m "$f" -t "deskdroid $f build ${{ github.run_number }}"
+            done
+            rm "$RUNNER_TEMP/minisign.key"
+          fi
+      # GitHub release assets max out at 2 GB, so big images (Full) go up in
+      # parts. The app downloads the parts back to back and checks the
+      # signature of the joined file.
+      - name: Split large images
+        run: |
+          cd out
+          for f in deskdroid-rootfs-*.tar.zst; do
+            if [ "$(stat -c %s "$f")" -gt $((1900 * 1024 * 1024)) ]; then
+              split -b 1900M -d -a 2 "$f" "$f.part"
+              rm "$f"
+              parts=$(ls "$f".part* | jq -R . | jq -sc .)
+            else
+              parts=$(jq -nc --arg f "$f" '[$f]')
+            fi
+            jq --arg f "$f" --argjson p "$parts" '(.images[] | select(.file == $f)).parts = $p' \
+              deskdroid-images.json > m.json && mv m.json deskdroid-images.json
+          done
+          jq ".partSize = $((1900 * 1024 * 1024))" deskdroid-images.json > m.json && mv m.json deskdroid-images.json
+          cat deskdroid-images.json
       - name: Publish as the rootfs-latest release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,10 @@
+# PulseAudio for the DeskDroid session (started by deskdroid-session).
+# Sound goes into a FIFO that the Android app reads and plays (AudioBridge.kt):
+# 48 kHz, stereo, signed 16-bit little endian.
+load-module module-pipe-sink sink_name=android file=/tmp/deskdroid/audio.pipe format=s16le rate=48000 channels=2 sink_properties=device.description=Phone
+set-default-sink android
+load-module module-native-protocol-unix
+load-module module-null-source source_name=nomic source_properties=device.description=No-microphone
+set-default-source nomic
+load-module module-always-sink
+load-module module-stream-restore restore_device=false

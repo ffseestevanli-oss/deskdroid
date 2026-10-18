@@ -2,62 +2,80 @@ package io.deskdroid.app
 
 import android.app.ActivityOptions
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.os.PowerManager
 import java.io.File
+import java.util.TimeZone
 
 /**
- * Owns the desktop session: Termux:X11 server, the proot'd Plasma session,
- * and the X11 window on the chosen display.
+ * Owns the desktop session: the embedded X server (Termux:X11's lorie), the
+ * proot'd Plasma session, the audio bridge, and the desktop window.
  */
 class SessionService : Service() {
     private var xServer: Process? = null
     private var session: Process? = null
+    private var audio: AudioBridge? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var displayId = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopSession()
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopSession()
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_SHOW -> {
+                if (session?.isAlive == true) showDesktop(displayId)
+                else startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return START_NOT_STICKY
+            }
         }
         startForeground(
-            1, Notifications.build(this, "Desktop running"),
+            Notifications.SESSION_ID, Notifications.session(this, "Starting your desktop"),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         )
+        displayId = intent?.getIntExtra(EXTRA_DISPLAY, 0) ?: 0
         if (session?.isAlive == true) {
-            showDisplay(intent?.getIntExtra(EXTRA_DISPLAY, 0) ?: 0)
+            showDesktop(displayId)
             return START_NOT_STICKY
         }
-        val gpu = intent?.getStringExtra(EXTRA_GPU) ?: "llvmpipe"
-        val display = intent?.getIntExtra(EXTRA_DISPLAY, 0) ?: 0
         // Started at boot: Android won't let a background app open a window, so run
         // without showing it; "Start desktop" or the notification brings it up.
         val headless = intent?.getBooleanExtra(EXTRA_HEADLESS, false) ?: false
-        Thread { runSession(gpu, display, headless) }.start()
+        running = true
+        Thread { runSession(headless) }.start()
         return START_NOT_STICKY
     }
 
-    private fun runSession(gpu: String, displayId: Int, headless: Boolean) {
+    private fun runSession(headless: Boolean) {
         val paths = Paths(this)
         try {
             wakeLock = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "deskdroid:session")
                 .apply { acquire() }
 
+            paths.runtime.mkdirs()
+            audio = AudioBridge(paths.audioPipe).also { it.start() }
+
             AppLog.setStatus("Starting display server")
+            File(paths.rootfsTmp, ".X11-unix").mkdirs()
             paths.x11Socket.delete()
+            DesktopDefaults.apply(this)
             xServer = startX11Server(paths).also { pump("x11", it) }
             waitFor(paths.x11Socket, 15_000)
-            if (!headless) showDisplay(displayId)
+            if (!headless) showDesktop(displayId)
 
-            AppLog.setStatus("Starting Plasma ($gpu)")
-            session = Proot.sessionCommand(paths, gpu).start().also { pump("session", it) }
+            val gpu = GpuProfile.resolve(Prefs.gpuMode(this), paths)
+            AppLog.setStatus("Starting the desktop (${GpuProfile.describe(gpu)})")
+            session = Proot.sessionCommand(paths, sessionEnv(gpu)).start().also { pump("session", it) }
             AppLog.setStatus("Desktop running")
+            notify("Desktop running · tap to open")
             val code = session!!.waitFor()
             AppLog.setStatus("Desktop exited (code $code)")
         } catch (e: Exception) {
@@ -69,31 +87,48 @@ class SessionService : Service() {
         }
     }
 
+    private fun sessionEnv(gpu: String): Map<String, String> {
+        val scale = Prefs.scale(this).takeIf { it > 0f } ?: DesktopDefaults.scaleFor(this)
+        return mapOf(
+            "DESKDROID_GPU" to gpu,
+            "DESKDROID_SCALE" to "%.2f".format(java.util.Locale.ROOT, scale),
+            "TZ" to TimeZone.getDefault().id,
+        )
+    }
+
     /**
-     * Phase 0: run the X server from the installed Termux:X11 APK, the same way
-     * Termux's `termux-x11` script does. The socket lands in the rootfs /tmp.
+     * The X server is Termux:X11's CmdEntryPoint, compiled into this APK. It runs
+     * as a separate app_process, the same way the termux-x11 command starts it,
+     * and connects back to DesktopActivity. The socket lands in the rootfs /tmp.
      */
     private fun startX11Server(paths: Paths): Process {
-        val apk = packageManager.getApplicationInfo(X11_PACKAGE, 0).sourceDir
         val pb = ProcessBuilder(
             "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
             "com.termux.x11.CmdEntryPoint", ":0"
         ).redirectErrorStream(true)
         pb.environment().apply {
             remove("LD_PRELOAD"); remove("LD_LIBRARY_PATH")
-            put("CLASSPATH", apk)
-            put("TMPDIR", File(paths.rootfs, "tmp").path)
+            put("CLASSPATH", applicationInfo.sourceDir)
+            put("TMPDIR", paths.rootfsTmp.path)
             put("XKB_CONFIG_ROOT", File(paths.rootfs, "usr/share/X11/xkb").path)
         }
         return pb.start()
     }
 
-    private fun showDisplay(displayId: Int) {
-        val intent = Intent().setClassName(X11_PACKAGE, "$X11_PACKAGE.MainActivity")
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val opts = ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
-        startActivity(intent, opts.toBundle())
+    private fun showDesktop(id: Int) {
+        val intent = Intent(this, DesktopActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val opts = ActivityOptions.makeBasic().setLaunchDisplayId(id)
+        try {
+            startActivity(intent, opts.toBundle())
+        } catch (e: Exception) {
+            // Background start blocked (Android 10+); the notification opens it.
+            AppLog.i("Couldn't open the desktop window: ${e.message}")
+        }
     }
+
+    private fun notify(text: String) =
+        getSystemService(android.app.NotificationManager::class.java)
+            .notify(Notifications.SESSION_ID, Notifications.session(this, text))
 
     private fun waitFor(f: File, timeoutMs: Long) {
         val end = System.currentTimeMillis() + timeoutMs
@@ -108,10 +143,14 @@ class SessionService : Service() {
         p.inputStream.bufferedReader().forEachLine { AppLog.i("[$tag] $it") }
     }.start()
 
+    @Synchronized
     private fun stopSession() {
         session?.destroy(); session = null
         xServer?.destroy(); xServer = null
+        audio?.stop(); audio = null
         wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
+        sendBroadcast(Intent("com.termux.x11.ACTION_STOP").setPackage(packageName))
+        running = false
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -121,10 +160,19 @@ class SessionService : Service() {
     }
 
     companion object {
-        const val X11_PACKAGE = "com.termux.x11"
         const val ACTION_STOP = "io.deskdroid.app.STOP"
-        const val EXTRA_GPU = "gpu"
+        const val ACTION_SHOW = "io.deskdroid.app.SHOW"
         const val EXTRA_DISPLAY = "display"
         const val EXTRA_HEADLESS = "headless"
+
+        @Volatile var running = false
+            private set
+
+        fun start(c: Context, displayId: Int) = c.startForegroundService(
+            Intent(c, SessionService::class.java).putExtra(EXTRA_DISPLAY, displayId)
+        )
+
+        fun stop(c: Context) =
+            c.startService(Intent(c, SessionService::class.java).setAction(ACTION_STOP))
     }
 }

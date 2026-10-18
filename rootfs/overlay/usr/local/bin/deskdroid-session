@@ -1,6 +1,7 @@
 #!/bin/sh
 # Starts the desktop session as the deskdroid user. Launched by deskdroid-boot.
 # DESKDROID_GPU: llvmpipe | nocomp | turnip | virgl
+# DESKDROID_SCALE: Plasma scale factor from the screen's density (1, 1.25, ... 2.5)
 
 export XDG_RUNTIME_DIR=/tmp/runtime-$USER
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
@@ -14,15 +15,37 @@ case "${DESKDROID_GPU:-llvmpipe}" in
   nocomp)
     export GALLIUM_DRIVER=llvmpipe KWIN_COMPOSE=N ;;
   turnip)
-    # Needs a Mesa build with the kgsl backend (Debian's turnip uses msm DRM). Phase 1.
+    # Mesa with Turnip's kgsl backend from the deskdroid-mesa package.
+    if [ -d /opt/deskdroid-mesa/lib ]; then
+      export LD_LIBRARY_PATH=/opt/deskdroid-mesa/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+      export VK_ICD_FILENAMES=/opt/deskdroid-mesa/share/vulkan/icd.d/freedreno_icd.aarch64.json
+      export LIBGL_DRIVERS_PATH=/opt/deskdroid-mesa/lib/dri
+    fi
     export MESA_LOADER_DRIVER_OVERRIDE=zink TU_DEBUG=noconform ;;
   virgl)
     # Needs a virgl server on the Android side listening on /tmp/.virgl_test.
     export GALLIUM_DRIVER=virpipe ;;
 esac
 
-echo "deskdroid-session: GPU mode ${DESKDROID_GPU}"
+echo "deskdroid-session: GPU mode ${DESKDROID_GPU}, scale ${DESKDROID_SCALE:-1}"
 glxinfo -B 2>&1 | grep -E 'renderer|version' || true
+
+# Sound: PulseAudio writes into the FIFO the app plays from (/etc/deskdroid/pulse.pa).
+if command -v pulseaudio >/dev/null; then
+  pulseaudio --daemonize=yes --exit-idle-time=-1 --disallow-exit -n -F /etc/deskdroid/pulse.pa \
+    || echo "deskdroid-session: pulseaudio failed"
+fi
+
+# Scale: Qt/KDE read the X DPI, GTK takes an integer scale.
+SCALE="${DESKDROID_SCALE:-1}"
+DPI=$(awk -v s="$SCALE" 'BEGIN { printf "%d", 96 * s }')
+echo "Xft.dpi: $DPI" | xrdb -merge
+if command -v kwriteconfig6 >/dev/null; then
+  kwriteconfig6 --file kcmfonts --group General --key forceFontDPI "$DPI"
+  kwriteconfig6 --file kdeglobals --group KScreen --key ScaleFactor "$SCALE"
+fi
+export GDK_SCALE=$(awk -v s="$SCALE" 'BEGIN { printf "%d", (s >= 1.75) ? 2 : 1 }')
+export GDK_DPI_SCALE=$(awk -v s="$SCALE" -v g="$GDK_SCALE" 'BEGIN { printf "%.2f", s / g }')
 
 # Light/Full run Plasma; Ultra-lite runs MATE.
 if command -v startplasma-x11 >/dev/null; then

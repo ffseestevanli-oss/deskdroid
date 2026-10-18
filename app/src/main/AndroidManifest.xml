@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -8,28 +9,70 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- lorie asks for this to change settings over ADB; DeskDroid never needs it. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:node="remove" />
 
-    <!-- Phase 0 uses the Termux:X11 app as the display server; Phase 1 embeds it. -->
-    <queries>
-        <package android:name="com.termux.x11" />
-    </queries>
-
+    <!--
+      extractNativeLibs: proot and its helpers must be extracted to nativeLibraryDir
+      to be executable (W^X), while lorie loads libXlorie.so from inside the APK,
+      so libs are also stored uncompressed (app/build.gradle.kts).
+      The application class is lorie's LorieApp (merged from external/termux-x11).
+    -->
     <application
         android:allowBackup="false"
         android:extractNativeLibs="true"
         android:hasFragileUserData="true"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@android:style/Theme.DeviceDefault">
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+        tools:replace="android:allowBackup">
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The desktop window: lorie's MainActivity plus DeskDroid's drawer. -->
+        <activity
+            android:name=".DesktopActivity"
+            android:exported="false"
+            android:taskAffinity=".DesktopActivity"
+            android:theme="@style/LorieAppTheme"
+            android:launchMode="singleInstance"
+            android:supportsPictureInPicture="false"
+            android:configChanges="fontScale|orientation|screenSize|keyboard|keyboardHidden|layoutDirection|locale|mcc|mnc|navigation|screenLayout|touchscreen|uiMode|smallestScreenSize|density"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="stateHidden|adjustNothing" />
+
+        <!-- Termux:X11's own launcher entry and settings screen: hidden, DeskDroid has its own. -->
+        <activity
+            android:name="com.termux.x11.MainActivity"
+            android:exported="false"
+            tools:replace="android:exported">
+            <intent-filter tools:node="removeAll" />
+        </activity>
+        <activity
+            android:name="com.termux.x11.LoriePreferences"
+            android:exported="false"
+            tools:replace="android:exported">
+            <intent-filter tools:node="removeAll" />
+        </activity>
+        <!-- The X server (a child app_process with our uid) broadcasts to these; no other app needs to. -->
+        <receiver
+            android:name="com.termux.x11.LorieApp$Receiver"
+            android:exported="false"
+            tools:replace="android:exported" />
+        <receiver
+            android:name="com.termux.x11.LoriePreferences$Receiver"
+            android:exported="false"
+            tools:replace="android:exported" />
 
         <receiver
             android:name=".BootReceiver"
