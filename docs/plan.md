@@ -21,7 +21,7 @@ _Draft 1 · 2026-10-16_
 | Desktop session | Plasma **X11 session** for MVP, **Plasma Wayland** (KWin nested on our host) from Phase 2 | X11 apps keep working through Xwayland in both. |
 | GPU (Adreno) | **Turnip** (Mesa Vulkan) via `/dev/kgsl`, **Zink** for OpenGL | `/dev/kgsl` is reachable from unprivileged apps; this is how Winlator/Mobox get real GPU speed. |
 | GPU (Mali/other) | **llvmpipe** at first, then a Vulkan forwarding layer (Vortek-style) or virgl over Android GLES | No unprivileged path to Panfrost/Mali DRM nodes. |
-| x86 translation | **Box64** (x86_64) + **Box86**/Box64-WOW64 (32-bit) + **Wine** (WoW64 build) | De facto standard on ARM Linux. |
+| x86 translation | **FEX-Emu** for Steam and 32-bit x86, **Box64** + **Wine** (WoW64) for standalone Windows apps | FEX runs 32-bit and 64-bit x86 without needing 32-bit ARM, which the Pixel 10 Pro and most 2023+ chips lack; it is what Valve uses for Steam on ARM (Steam Frame) and what Ubuntu's arm64 Steam snap uses. Box64 stays as a fast alternative for Wine apps. |
 | Audio | **PulseAudio** server on the Android side with an AAudio sink | Proven in Termux; PipeWire-pulse client inside the rootfs can come later. |
 | How we get binaries | Native pieces built with the NDK under **our own package prefix**; rootfs is plain Debian built in CI | Avoids depending on the Termux app or its `com.termux` hardcoded paths. |
 
@@ -141,6 +141,24 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 
 ---
 
+## 6b. Steam, preinstalled
+
+Steam ships in the image as a desktop and menu icon, ready on first click. Valve does not officially support Steam on ARM Linux, so it runs as the x86 client under FEX, the same approach as Valve's Steam Frame and [Ubuntu's arm64 Steam snap](https://phoronix.com/news/Steam-Snap-ARM64-FEX).
+
+**What it needs:**
+- **FEX-Emu** (arm64), with its x86 rootfs (x86_64 + i386 glibc, 32-bit libraries the Steam client needs). Not in Debian, so we build it in CI and publish it in our own apt repo.
+- **FEX thunks** so x86 games call our arm64 Mesa (Vulkan/OpenGL) directly instead of emulated x86 drivers.
+- **Steam launcher** (Valve's small bootstrap). The full client (~1 GB) downloads and updates itself on first launch, which also keeps us from redistributing Valve's binaries. The user accepts Steam's license in Valve's own first-run dialog.
+- **Proton** for Windows games, downloaded by Steam as usual and run under FEX.
+- Launcher shim instead of binfmt_misc (no root): `steam` → `FEXInterpreter /usr/lib/steam/steam`.
+
+**Size impact (estimates, to measure in Phase 3):** FEX x86 rootfs about +1.5 to 2 GB on disk (+0.5 to 0.8 GB to the compressed download). Steam client +1 GB on first launch. Each Proton version +1 GB. Total free space recommended goes from ~6 GB to ~10 GB. Phase 1 images can leave the FEX rootfs as a first-click download if the base download size hurts.
+
+**Hard parts:**
+- **Steam Linux Runtime containers.** Steam runs games (and Proton) inside its pressure-vessel container, which uses bubblewrap and needs user namespaces that Android apps don't get. Fix: a `bwrap` shim that turns bubblewrap's bind-mount arguments into a nested proot, or force games to run outside the container. This is the first thing to prove.
+- **Steam UI speed.** The Steam UI is an emulated Chromium (steamwebhelper). Expect sluggishness on the desktop client; Big Picture mode and launching games directly are the smoother path.
+- **Anti-cheat** games stay unsupported, same as on Steam Deck without vendor opt-in.
+
 ## 7. Licensing when bundling
 
 | Component | License | What it means for us |
@@ -155,6 +173,8 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 | DXVK / VKD3D-Proton | zlib / LGPL-2.1 | Fine. |
 | KDE Plasma, Debian packages | Mostly GPL/LGPL/MIT | Distributing a rootfs image means we distribute those binaries: must provide corresponding source (point to Debian's archive snapshot for unmodified packages; host source for anything we patch). |
 | Winlator | Check before copying code | Treat as reference; if we reuse code, check its license file and keep notices. |
+| Steam client | Proprietary (Valve) | Ship only Valve's launcher/bootstrap; the client downloads itself from Valve and the user accepts Valve's agreement. |
+| FEX-Emu | MIT | No issue. |
 | Microsoft fonts/DLLs, Windows components | Proprietary | **Never bundle.** Offer optional user-initiated install (e.g. winetricks) with the user accepting the EULA. |
 | "KDE", "Debian", "Termux" names/logos | Trademarks | Don't use their logos as our branding; "powered by KDE Plasma" wording is fine. |
 
@@ -190,7 +210,8 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 ### Phase 3: Windows and x86 apps
 - Box64/Box86 + Wine WoW64 preinstalled, `.exe` double-click in Dolphin "just works".
 - Wine prefix manager (per-app prefixes, DXVK/VKD3D/WineD3D choice), device performance profiles.
-- x86_64 Linux apps via Box64 binfmt-style wrapper (no binfmt_misc without root, so a launcher shim).
+- x86_64 Linux apps via FEX/Box64 launcher shims (no binfmt_misc without root).
+- **Steam preinstalled** (section 6b): FEX + x86 rootfs + thunks in our apt repo, bwrap shim for Steam's runtime containers, Proton games launching from Steam.
 
 ### Phase 4: Gaming and peripherals
 - Gamepad bridge (Wine XInput + SDL virtual joystick), on-screen controls for touch-only use.
