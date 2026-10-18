@@ -4,27 +4,42 @@ A full KDE Plasma desktop on non-rooted Android phones: one app, tap to start, w
 
 Architecture and roadmap: see [docs/plan.md](docs/plan.md).
 
-## Status: Phase 0 feasibility spike
-
-This build answers one question: does the architecture work on real phones (Pixel 10 Pro first)?
+## Status: Phase 1, "Tap to desktop" (in progress, not yet tested on a device)
 
 What's in it:
-- `app/`: a minimal Android launcher (Kotlin, no AndroidX). Downloads and unpacks the rootfs, starts the X server and Plasma under proot from a foreground service, and shows the desktop on the phone screen or an external display.
-- `rootfs/`: builds the Debian trixie arm64 images with `mmdebstrap`, one per edition: Light (Plasma + Discover), Full (Plasma + apps) and Ultra-lite (MATE).
-- `scripts/fetch-prebuilts.sh`: pulls Termux's Android build of proot into `jniLibs` (so it is executable under Android's W^X rule). Phase 0 only: F-Droid requires building from source, so Phase 1 compiles proot with the NDK instead.
-- `.github/workflows/`: CI that builds the APK and publishes the rootfs as the `rootfs-latest` release.
+- `app/`: the Android app (Kotlin, plain views). Setup flow and Home screen in the approved "party" design, installer service, session service, and the desktop window with its overlay drawer.
+- `external/termux-x11/`: Termux:X11 as a git submodule. Its `lorie` library (X server, input, clipboard) is built into the APK, so users don't install a second app.
+- `native/`: proot, talloc and the installer helper `ddtool` (zstd + minisign), compiled from source with the NDK during the Gradle build. No prebuilt binaries anywhere, as F-Droid requires. See [native/README.md](native/README.md).
+- `rootfs/`: builds the Debian trixie arm64 images (`.tar.zst`) with `mmdebstrap`, one per edition: Light (Plasma + Discover), Full (Plasma + apps) and Ultra-lite (MATE).
+- `.github/workflows/`: CI that builds the APK and publishes signed images plus `deskdroid-images.json` as the `rootfs-latest` release.
 
-Phase 0 shortcuts (all replaced in Phase 1):
-- The display server is the separately installed **Termux:X11** app, run the same way Termux runs it. Phase 1 embeds it.
-- No audio yet.
-- GPU: software rendering (llvmpipe) by default. VirGL and Turnip modes are wired in the session script but need Android-side pieces that come next.
+How the pieces fit at run time:
+1. The installer reads `deskdroid-images.json`, downloads the chosen edition (resumable, in parts if over 2 GB), checks its minisign signature, and unpacks it into app-private storage.
+2. "Start desktop" runs the X server (lorie's `CmdEntryPoint`, as a child process), opens `DesktopActivity`, then boots Debian under proot: system D-Bus, PulseAudio, then Plasma.
+3. Sound: PulseAudio writes into a FIFO that the app plays with `AudioTrack`.
 
-## First build
+Not done yet in Phase 1: GPU acceleration (Turnip/kgsl Mesa build, Vulkan forwarding for Mali/PowerVR; software rendering for now), the Android 12-13 one-tap phantom-process fix over Wireless debugging, and device testing ([docs/phase1-checklist.md](docs/phase1-checklist.md)).
 
-1. Create the GitHub repo and push this folder to `main`.
-2. Actions → **Rootfs images** → Run workflow. Publishes all three editions to the `rootfs-latest` release.
-3. Actions → **Android APK** runs on push. Download the `deskdroid-debug-apk` artifact.
-4. On the phone: install Termux:X11 from https://github.com/termux/termux-x11/releases and the DeskDroid APK.
-5. Follow `docs/spike-checklist.md`.
+## Build
 
-Local build (needs Android SDK, JDK 17, patchelf): `scripts/fetch-prebuilts.sh && ./gradlew assembleDebug`.
+Clone with submodules:
+
+    git clone --recurse-submodules <repo>
+    # or, in an existing clone:
+    git submodule update --init --recursive
+
+Needs JDK 17, the Android SDK, the NDK version pinned in `app/build.gradle.kts`, and `python3` + `bison` (Termux:X11's X server build). Then:
+
+    ./gradlew assembleDebug
+
+CI does the same on every push (Actions → Android APK, artifact `deskdroid-debug-apk`).
+
+System images: Actions → **Rootfs images** → Run workflow. Publishes all three editions to the `rootfs-latest` release.
+
+## Signing key for system images
+
+The app only installs images signed with DeskDroid's minisign key (debug builds without a key fall back to SHA-256).
+
+1. `minisign -G -W -p deskdroid.pub -s deskdroid.key` (no password; the key lives only in GitHub's encrypted secrets).
+2. Repo Settings → Secrets → Actions: `MINISIGN_SECRET_KEY` = contents of `deskdroid.key`.
+3. Repo Settings → Variables → Actions: `MINISIGN_PUBLIC_KEY` = the second line of `deskdroid.pub`. The APK workflow bakes it in; for local builds set `deskdroidImagePublicKey` in `gradle.properties`.
