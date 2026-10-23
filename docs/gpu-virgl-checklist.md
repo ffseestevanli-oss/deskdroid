@@ -12,6 +12,13 @@ renders it with Android's GPU driver: the system's ANGLE when the phone has it
 the X server, so expect it to be smoother than software rendering but not native
 speed. Vulkan apps still use software rendering until Venus lands.
 
+## Results so far
+
+- 2026-10-23, Pixel 10 Pro, Automatic (ANGLE): KWin crashed repeatedly ("KWin is
+  unstable") and a Firefox tab crashed. Software rendering works well. Since
+  then: Automatic picks software on non-Adreno phones, virgl is opt-in, and in
+  virgl mode KWin composites in software while apps use the GPU.
+
 ## 1. GPU report (before starting the desktop)
 
 Settings → **GPU report** → **Share**, and send the text back. It shows the GPU,
@@ -20,9 +27,8 @@ The "forwarding checks" block decides how much work Venus (the next step) needs.
 
 ## 2. Desktop with virgl
 
-1. Settings → Graphics: leave **Automatic** (it now picks virgl on non-Adreno
-   phones). Virgl backend: **Automatic**.
-2. Start the desktop. The status line should say "GPU via virgl (OpenGL)".
+1. Settings → Graphics: **GPU via virgl (experimental)**. Virgl backend: **Automatic**.
+2. Start the desktop. The status line should say "GPU via virgl (experimental)".
 3. In Konsole: `glxinfo -B`. Expected: `OpenGL renderer string: virgl (...)`.
    If it says `llvmpipe`, open Settings → Log and look for `[virgl]` lines.
 4. Check, with notes on smoothness compared with software rendering:

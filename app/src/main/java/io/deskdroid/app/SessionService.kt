@@ -83,6 +83,7 @@ class SessionService : Service() {
                     gpu = "llvmpipe"
                 }
             }
+            VirglServer.setKwinWrapper(paths, gpu == "virgl")
             AppLog.setStatus("Starting the desktop (${GpuProfile.describe(gpu)})")
             session = Proot.sessionCommand(paths, sessionEnv(gpu)).start().also { pump("session", it) }
             AppLog.setStatus("Desktop running")

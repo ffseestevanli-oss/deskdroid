@@ -546,7 +546,7 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
 
         addView(ui.text("GRAPHICS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
         val modes = listOf("auto", "virgl", "llvmpipe", "nocomp", "turnip")
-        val labels = listOf("Automatic", "GPU via virgl (OpenGL)", "Software (llvmpipe)", "Software, effects off",
+        val labels = listOf("Automatic", "GPU via virgl (experimental)", "Software (llvmpipe)", "Software, effects off",
             "Adreno (Turnip + Zink)")
         val gpuGroup = ui.column(6)
         fun renderGpu() {
@@ -570,8 +570,9 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             Prefs.setVirglBackend(c, backends[i])
         }.view, LinearLayout.LayoutParams(-1, -2))
         val angle = VirglServer.angleDir()
-        addView(ui.text("Changes apply the next time the desktop starts. Automatic uses Turnip on Adreno and virgl on " +
-            "other GPUs (Mali, PowerVR), with software rendering if the GPU server can't start. " +
+        addView(ui.text("Changes apply the next time the desktop starts. Automatic uses Turnip on Adreno and software " +
+            "rendering on other GPUs. virgl gives apps the GPU on Mali and PowerVR but can crash them; the " +
+            "desktop itself stays on software rendering. " +
             (if (angle != null) "This phone has ANGLE, which virgl uses by default." else "This phone has no ANGLE, so virgl uses the vendor driver."),
             12f, Party.MUTED))
         addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
