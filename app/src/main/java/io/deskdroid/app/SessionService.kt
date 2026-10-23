@@ -27,6 +27,7 @@ class SessionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        AppLog.attach(this)
         when (intent?.action) {
             ACTION_STOP -> {
                 stopSession()

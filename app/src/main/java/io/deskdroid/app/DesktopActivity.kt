@@ -33,6 +33,7 @@ class DesktopActivity : com.termux.x11.MainActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLog.attach(this)
         if (isFinishing) return
         hideTermuxChrome()
         addContentView(buildOverlay(), ViewGroup.LayoutParams(-1, -1))
