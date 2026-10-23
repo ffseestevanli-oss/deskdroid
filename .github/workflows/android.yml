@@ -43,6 +43,7 @@ jobs:
           ./gradlew --no-daemon assembleDebug
           -PdeskdroidRootfsBaseUrl=https://github.com/${{ github.repository }}/releases/download/rootfs-latest/
           -PdeskdroidImagePublicKey="${{ vars.MINISIGN_PUBLIC_KEY }}"
+          -PdeskdroidBuildNumber=${{ github.run_number }}
       # Fail the build if the APK wouldn't install: bad signature or manifest.
       - name: Check the APK
         run: |
@@ -62,11 +63,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          cp app/build/outputs/apk/debug/*.apk deskdroid-debug.apk
-          notes="Debug build of main from ${{ github.sha }}. Install deskdroid-debug.apk on an arm64 phone (Android 10 or newer)."
+          # A new file name per build, so phones and browsers never reuse an old download.
+          name="deskdroid-build-${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/debug/*.apk "$name"
+          notes="Build ${{ github.run_number }} (debug) of main from ${{ github.sha }}. Install $name on an arm64 phone (Android 10 or newer); it installs over earlier builds."
           if gh release view apk-latest >/dev/null 2>&1; then
             gh release edit apk-latest --notes "$notes" --prerelease=false --latest
-            gh release upload apk-latest deskdroid-debug.apk --clobber
+            gh release upload apk-latest "$name" --clobber
+            # Only the newest build stays on the release.
+            gh release view apk-latest --json assets -q '.assets[].name' | grep '\.apk$' | grep -vx "$name" |
+              while read -r old; do gh release delete-asset apk-latest "$old" --yes; done
           else
-            gh release create apk-latest deskdroid-debug.apk --title "DeskDroid APK (latest debug build)" --notes "$notes" --latest
+            gh release create apk-latest "$name" --title "DeskDroid APK (latest debug build)" --notes "$notes" --latest
           fi

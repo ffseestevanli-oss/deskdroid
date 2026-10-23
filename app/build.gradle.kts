@@ -13,8 +13,10 @@ android {
         applicationId = "io.deskdroid.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.1.3"
+        // CI passes its run number, so every build has its own version and file name.
+        val build = (project.findProperty("deskdroidBuildNumber") as String?)?.toIntOrNull()
+        versionCode = if (build != null) 1000 + build else 5
+        versionName = "0.1.3" + (build?.let { "-build.$it" } ?: "")
         ndk { abiFilters += "arm64-v8a" }
         buildConfigField(
             "String", "ROOTFS_BASE_URL",
