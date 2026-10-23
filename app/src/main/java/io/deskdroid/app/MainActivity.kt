@@ -21,6 +21,7 @@ class MainActivity : Activity(), Navigator {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLog.attach(this)
         window.statusBarColor = Party.BG
         window.navigationBarColor = Party.BG
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
