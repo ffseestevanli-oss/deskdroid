@@ -14,8 +14,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$(mkdir -p "$1" && cd "$1" && pwd)"
 NDK="${2:-}"
 API="${3:-29}"
-WORK="$OUT/../native-work"
-rm -rf "$WORK" && mkdir -p "$WORK/talloc" "$WORK/proot"
+# Scratch space outside OUT: Gradle packages every file under the jniLibs dir.
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$WORK/talloc" "$WORK/proot"
 
 if [ -n "$NDK" ]; then
   host="$(uname -s | tr A-Z a-z)-x86_64"
