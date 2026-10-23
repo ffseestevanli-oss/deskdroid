@@ -34,6 +34,8 @@ mmdebstrap \
   --customize-hook="sync-in $HERE/overlay /" \
   --customize-hook='rm -f "$1/usr/share/wallpapers/DeskDroid/contents/images/README.md"' \
   --customize-hook='chmod 755 "$1"/usr/local/bin/deskdroid-*' \
+  --customize-hook='chroot "$1" find / -xdev -type f -perm -4000 | sort > "$1/etc/deskdroid/setuid-files"' \
+  --customize-hook='mkdir -p "$1/home/deskdroid/.config" && printf "[Software]\nUseOfflineUpdates=false\n" > "$1/home/deskdroid/.config/discoverrc"' \
   --customize-hook="$HERE/dark-theme.sh \"\$1\"" \
   --customize-hook='echo "en_US.UTF-8 UTF-8" > "$1/etc/locale.gen" && chroot "$1" locale-gen' \
   --customize-hook='mkdir -p "$1/home/deskdroid/.config" && printf "[Basic Settings]\nIndexing-Enabled=false\n" > "$1/home/deskdroid/.config/baloofilerc"' \

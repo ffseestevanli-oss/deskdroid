@@ -3,9 +3,29 @@
 # proot -0 emulates root and setuid, so sudo/apt/Discover work for the user later.
 # DESKDROID_* variables come from the app (SessionService.sessionEnv).
 
+# The app drops setuid bits when it unpacks the image; put back the ones the
+# image was built with (build-rootfs.sh lists them), so sudo and pkexec work.
+if [ -f /etc/deskdroid/setuid-files ]; then
+  while read -r f; do
+    [ -f "$f" ] && chmod u+s "$f" 2>/dev/null
+  done < /etc/deskdroid/setuid-files
+fi
+
+# System bus as root without the setuid launch helper (see dbus-system.conf).
+# Services it starts inherit this environment: GLib's base network monitor
+# always reports online, so PackageKit doesn't refuse downloads when Android
+# blocks the netlink socket GLib would watch.
 mkdir -p /run/dbus
-rm -f /run/dbus/pid
-dbus-daemon --system --fork --nopidfile 2>&1 || echo "deskdroid-boot: system dbus failed"
+rm -f /run/dbus/pid /run/dbus/system_bus_socket
+GIO_USE_NETWORK_MONITOR=base dbus-daemon --config-file=/etc/deskdroid/dbus-system.conf --fork --nopidfile 2>&1 \
+  || echo "deskdroid-boot: system dbus failed"
+
+# The image ships without apt's package lists. Fetch them on first boot, in
+# the background, so Discover has apps (and their AppStream data) to show.
+if ! ls /var/lib/apt/lists/*_Packages >/dev/null 2>&1; then
+  ( apt-get update -q >/var/log/deskdroid-apt-update.log 2>&1 \
+      || echo "deskdroid-boot: apt-get update failed, see /var/log/deskdroid-apt-update.log" ) &
+fi
 
 exec runuser -u deskdroid -- env \
   HOME=/home/deskdroid USER=deskdroid LOGNAME=deskdroid SHELL=/bin/bash \
