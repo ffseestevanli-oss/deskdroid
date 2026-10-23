@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Builds the virgl server (virglrenderer's vtest server, with libepoxy linked in
-# statically) for Android with the NDK, and installs it as
-# <outdir>/libvirgl_test_server.so so it can be exec'd from nativeLibraryDir.
+# Builds virglrenderer's vtest server and render server (libepoxy linked in
+# statically) for Android with the NDK, and installs them as lib*.so files in
+# <outdir> so they can be exec'd from nativeLibraryDir.
 #
-# Linux apps in the rootfs use Mesa's virgl driver (GALLIUM_DRIVER=virpipe),
-# which sends OpenGL work over /tmp/.virgl_test to this server; the server runs
-# it on Android's OpenGL ES driver or on ANGLE (see native/README.md).
+# Linux apps in the rootfs use Mesa's Venus Vulkan driver (VN_DEBUG=vtest),
+# with Zink for OpenGL, which sends Vulkan commands over /tmp/.virgl_test to
+# this server; it runs them on Android's Vulkan driver (see native/README.md).
 #
 #   native/virgl/build.sh <outdir> <ndk-dir> [api-level]
 # Needs meson, ninja, pkg-config and python3. Sources are downloaded once
@@ -87,11 +87,28 @@ meson setup "$WORK/epoxy-build" "$SRC/libepoxy" --cross-file "$WORK/cross.ini" \
   -Degl=yes -Dglx=no -Dx11=false -Dtests=false
 ninja -C "$WORK/epoxy-build" install
 
-echo "== virglrenderer"
-meson setup "$WORK/virgl-build" "$SRC" --cross-file "$WORK/cross.ini" \
-  --prefix="$PREFIX" --libdir=lib --buildtype=release -Ddefault_library=static \
-  -Dplatforms=egl -Dvenus=false -Dtests=false
-ninja -C "$WORK/virgl-build" vtest/virgl_test_server
-
-install -m 755 "$WORK/virgl-build/vtest/virgl_test_server" "$OUT/libvirgl_test_server.so"
-"$BIN/llvm-strip" --strip-unneeded "$OUT/libvirgl_test_server.so"
+# Venus runs inside virglrenderer's render server, which the vtest server
+# execs from <prefix>/libexec. Android only lets us exec from nativeLibraryDir,
+# whose path isn't known at build time, so the prefix is /proc/self/cwd: the
+# server's working directory (VenusServer.kt) holds libexec/virgl_render_server
+# as a link to the right lib*.so.
+# Two builds: "dmabuf" is upstream Venus (needs VK_EXT_external_memory_dma_buf,
+# e.g. PowerVR on the Pixel 10); "ahb" adds patch 0011 for drivers that can only
+# share memory as AHardwareBuffers (common on Mali).
+for variant in dmabuf ahb; do
+  echo "== virglrenderer ($variant)"
+  extra=()
+  [ "$variant" = ahb ] && extra=(-Dc_args="-ffile-prefix-map=$WORK=. -DDESKDROID_VENUS_AHB")
+  meson setup "$WORK/virgl-$variant" "$SRC" --cross-file "$WORK/cross.ini" \
+    --prefix=/proc/self/cwd --libdir=lib --buildtype=release -Ddefault_library=static \
+    -Dplatforms=egl -Dvenus=true -Dtests=false "${extra[@]}"
+  ninja -C "$WORK/virgl-$variant"
+  suffix=""; [ "$variant" = ahb ] && suffix="_ahb"
+  install -m 755 "$WORK/virgl-$variant/vtest/virgl_test_server" "$OUT/libvirgl_test_server$suffix.so"
+  rs="$WORK/virgl-$variant/server/virgl_render_server"
+  if [ -f "$rs" ]; then
+    install -m 755 "$rs" "$OUT/libvirgl_render_server$suffix.so"
+  fi
+done
+"$BIN/llvm-strip" --strip-unneeded "$OUT"/libvirgl_*.so
+ls -l "$OUT"/libvirgl_*.so
