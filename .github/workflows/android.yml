@@ -52,6 +52,10 @@ jobs:
           "$bt/apksigner" verify --verbose --print-certs "$apk"
           "$bt/aapt2" dump badging "$apk" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code|application-debuggable|testOnly)"
           "$bt/zipalign" -c -P 16 -v 4 "$apk" | tail -3
+          unzip -l "$apk" | grep 'lib/arm64-v8a/'
+          for f in libvirgl_test_server libvirgl_render_server libvirgl_test_server_ahb libvirgl_render_server_ahb libgpureport; do
+            unzip -l "$apk" | grep -q "lib/arm64-v8a/$f.so" || { echo "missing $f.so (Venus)"; exit 1; }
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: deskdroid-debug-apk
