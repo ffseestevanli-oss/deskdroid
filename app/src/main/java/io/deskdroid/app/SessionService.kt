@@ -84,6 +84,7 @@ class SessionService : Service() {
                 }
             }
             VenusServer.writeSessionEnv(this, paths, gpu == "venus")
+            Browsers.install(this, paths)
             AppLog.setStatus("Starting the desktop (${GpuProfile.describe(gpu)})")
             session = Proot.sessionCommand(paths, sessionEnv(gpu)).start().also { pump("session", it) }
             AppLog.setStatus("Desktop running")
@@ -105,7 +106,7 @@ class SessionService : Service() {
             "DESKDROID_GPU" to gpu,
             "DESKDROID_SCALE" to "%.2f".format(java.util.Locale.ROOT, scale),
             "TZ" to TimeZone.getDefault().id,
-        )
+        ) + Browsers.geckoEnv
     }
 
     /**

@@ -40,7 +40,11 @@ object Proot {
             "DISPLAY=:0",
         )
         args += env.map { (k, v) -> "$k=$v" }
-        args += listOf("/bin/sh", "/usr/local/bin/deskdroid-boot")
+        // Browser fixes first, as root (see Browsers); they never block the boot.
+        args += listOf(
+            "/bin/sh", "-c",
+            "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; exec /bin/sh /usr/local/bin/deskdroid-boot",
+        )
         return ProcessBuilder(args).redirectErrorStream(true).also { pb ->
             pb.environment().apply {
                 clear()
