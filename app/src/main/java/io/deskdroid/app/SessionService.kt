@@ -78,6 +78,10 @@ class SessionService : Service() {
             if (gpu == "venus") {
                 AppLog.setStatus("Starting the GPU server")
                 gpuServer = VenusServer.start(this, paths) { pump("venus", it) }
+                if (gpuServer != null) {
+                    AppLog.setStatus("Testing the GPU")
+                    if (!VenusServer.selfTest(paths)) { gpuServer?.destroy(); gpuServer = null }
+                }
                 if (gpuServer == null) {
                     AppLog.i("GPU server unavailable; using software rendering")
                     gpu = "llvmpipe"

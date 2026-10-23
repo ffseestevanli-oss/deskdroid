@@ -90,6 +90,38 @@ object VenusServer {
         return p
     }
 
+    /** What Linux apps need to use Venus over vtest, with Zink for OpenGL. */
+    private fun clientEnv(icd: File) = linkedMapOf(
+        "VN_DEBUG" to "vtest",
+        "VK_ICD_FILENAMES" to "/usr/share/vulkan/icd.d/${icd.name}",
+        // No DRI3 device behind Venus over vtest: present through the X server in software.
+        "MESA_VK_WSI_DEBUG" to "sw",
+        // OpenGL through Zink on Venus.
+        "MESA_LOADER_DRIVER_OVERRIDE" to "zink",
+        "GALLIUM_DRIVER" to "zink",
+        "ZINK_DESCRIPTORS" to "lazy",
+    )
+
+    /**
+     * Checks that a Linux Vulkan app reaches the GPU through the running server
+     * before the desktop depends on it: vulkaninfo must list a Venus device
+     * within 20 s. A hang here would otherwise leave the desktop black.
+     */
+    fun selfTest(paths: Paths): Boolean {
+        val icd = venusIcd(paths) ?: return false
+        val p = Proot.shellCommand(paths, clientEnv(icd), "vulkaninfo --summary 2>&1").start()
+        val out = StringBuilder()
+        val reader = Thread { p.inputStream.bufferedReader().forEachLine { synchronized(out) { out.appendLine(it) } } }.apply { start() }
+        val done = p.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)
+        if (!done) p.destroyForcibly()
+        reader.join(1_000)
+        val text = synchronized(out) { out.toString() }
+        text.lineSequence().filter { it.isNotBlank() }.take(40).forEach { AppLog.i("[venus-test] $it") }
+        val ok = done && text.lineSequence().any { it.contains("deviceName") && it.contains("Venus") }
+        AppLog.i(if (ok) "Venus self-test passed" else "Venus self-test failed (${if (done) "no Venus device" else "timed out"})")
+        return ok
+    }
+
     /**
      * Writes the GPU environment for the Plasma session. startplasma sources
      * the .sh files in ~/.config/plasma-workspace/env, so this reaches KWin, plasmashell and
@@ -100,44 +132,38 @@ object VenusServer {
         val f = File(paths.rootfs, "home/deskdroid/.config/plasma-workspace/env/deskdroid-gpu.sh")
         if (!on) {
             if (f.exists() && f.readText().contains(TAG)) f.delete()
-            setKwinWrapper(paths, false)
+            setShellWrappers(paths, false)
             return
         }
         val icd = venusIcd(paths) ?: return
         f.parentFile!!.mkdirs()
         f.writeText(
-            """
-            |# $TAG: written by the DeskDroid app (VenusServer.kt) at each start in Venus mode.
-            |export VN_DEBUG=vtest
-            |export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/${icd.name}
-            |# No DRI3 device behind Venus over vtest: present through the X server in software.
-            |export MESA_VK_WSI_DEBUG=sw
-            |# OpenGL through Zink on Venus.
-            |export MESA_LOADER_DRIVER_OVERRIDE=zink
-            |export GALLIUM_DRIVER=zink
-            |export ZINK_DESCRIPTORS=lazy
-            |""".trimMargin()
+            "# $TAG: written by the DeskDroid app (VenusServer.kt) at each start in Venus mode.\n" +
+                clientEnv(icd).entries.joinToString("") { (k, v) -> "export $k=$v\n" }
         )
-        setKwinWrapper(paths, !Prefs.gpuDesktop(c))
+        setShellWrappers(paths, !Prefs.gpuDesktop(c))
     }
 
     /**
-     * KWin on the GPU is opt-in (virgl crashed it on the Pixel 10 Pro): by default
-     * it composites with llvmpipe while apps use Venus. ksmserver starts kwin_x11
-     * through PATH, so a wrapper in /usr/local/bin (ahead of /usr/bin) does that.
+     * The desktop shell on the GPU is opt-in (virgl crashed KWin on the Pixel 10
+     * Pro): by default KWin and plasmashell render with llvmpipe while apps use
+     * Venus, so a GPU problem can't leave the desktop black. Both are started
+     * through PATH, so wrappers in /usr/local/bin (ahead of /usr/bin) do that.
      */
-    private fun setKwinWrapper(paths: Paths, on: Boolean) {
-        val f = File(paths.rootfs, "usr/local/bin/kwin_x11")
-        if (on) {
-            f.writeText(
-                "#!/bin/sh\n# $TAG: written by the DeskDroid app (VenusServer.kt) in Venus mode.\n" +
-                    "# KWin composites in software; apps keep the GPU through Venus.\n" +
-                    "unset MESA_LOADER_DRIVER_OVERRIDE VN_DEBUG VK_ICD_FILENAMES\n" +
-                    "LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe exec /usr/bin/kwin_x11 \"\$@\"\n"
-            )
-            f.setExecutable(true, false)
-        } else if (f.exists() && f.readText().let { it.contains(TAG) || it.contains("deskdroid-virgl-kwin") }) {
-            f.delete()
+    private fun setShellWrappers(paths: Paths, on: Boolean) {
+        for (name in listOf("kwin_x11", "plasmashell")) {
+            val f = File(paths.rootfs, "usr/local/bin/$name")
+            if (on) {
+                f.writeText(
+                    "#!/bin/sh\n# $TAG: written by the DeskDroid app (VenusServer.kt) in Venus mode.\n" +
+                        "# The desktop renders in software; apps keep the GPU through Venus.\n" +
+                        "unset MESA_LOADER_DRIVER_OVERRIDE VN_DEBUG VK_ICD_FILENAMES MESA_VK_WSI_DEBUG ZINK_DESCRIPTORS\n" +
+                        "LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe exec /usr/bin/$name \"\$@\"\n"
+                )
+                f.setExecutable(true, false)
+            } else if (f.exists() && f.readText().let { it.contains(TAG) || it.contains("deskdroid-virgl-kwin") }) {
+                f.delete()
+            }
         }
     }
 }

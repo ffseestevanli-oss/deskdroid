@@ -17,8 +17,11 @@ upstream Venus and needs `VK_EXT_external_memory_dma_buf` (the Pixel 10 Pro has
 it). **AHardwareBuffer** is a separate server build for drivers that lack it,
 common on Mali. Automatic asks the driver and picks one.
 
-KWin (window effects) stays on software rendering by default, because virgl
-crashed it. Apps get the GPU either way.
+KWin (window effects) and plasmashell (panel, wallpaper) stay on software
+rendering by default, so a GPU problem can't leave the desktop black. Apps get
+the GPU either way. Before the desktop starts, the app runs `vulkaninfo` against
+the server; if it doesn't find a Venus device within 20 s, the session falls back
+to software rendering and the log shows `[venus-test]` lines saying why.
 
 ## Results so far
 
@@ -28,6 +31,8 @@ crashed it. Apps get the GPU either way.
   extension Venus needs is present, including `VK_KHR_external_memory_fd`,
   `VK_EXT_external_memory_dma_buf` and `VK_EXT_image_drm_format_modifier`.
 - Firefox tabs crash in software mode too, so that crash isn't the GPU path's.
+- 2026-10-23, build 31, Venus: black screen after the splash screen. Since then:
+  plasmashell stays on software rendering too, and the Venus self-test above.
 
 ## 1. GPU report (before starting the desktop)
 

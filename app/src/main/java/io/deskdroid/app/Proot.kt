@@ -6,7 +6,13 @@ import java.io.File
 object Proot {
 
     /** [env] is passed through deskdroid-boot to the session (DESKDROID_* settings). */
-    fun sessionCommand(paths: Paths, env: Map<String, String>): ProcessBuilder {
+    fun sessionCommand(paths: Paths, env: Map<String, String>): ProcessBuilder =
+        // Browser fixes first, as root (see Browsers); they never block the boot.
+        shellCommand(paths, env,
+            "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; exec /bin/sh /usr/local/bin/deskdroid-boot")
+
+    /** Runs [script] with /bin/sh as (fake) root inside the rootfs. */
+    fun shellCommand(paths: Paths, env: Map<String, String>, script: String): ProcessBuilder {
         paths.prootTmp.mkdirs()
         val args = mutableListOf(
             paths.proot.path,
@@ -40,11 +46,7 @@ object Proot {
             "DISPLAY=:0",
         )
         args += env.map { (k, v) -> "$k=$v" }
-        // Browser fixes first, as root (see Browsers); they never block the boot.
-        args += listOf(
-            "/bin/sh", "-c",
-            "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; exec /bin/sh /usr/local/bin/deskdroid-boot",
-        )
+        args += listOf("/bin/sh", "-c", script)
         return ProcessBuilder(args).redirectErrorStream(true).also { pb ->
             pb.environment().apply {
                 clear()
