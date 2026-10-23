@@ -18,6 +18,11 @@ case "$EDITION" in
   full)      LISTS="base plasma full" ;;
   *) echo "unknown edition: $EDITION" >&2; exit 1 ;;
 esac
+# Floorp, the default browser (not in Debian), for editions with a browser.
+case "$EDITION" in
+  full|ultralite) FLOORP_HOOK="$HERE/floorp.sh \"\$1\"" ;;
+  *) FLOORP_HOOK=true ;;
+esac
 PKGS="$(for l in $LISTS; do cat "$HERE/packages/$l.txt"; done | grep -Ev '^\s*(#|$)' | paste -sd, -)"
 
 mmdebstrap \
@@ -37,6 +42,7 @@ mmdebstrap \
   --customize-hook='chroot "$1" find / -xdev -type f -perm -4000 | sort > "$1/etc/deskdroid/setuid-files"' \
   --customize-hook='mkdir -p "$1/home/deskdroid/.config" && printf "[Software]\nUseOfflineUpdates=false\n" > "$1/home/deskdroid/.config/discoverrc"' \
   --customize-hook="$HERE/dark-theme.sh \"\$1\"" \
+  --customize-hook="$FLOORP_HOOK" \
   --customize-hook='echo "en_US.UTF-8 UTF-8" > "$1/etc/locale.gen" && chroot "$1" locale-gen' \
   --customize-hook='mkdir -p "$1/home/deskdroid/.config" && printf "[Basic Settings]\nIndexing-Enabled=false\n" > "$1/home/deskdroid/.config/baloofilerc"' \
   --customize-hook='printf "[General]\nsystemdBoot=false\n" > "$1/home/deskdroid/.config/startkderc"' \

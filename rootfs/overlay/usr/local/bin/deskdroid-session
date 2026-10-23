@@ -57,6 +57,12 @@ export GDK_SCALE=$(awk -v s="$SCALE" 'BEGIN { printf "%d", (s >= 1.75) ? 2 : 1 }
 # would double that, so GDK_DPI_SCALE takes it back out.
 export GDK_DPI_SCALE=$(awk -v g="$GDK_SCALE" 'BEGIN { printf "%.2f", 1 / g }')
 
+# Gecko browsers (Floorp): their sandboxes need seccomp and user namespaces,
+# which proot can't provide, so tabs crash without these.
+export MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 \
+  MOZ_DISABLE_RDD_SANDBOX=1 MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 \
+  MOZ_DISABLE_UTILITY_SANDBOX=1
+
 # Light/Full run Plasma; Ultra-lite runs MATE.
 if command -v startplasma-x11 >/dev/null; then
   exec dbus-launch --exit-with-session startplasma-x11
