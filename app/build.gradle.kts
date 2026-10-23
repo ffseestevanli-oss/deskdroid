@@ -43,6 +43,9 @@ android {
 
 dependencies {
     implementation(project(":lorie"))
+    // DesktopActivity extends lorie's MainActivity, an AppCompatActivity; lorie only
+    // has appcompat as an implementation dependency, so name it here too.
+    implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("org.apache.commons:commons-compress:1.27.1")
 }
 
