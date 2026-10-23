@@ -191,18 +191,10 @@ diff --git a/src/venus/vkr_device_memory.c b/src/venus/vkr_device_memory.c
 +   vkr_gbm_bo_destroy(bo);
 +   return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 +}
-+#else
++#endif
  static inline VkResult
  vkr_gbm_get_fd_info_from_allocation_info(UNUSED struct vkr_physical_device *physical_dev,
                                           UNUSED const VkMemoryAllocateInfo *alloc_info,
-@@ -224,6 +352,7 @@ vkr_gbm_get_fd_info_from_allocation_info(UNUSED struct vkr_physical_device *phys
-    vkr_log("minigbm_allocation is not enabled");
-    return VK_ERROR_OUT_OF_DEVICE_MEMORY;
- }
-+#endif
- 
- #endif /* ENABLE_GBM_ALLOCATION */
- 
 @@ -365,6 +494,23 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
           valid_fd_types |= 1 << VIRGL_RESOURCE_FD_DMABUF;
     }
