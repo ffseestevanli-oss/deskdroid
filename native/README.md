@@ -19,6 +19,10 @@ F-Droid builds every APK from source, so DeskDroid ships no prebuilt binaries.
 `talloc/shim/replace.h` is ours: a small stand-in for Samba's `lib/replace`, so
 talloc builds without Samba's waf configure step.
 
+Local changes to vendored sources (keep them when updating):
+- `proot/src/extension/ashmem_memfd/ashmem_memfd.c`: adds `#include <string.h>`,
+  which NDK clang requires.
+
 Outputs (`app/build/generated/nativeTools/lib/arm64-v8a/`):
 - `libproot.so`: the proot executable
 - `libproot-loader.so`: proot's loader (found through `PROOT_LOADER`)

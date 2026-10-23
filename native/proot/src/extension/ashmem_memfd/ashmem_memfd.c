@@ -1,6 +1,7 @@
 #if defined(__ANDROID__) || defined(__BIONIC__)
 
 #include <stdlib.h>
+#include <string.h>  /* strcmp, memset (NDK clang rejects implicit declarations) */
 #include <signal.h>
 #include <unistd.h>
 #include <sys/syscall.h>  /* __NR_memfd_create,  */
