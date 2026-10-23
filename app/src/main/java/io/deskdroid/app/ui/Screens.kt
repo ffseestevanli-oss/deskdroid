@@ -544,6 +544,14 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             DesktopDefaults.applyTouchMode(c)
         }.view, LinearLayout.LayoutParams(-1, -2))
 
+        addView(ui.text("DESKTOP SCALE", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+        val scales = listOf(1f, 1.25f, 1.5f, 0f)
+        addView(Segmented(ui, listOf("100%", "125%", "150%", "Auto"), scales.indexOf(Prefs.scale(c)).coerceAtLeast(0)) { i ->
+            Prefs.setScale(c, scales[i])
+        }.view, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.text("Applies the next time the desktop starts. Zoom in the desktop's side drawer enlarges " +
+            "everything on top of this. Auto picks from your screen's density.", 13f, Party.MUTED))
+
         addView(ui.text("GRAPHICS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
         val modes = listOf("auto", "virgl", "llvmpipe", "nocomp", "turnip")
         val labels = listOf("Automatic", "GPU via virgl (OpenGL)", "Software (llvmpipe)", "Software, effects off",

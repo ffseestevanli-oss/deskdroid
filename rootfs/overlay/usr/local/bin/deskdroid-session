@@ -53,7 +53,9 @@ if command -v kwriteconfig6 >/dev/null; then
   kwriteconfig6 --file kdeglobals --group KScreen --key ScaleFactor "$SCALE"
 fi
 export GDK_SCALE=$(awk -v s="$SCALE" 'BEGIN { printf "%d", (s >= 1.75) ? 2 : 1 }')
-export GDK_DPI_SCALE=$(awk -v s="$SCALE" -v g="$GDK_SCALE" 'BEGIN { printf "%.2f", s / g }')
+# GTK already sizes text from Xft.dpi, which carries the whole scale; GDK_SCALE
+# would double that, so GDK_DPI_SCALE takes it back out.
+export GDK_DPI_SCALE=$(awk -v g="$GDK_SCALE" 'BEGIN { printf "%.2f", 1 / g }')
 
 # Light/Full run Plasma; Ultra-lite runs MATE.
 if command -v startplasma-x11 >/dev/null; then

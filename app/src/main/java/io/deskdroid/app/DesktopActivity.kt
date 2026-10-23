@@ -231,7 +231,7 @@ class DesktopActivity : com.termux.x11.MainActivity() {
     }
 
     companion object {
-        private val ZOOMS = listOf(100, 125, 150)
-        private val ZOOMS_LABEL = listOf("1×", "1.25×", "1.5×")
+        private val ZOOMS = listOf(100, 125, 150, 200)
+        private val ZOOMS_LABEL = listOf("1×", "1.25×", "1.5×", "2×")
     }
 }

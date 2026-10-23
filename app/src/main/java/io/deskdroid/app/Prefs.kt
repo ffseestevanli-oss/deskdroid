@@ -24,7 +24,8 @@ object Prefs {
     fun touchMode(c: Context) = prefs(c).getString("touch_mode", "touchpad")!!
     fun setTouchMode(c: Context, mode: String) = prefs(c).edit().putString("touch_mode", mode).apply()
 
-    fun scale(c: Context) = prefs(c).getFloat("scale", 0f) // 0 = from display DPI
+    /** Desktop scale: 1 = native pixels (default), 0 = from the display's density. */
+    fun scale(c: Context) = prefs(c).getFloat("scale", 1f)
     fun setScale(c: Context, s: Float) = prefs(c).edit().putFloat("scale", s).apply()
 
     fun setupDone(c: Context) = prefs(c).getBoolean("setup_done", false)

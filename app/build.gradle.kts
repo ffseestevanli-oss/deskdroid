@@ -13,8 +13,8 @@ android {
         applicationId = "io.deskdroid.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.2-virgl"
+        versionCode = 5
+        versionName = "0.1.3"
         ndk { abiFilters += "arm64-v8a" }
         buildConfigField(
             "String", "ROOTFS_BASE_URL",
