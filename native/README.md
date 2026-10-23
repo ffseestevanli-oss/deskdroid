@@ -23,16 +23,23 @@ F-Droid builds every APK from source, so DeskDroid ships no prebuilt binaries.
 Vulkan driver details for Settings → GPU report, including the Vulkan
 extensions GPU forwarding (Venus) depends on.
 
-`virgl/build.sh` builds virglrenderer's vtest server for Android with meson
-and the NDK (needs `meson`, `ninja`, `pkg-config`, `python3`). It downloads the
-two source tarballs once into `~/.cache/deskdroid` and checks their SHA-256.
-Linux apps reach it through Mesa's virgl driver (`GALLIUM_DRIVER=virpipe`) on
-`/tmp/.virgl_test`; it renders with the vendor's OpenGL ES or the system's ANGLE.
+`virgl/build.sh` builds virglrenderer's vtest server and render server for
+Android with meson and the NDK (needs `meson`, `ninja`, `pkg-config`, `python3`),
+with Venus enabled. It downloads the two source tarballs once into
+`~/.cache/deskdroid` and checks their SHA-256. Linux apps reach it through
+Mesa's Venus Vulkan driver (`VN_DEBUG=vtest`) on `/tmp/.virgl_test`, with Zink
+on top for OpenGL; the render server runs their Vulkan commands on Android's
+Vulkan driver. It is built twice: the plain build shares memory as dma-bufs
+(upstream Venus), the `_ahb` build compiles patch 0011 (`-DDESKDROID_VENUS_AHB`)
+to share AHardwareBuffers, for drivers without `VK_EXT_external_memory_dma_buf`.
+The install prefix is `/proc/self/cwd`, so the server execs
+`libexec/virgl_render_server` from its working directory, which
+`VenusServer.kt` links to the right `lib*.so`.
 The patches make it build and run on Android (EGL without GBM, ashmem instead
-of memfd, ANGLE loading, DXTn texture decoding). Our change to Termux's 0007:
-ANGLE is loaded from `angle/` relative to the server's working directory
-(`VirglServer.kt` links that to the system's ANGLE) and the default socket is
-`/tmp/.virgl_test`. Our change to 0010: keep detecting `timespec_get`, which API 29 has.
+of memfd, AHardwareBuffer memory, DXTn texture decoding). Our change to Termux's
+0007: the default socket is `/tmp/.virgl_test`. Our change to 0010: keep
+detecting `timespec_get`, which API 29 has. 0011 is guarded by
+`DESKDROID_VENUS_AHB`; 0012 adds a missing `VKAPI_ATTR`.
 
 `talloc/shim/replace.h` is ours: a small stand-in for Samba's `lib/replace`, so
 talloc builds without Samba's waf configure step.
@@ -47,7 +54,8 @@ Outputs (`app/build/generated/nativeTools/lib/arm64-v8a/`):
 - `libtalloc.so`: talloc shared library proot links against
 - `libddtool.so`: the installer helper above
 - `libgpureport.so`: the GPU report tool (NDK builds only)
-- `libvirgl_test_server.so`: the virgl server (NDK builds only)
+- `libvirgl_test_server.so`, `libvirgl_render_server.so`: the Venus server, dma-buf build (NDK builds only)
+- `libvirgl_test_server_ahb.so`, `libvirgl_render_server_ahb.so`: the AHardwareBuffer build
 
 To update a vendored source, replace the files from the new upstream version
 and change the table above. Local build without the NDK uses the host

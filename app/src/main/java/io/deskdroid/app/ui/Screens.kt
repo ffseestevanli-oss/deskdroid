@@ -29,7 +29,7 @@ import io.deskdroid.app.Paths
 import io.deskdroid.app.Prefs
 import io.deskdroid.app.R
 import io.deskdroid.app.SessionService
-import io.deskdroid.app.VirglServer
+import io.deskdroid.app.VenusServer
 
 /** One full-screen page of the launcher. MainActivity swaps between them. */
 abstract class Screen(protected val activity: Activity, protected val nav: Navigator) {
@@ -553,8 +553,8 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             "everything on top of this. Auto picks from your screen's density.", 13f, Party.MUTED))
 
         addView(ui.text("GRAPHICS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val modes = listOf("auto", "virgl", "llvmpipe", "nocomp", "turnip")
-        val labels = listOf("Automatic", "GPU via virgl (experimental)", "Software (llvmpipe)", "Software, effects off",
+        val modes = listOf("auto", "venus", "llvmpipe", "nocomp", "turnip")
+        val labels = listOf("Automatic", "GPU via Venus (experimental)", "Software (llvmpipe)", "Software, effects off",
             "Adreno (Turnip + Zink)")
         val gpuGroup = ui.column(6)
         fun renderGpu() {
@@ -571,18 +571,19 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         }
         renderGpu()
         addView(gpuGroup, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("VIRGL BACKEND", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val backends = listOf("auto", "angle", "gles")
-        addView(Segmented(ui, listOf("Automatic", "ANGLE", "Vendor GLES"),
-            backends.indexOf(Prefs.virglBackend(c)).coerceAtLeast(0)) { i ->
-            Prefs.setVirglBackend(c, backends[i])
+        addView(ui.text("VENUS GPU MEMORY", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+        val memModes = listOf("auto", "dmabuf", "ahb")
+        addView(Segmented(ui, listOf("Automatic", "dma-buf", "AHardwareBuffer"),
+            memModes.indexOf(Prefs.venusMemory(c)).coerceAtLeast(0)) { i ->
+            Prefs.setVenusMemory(c, memModes[i])
         }.view, LinearLayout.LayoutParams(-1, -2))
-        val angle = VirglServer.angleDir()
+        addView(ui.switchRow(null, "Desktop effects on the GPU", "Venus mode only. Off keeps KWin on software " +
+            "rendering, which is the stable choice; apps use the GPU either way.", Prefs.gpuDesktop(c)) {
+            Prefs.setGpuDesktop(c, it)
+        }, LinearLayout.LayoutParams(-1, -2))
         addView(ui.text("Changes apply the next time the desktop starts. Automatic uses Turnip on Adreno and software " +
-            "rendering on other GPUs. virgl gives apps the GPU on Mali and PowerVR but can crash them; the " +
-            "desktop itself stays on software rendering. " +
-            (if (angle != null) "This phone has ANGLE, which virgl uses by default." else "This phone has no ANGLE, so virgl uses the vendor driver."),
-            12f, Party.MUTED))
+            "rendering on other GPUs. Venus gives Linux apps Vulkan and OpenGL (through Zink) on Mali and PowerVR " +
+            "GPUs. If apps crash or draw garbage there, try the other GPU memory mode.", 12f, Party.MUTED))
         addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
 
@@ -662,7 +663,7 @@ class GpuReportScreen(a: Activity, n: Navigator) : Screen(a, n) {
 
     private fun collect(): String {
         val paths = Paths(c)
-        val angle = VirglServer.angleDir()
+        val angle = File("/system/lib64/libEGL_angle.so").takeIf { it.exists() }?.parentFile
         val sb = StringBuilder()
         sb.appendLine("DeskDroid ${BuildConfig.VERSION_NAME}")
         sb.appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.DEVICE})")
@@ -672,10 +673,12 @@ class GpuReportScreen(a: Activity, n: Navigator) : Screen(a, n) {
             sb.appendLine("$dev: ${if (File(dev).exists()) "present" else "absent"}")
         }
         sb.appendLine("ANGLE: ${angle?.path ?: "not found"}")
-        sb.appendLine("virgl server: ${if (paths.virglServer.exists()) "bundled" else "missing"}")
+        sb.appendLine("Venus server: ${if (File(paths.nativeLibs, "libvirgl_test_server.so").exists()) "bundled" else "missing"}, " +
+            "render server: ${if (File(paths.nativeLibs, "libvirgl_render_server.so").exists()) "bundled" else "missing"}")
+        sb.appendLine("Venus driver in system image: ${VenusServer.venusIcd(paths)?.name ?: "missing"}")
         val mode = Prefs.gpuMode(c)
-        sb.appendLine("Graphics setting: $mode -> ${GpuProfile.resolve(mode, paths)}, virgl backend " +
-            "${Prefs.virglBackend(c)} -> ${VirglServer.backend(c)}")
+        sb.appendLine("Graphics setting: $mode -> ${GpuProfile.resolve(mode, paths)}, Venus memory " +
+            "${Prefs.venusMemory(c)} -> ${VenusServer.memoryMode(c, paths)}, desktop on GPU: ${Prefs.gpuDesktop(c)}")
         sb.appendLine()
         sb.append(run(listOf(paths.gpuReport.path)))
         if (angle != null) sb.append(run(listOf(paths.gpuReport.path, "--angle", angle.path)))

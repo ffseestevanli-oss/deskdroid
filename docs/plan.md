@@ -20,7 +20,7 @@ _Draft 1 · 2026-10-16_
 | Display server | **Termux:X11** for the MVP, then **DeskDroid's own Wayland host** (Phase 2) | Termux:X11 is mature and gets us a desktop fastest. Wayland is the destination because Plasma 6.8+ is Wayland-only (section 6). |
 | Desktop session | Plasma **X11 session** for MVP, **Plasma Wayland** (KWin nested on our host) from Phase 2 | X11 apps keep working through Xwayland in both. |
 | GPU (Adreno) | **Turnip** (Mesa Vulkan) via `/dev/kgsl`, **Zink** for OpenGL | `/dev/kgsl` is reachable from unprivileged apps; this is how Winlator/Mobox get real GPU speed. |
-| GPU (Mali/other) | **virgl** over Android GLES/ANGLE first (OpenGL), then **Venus** Vulkan forwarding + Zink; llvmpipe fallback | No unprivileged path to Panfrost/Mali or PowerVR DRM drivers. Vortek is closed-source, so Venus is the open equivalent. Decided with Steven 2026-10-23: virgl first. First Pixel 10 Pro test: virgl crashed KWin and Firefox tabs, so it is opt-in and Automatic stays on llvmpipe. |
+| GPU (Mali/other) | **Venus** Vulkan forwarding + Zink (dma-buf, or AHardwareBuffer memory where the driver lacks dma-buf export); llvmpipe fallback | No unprivileged path to Panfrost/Mali or PowerVR DRM drivers. Vortek is closed-source, so Venus is the open equivalent. Decided with Steven 2026-10-23: virgl first. First Pixel 10 Pro test: virgl crashed KWin and Firefox tabs. Steven then chose to replace virgl with Venus (opt-in, Automatic stays on llvmpipe until proven), borrowing ideas from GameNative's Vortek: KWin stays on software by default, and zero-copy presentation into AHardwareBuffers is a later step. |
 | x86 translation | **FEX-Emu** for Steam and 32-bit x86, **Box64** + **Wine** (WoW64) for standalone Windows apps | FEX runs 32-bit and 64-bit x86 without needing 32-bit ARM, which the Pixel 10 Pro and most 2023+ chips lack; it is what Valve uses for Steam on ARM (Steam Frame) and what Ubuntu's arm64 Steam snap uses. Box64 stays as a fast alternative for Wine apps. |
 | Audio | **PulseAudio** server on the Android side with an AAudio sink | Proven in Termux; PipeWire-pulse client inside the rootfs can come later. |
 | How we get binaries | Native pieces built with the NDK under **our own package prefix**; rootfs is plain Debian built in CI | Avoids depending on the Termux app or its `com.termux` hardcoded paths. |
@@ -40,7 +40,7 @@ _Draft 1 · 2026-10-16_
 │  • Display manager (internal / external / DeX mode)                   │
 │ Native (jniLibs, so they are executable under W^X)                    │
 │  • libproot.so + loader     • libpulseaudio-server.so (AAudio sink)   │
-│  • small helpers (busybox-style tar, virgl/vortek server later)       │
+│  • small helpers (busybox-style tar, Venus server)       │
 └───────────────────────────────────────────────────────────────────────┘
              │ proot (bind /dev/kgsl, /sdcard, X/pulse sockets)
 ┌──────────────────────────── Debian rootfs ────────────────────────────┐
