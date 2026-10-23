@@ -599,6 +599,11 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             LinearLayout.LayoutParams(-1, -2))
 
         addView(ui.text("LOG", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+        addView(ui.outlineButton("Share log", Party.CYAN, Party.CYAN) {
+            c.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+                .putExtra(Intent.EXTRA_SUBJECT, "DeskDroid log")
+                .putExtra(Intent.EXTRA_TEXT, "DeskDroid ${BuildConfig.VERSION_NAME}\n\n${AppLog.text()}"), "Share log"))
+        }, LinearLayout.LayoutParams(-1, -2))
         log = ui.text(AppLog.text(), 11f, Party.MUTED).apply {
             typeface = android.graphics.Typeface.MONOSPACE
             setTextIsSelectable(true)

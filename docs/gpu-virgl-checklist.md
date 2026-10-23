@@ -18,6 +18,12 @@ speed. Vulkan apps still use software rendering until Venus lands.
   unstable") and a Firefox tab crashed. Software rendering works well. Since
   then: Automatic picks software on non-Adreno phones, virgl is opt-in, and in
   virgl mode KWin composites in software while apps use the GPU.
+- GPU report (Android 17, driver 25.3@6908880): GLES 3.2 and ANGLE on Vulkan
+  1.4.317 both work. Every Vulkan extension Venus needs is present, including
+  `VK_KHR_external_memory_fd`, `VK_EXT_external_memory_dma_buf` and
+  `VK_EXT_image_drm_format_modifier`, so upstream Venus should run without the
+  AHardwareBuffer patch.
+- Firefox tabs crash in software mode too, so that crash isn't virgl's.
 
 ## 1. GPU report (before starting the desktop)
 
