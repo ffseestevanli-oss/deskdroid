@@ -83,4 +83,4 @@ jobs:
         run: |
           gh release delete rootfs-latest --yes --cleanup-tag || true
           gh release create rootfs-latest out/* \
-            --title "Rootfs (latest)" --notes "Debian trixie arm64: Light, Full and Ultra-lite editions, built from ${{ github.sha }}" --prerelease
+            --title "Rootfs (latest)" --notes "Debian trixie arm64: Light, Full and Ultra-lite editions, built from ${{ github.sha }}" --prerelease --latest=false
