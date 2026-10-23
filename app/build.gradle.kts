@@ -28,11 +28,10 @@ android {
 
     buildFeatures { buildConfig = true }
 
-    // Native libs are stored uncompressed: lorie System.load()s libXlorie.so
-    // straight from the APK. The manifest still sets extractNativeLibs="true",
-    // so the installer also copies them to nativeLibraryDir, the only place an
-    // app targeting API 29+ may exec proot and its helpers from (W^X).
-    packaging { jniLibs { useLegacyPackaging = false } }
+    // Native libs are extracted at install time to nativeLibraryDir, the only
+    // place an app targeting API 29+ may exec proot and its helpers from (W^X).
+    // The X server finds the extracted libXlorie.so via SessionService's class path.
+    packaging { jniLibs { useLegacyPackaging = true } }
     sourceSets.getByName("main").jniLibs.srcDir("build/generated/nativeTools/lib")
 
     compileOptions {

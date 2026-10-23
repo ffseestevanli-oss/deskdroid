@@ -5,8 +5,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.system.Os
 import java.io.File
 import java.util.TimeZone
 
@@ -100,15 +102,25 @@ class SessionService : Service() {
      * The X server is Termux:X11's CmdEntryPoint, compiled into this APK. It runs
      * as a separate app_process, the same way the termux-x11 command starts it,
      * and connects back to DesktopActivity. The socket lands in the rootfs /tmp.
+     *
+     * CmdEntryPoint finds libXlorie.so as the class path resource
+     * lib/<abi>/libXlorie.so and System.load()s that path. Native libs in the APK
+     * are compressed (they must be extracted for proot, W^X), so a directory that
+     * links the resource to the extracted copy goes ahead of the APK.
      */
     private fun startX11Server(paths: Paths): Process {
+        val libRoot = File(cacheDir, "x11-libpath")
+        val abiDir = File(libRoot, "lib/${Build.SUPPORTED_ABIS[0]}").apply { mkdirs() }
+        val link = File(abiDir, "libXlorie.so")
+        link.delete()
+        Os.symlink(File(applicationInfo.nativeLibraryDir, "libXlorie.so").path, link.path)
         val pb = ProcessBuilder(
             "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
             "com.termux.x11.CmdEntryPoint", ":0"
         ).redirectErrorStream(true)
         pb.environment().apply {
             remove("LD_PRELOAD"); remove("LD_LIBRARY_PATH")
-            put("CLASSPATH", applicationInfo.sourceDir)
+            put("CLASSPATH", "${libRoot.path}:${applicationInfo.sourceDir}")
             put("TMPDIR", paths.rootfsTmp.path)
             put("XKB_CONFIG_ROOT", File(paths.rootfs, "usr/share/X11/xkb").path)
         }
