@@ -13,8 +13,8 @@ android {
         applicationId = "io.deskdroid.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.0-phase1"
+        versionCode = 3
+        versionName = "0.1.1-phase1"
         ndk { abiFilters += "arm64-v8a" }
         buildConfigField(
             "String", "ROOTFS_BASE_URL",
@@ -24,6 +24,15 @@ android {
             "String", "IMAGE_PUBLIC_KEY",
             "\"${project.findProperty("deskdroidImagePublicKey") ?: ""}\""
         )
+    }
+
+    // A fixed debug key (not a secret), so each CI debug build installs over
+    // the last one instead of needing an uninstall that wipes the desktop.
+    signingConfigs.getByName("debug") {
+        storeFile = file("debug.keystore")
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
     }
 
     buildFeatures { buildConfig = true }

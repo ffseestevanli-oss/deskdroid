@@ -40,6 +40,13 @@ class DesktopActivity : com.termux.x11.MainActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!SessionService.running) {
+            // Reopened from recents after the desktop stopped: lorie would only
+            // show "Not connected". Go back to the launcher instead.
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+            return
+        }
         if (LockGate.needsUnlock(this)) {
             // Opened from the notification while locked: unlock in the launcher first.
             startActivity(Intent(this, MainActivity::class.java))

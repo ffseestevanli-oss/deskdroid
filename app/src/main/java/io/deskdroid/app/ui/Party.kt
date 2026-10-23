@@ -327,6 +327,13 @@ class Ui(val c: Context) {
         addView(content, FrameLayout.LayoutParams(-1, -1))
         addView(RainbowStrip(c), FrameLayout.LayoutParams(-1, c.dp(4)))
         fitsSystemWindows = false
+        // Edge to edge (targetSdk 35): the glow runs under the system bars, the
+        // content stops above the navigation bar. Pages already leave room at the top.
+        setOnApplyWindowInsetsListener { _, insets ->
+            @Suppress("DEPRECATION")
+            content.setPadding(insets.systemWindowInsetLeft, 0, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
+            insets
+        }
     }
 
     fun ellipsize(t: TextView) = t.apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }

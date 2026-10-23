@@ -1,7 +1,7 @@
 #!/bin/sh
 # Starts the desktop session as the deskdroid user. Launched by deskdroid-boot.
 # DESKDROID_GPU: llvmpipe | nocomp | turnip | virgl
-# DESKDROID_SCALE: Plasma scale factor from the screen's density (1, 1.25, ... 2.5)
+# DESKDROID_SCALE: Plasma scale factor from the screen's density (1, 1.25, ... 2)
 
 export XDG_RUNTIME_DIR=/tmp/runtime-$USER
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"

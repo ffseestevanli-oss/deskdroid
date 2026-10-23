@@ -47,14 +47,15 @@ object DesktopDefaults {
         lorie(c).edit().putBoolean("additionalKbdVisible", visible).apply()
 
     /**
-     * Plasma scale from screen density: a 6.5" 1080p phone (~420 dpi) gets 2x so
-     * text is readable; monitors (~100-160 dpi) get 1x.
+     * Plasma scale from screen density: a 6.5" 1080p phone (~420-480 dpi) gets
+     * about 1.5x, small but readable and with room for windows; monitors
+     * (~100-160 dpi) get 1x. Zoom in the drawer adds more on top.
      */
     fun scaleFor(c: Context, displayContext: Context = c): Float {
         val dm = DisplayMetrics()
         @Suppress("DEPRECATION")
         displayContext.getSystemService(WindowManager::class.java).defaultDisplay.getRealMetrics(dm)
-        val s = dm.densityDpi / 192f
-        return (Math.round(s * 4) / 4f).coerceIn(1f, 2.5f)
+        val s = dm.densityDpi / 300f
+        return (Math.round(s * 4) / 4f).coerceIn(1f, 2f)
     }
 }

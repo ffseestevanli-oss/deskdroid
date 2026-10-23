@@ -44,6 +44,7 @@
             android:taskAffinity=".DesktopActivity"
             android:theme="@style/LorieAppTheme"
             android:launchMode="singleInstance"
+            android:autoRemoveFromRecents="true"
             android:supportsPictureInPicture="false"
             android:configChanges="fontScale|orientation|screenSize|keyboard|keyboardHidden|layoutDirection|locale|mcc|mnc|navigation|screenLayout|touchscreen|uiMode|smallestScreenSize|density"
             android:resizeableActivity="true"
