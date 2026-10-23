@@ -75,7 +75,9 @@ class SessionService : Service() {
             waitFor(paths.x11Socket, 15_000)
             if (!headless) showDesktop(displayId)
 
-            var gpu = GpuProfile.resolve(Prefs.gpuMode(this), paths)
+            val wayland = Prefs.sessionType(this) == "wayland"
+            // The experimental Wayland session renders in software for now (deskdroid-session).
+            var gpu = if (wayland) "llvmpipe" else GpuProfile.resolve(Prefs.gpuMode(this), paths)
             if (gpu == "venus") {
                 AppLog.setStatus("Starting the GPU server")
                 gpuServer = VenusServer.start(this, paths) { pump("venus", it) }
@@ -90,8 +92,8 @@ class SessionService : Service() {
             }
             VenusServer.writeSessionEnv(this, paths, gpu == "venus")
             Browsers.install(this, paths)
-            AppLog.setStatus("Starting the desktop (${GpuProfile.describe(gpu)})")
-            session = Proot.sessionCommand(paths, sessionEnv(gpu)).start().also { pump("session", it) }
+            AppLog.setStatus("Starting the desktop (${if (wayland) "Wayland, " else ""}${GpuProfile.describe(gpu)})")
+            session = Proot.sessionCommand(paths, sessionEnv(gpu, wayland)).start().also { pump("session", it) }
             AppLog.setStatus("Desktop running")
             notify("Desktop running · tap to open")
             val code = session!!.waitFor()
@@ -105,10 +107,11 @@ class SessionService : Service() {
         }
     }
 
-    private fun sessionEnv(gpu: String): Map<String, String> {
+    private fun sessionEnv(gpu: String, wayland: Boolean): Map<String, String> {
         val scale = Prefs.scale(this).takeIf { it > 0f } ?: DesktopDefaults.scaleFor(this)
         return mapOf(
             "DESKDROID_GPU" to gpu,
+            "DESKDROID_SESSION" to if (wayland) "wayland" else "x11",
             "DESKDROID_SCALE" to "%.2f".format(java.util.Locale.ROOT, scale),
             "TZ" to TimeZone.getDefault().id,
         ) + Browsers.geckoEnv

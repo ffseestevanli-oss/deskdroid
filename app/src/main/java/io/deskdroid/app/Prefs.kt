@@ -25,6 +25,10 @@ object Prefs {
     fun gpuDesktop(c: Context) = prefs(c).getBoolean("gpu_desktop", false)
     fun setGpuDesktop(c: Context, on: Boolean) = prefs(c).edit().putBoolean("gpu_desktop", on).apply()
 
+    /** Plasma session: "x11" (default) or "wayland" (experimental: KWin nested in the X server, software rendering). */
+    fun sessionType(c: Context) = prefs(c).getString("session_type", "x11")!!
+    fun setSessionType(c: Context, type: String) = prefs(c).edit().putString("session_type", type).apply()
+
     fun touchMode(c: Context) = prefs(c).getString("touch_mode", "touchpad")!!
     fun setTouchMode(c: Context, mode: String) = prefs(c).edit().putString("touch_mode", mode).apply()
 
