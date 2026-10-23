@@ -1,0 +1,8 @@
+// The deskdroid user has passwordless sudo, and the account has no password to
+// type into a polkit prompt, so it gets the same for polkit: Discover can
+// install and update software (PackageKit, flatpak) without asking.
+polkit.addRule(function(action, subject) {
+    if (subject.user == "deskdroid") {
+        return polkit.Result.YES;
+    }
+});

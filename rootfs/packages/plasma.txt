@@ -10,6 +10,9 @@ dolphin
 kate
 ark
 plasma-discover
+# Discover's apt backend and its app catalog; listed because Recommends are off.
+packagekit
+appstream
 plasma-discover-backend-flatpak
 flatpak
 fonts-noto-color-emoji
