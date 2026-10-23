@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -42,3 +44,18 @@ jobs:
         with:
           name: deskdroid-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+      # Every build of main also goes to the apk-latest release, a plain download link.
+      - name: Publish as the apk-latest release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp app/build/outputs/apk/debug/*.apk deskdroid-debug.apk
+          notes="Debug build of main from ${{ github.sha }}. Install deskdroid-debug.apk on an arm64 phone (Android 10 or newer)."
+          if gh release view apk-latest >/dev/null 2>&1; then
+            gh release edit apk-latest --notes "$notes"
+            gh release upload apk-latest deskdroid-debug.apk --clobber
+          else
+            gh release create apk-latest deskdroid-debug.apk --title "DeskDroid APK (latest debug build)" --notes "$notes" --prerelease
+          fi
