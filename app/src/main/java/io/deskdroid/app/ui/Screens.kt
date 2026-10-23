@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
+import android.os.Build
 import android.hardware.display.DisplayManager
 import android.view.Display
 import android.view.Gravity
@@ -13,6 +15,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import java.io.File
+import java.util.concurrent.TimeUnit
 import io.deskdroid.app.AppLog
 import io.deskdroid.app.BuildConfig
 import io.deskdroid.app.Checks
@@ -25,6 +29,7 @@ import io.deskdroid.app.Paths
 import io.deskdroid.app.Prefs
 import io.deskdroid.app.R
 import io.deskdroid.app.SessionService
+import io.deskdroid.app.VirglServer
 
 /** One full-screen page of the launcher. MainActivity swaps between them. */
 abstract class Screen(protected val activity: Activity, protected val nav: Navigator) {
@@ -540,8 +545,9 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         }.view, LinearLayout.LayoutParams(-1, -2))
 
         addView(ui.text("GRAPHICS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val modes = listOf("auto", "llvmpipe", "nocomp", "turnip")
-        val labels = listOf("Automatic", "Software (llvmpipe)", "Software, effects off", "Adreno (Turnip + Zink)")
+        val modes = listOf("auto", "virgl", "llvmpipe", "nocomp", "turnip")
+        val labels = listOf("Automatic", "GPU via virgl (OpenGL)", "Software (llvmpipe)", "Software, effects off",
+            "Adreno (Turnip + Zink)")
         val gpuGroup = ui.column(6)
         fun renderGpu() {
             gpuGroup.removeAllViews()
@@ -557,8 +563,19 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         }
         renderGpu()
         addView(gpuGroup, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("Changes apply the next time the desktop starts. Pixel and other Mali/PowerVR phones use software rendering until GPU forwarding is ready.",
+        addView(ui.text("VIRGL BACKEND", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+        val backends = listOf("auto", "angle", "gles")
+        addView(Segmented(ui, listOf("Automatic", "ANGLE", "Vendor GLES"),
+            backends.indexOf(Prefs.virglBackend(c)).coerceAtLeast(0)) { i ->
+            Prefs.setVirglBackend(c, backends[i])
+        }.view, LinearLayout.LayoutParams(-1, -2))
+        val angle = VirglServer.angleDir()
+        addView(ui.text("Changes apply the next time the desktop starts. Automatic uses Turnip on Adreno and virgl on " +
+            "other GPUs (Mali, PowerVR), with software rendering if the GPU server can't start. " +
+            (if (angle != null) "This phone has ANGLE, which virgl uses by default." else "This phone has no ANGLE, so virgl uses the vendor driver."),
             12f, Party.MUTED))
+        addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
+            LinearLayout.LayoutParams(-1, -2))
 
         addView(ui.switchRow(null, "Start on phone boot", "Desktop starts in the background after you unlock.", Prefs.autoStart(c)) {
             Prefs.setAutoStart(c, it)
@@ -594,5 +611,72 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
                 nav.replace(InstallScreen(activity, nav))
             }
             .setNegativeButton("Cancel", null).show()
+    }
+}
+
+/** What the phone's GPU drivers offer (native/gpureport), to copy or share when reporting GPU problems. */
+class GpuReportScreen(a: Activity, n: Navigator) : Screen(a, n) {
+    private lateinit var out: TextView
+    @Volatile private var report = ""
+
+    override fun build() = page(emptyList()) {
+        addView(backButton())
+        addView(ui.heading("GPU report", 22f))
+        addView(ui.text("Your GPU, its drivers and what DeskDroid can use. Share it when reporting graphics problems.",
+            14f, Party.MUTED))
+        addView(ui.row(8) {
+            addView(ui.weight(ui.outlineButton("Copy", Party.CYAN, Party.CYAN) {
+                c.getSystemService(ClipboardManager::class.java)
+                    .setPrimaryClip(ClipData.newPlainText("DeskDroid GPU report", report))
+            }))
+            addView(ui.weight(ui.outlineButton("Share", Party.PINK, Party.PINK) {
+                c.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, "DeskDroid GPU report")
+                    .putExtra(Intent.EXTRA_TEXT, report), "Share GPU report"))
+            }))
+        }, LinearLayout.LayoutParams(-1, -2))
+        out = ui.text("Collecting\u2026", 11f, Party.MUTED).apply {
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextIsSelectable(true)
+        }
+        addView(out, LinearLayout.LayoutParams(-1, -2))
+        Thread {
+            report = collect()
+            activity.runOnUiThread { out.text = report }
+        }.start()
+    }
+
+    private fun collect(): String {
+        val paths = Paths(c)
+        val angle = VirglServer.angleDir()
+        val sb = StringBuilder()
+        sb.appendLine("DeskDroid ${BuildConfig.VERSION_NAME}")
+        sb.appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.DEVICE})")
+        if (Build.VERSION.SDK_INT >= 31) sb.appendLine("SoC: ${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}")
+        sb.appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), build ${Build.DISPLAY}")
+        for (dev in listOf("/dev/kgsl-3d0", "/dev/mali0", "/dev/pvr_sync", "/dev/dri")) {
+            sb.appendLine("$dev: ${if (File(dev).exists()) "present" else "absent"}")
+        }
+        sb.appendLine("ANGLE: ${angle?.path ?: "not found"}")
+        sb.appendLine("virgl server: ${if (paths.virglServer.exists()) "bundled" else "missing"}")
+        val mode = Prefs.gpuMode(c)
+        sb.appendLine("Graphics setting: $mode -> ${GpuProfile.resolve(mode, paths)}, virgl backend " +
+            "${Prefs.virglBackend(c)} -> ${VirglServer.backend(c)}")
+        sb.appendLine()
+        sb.append(run(listOf(paths.gpuReport.path)))
+        if (angle != null) sb.append(run(listOf(paths.gpuReport.path, "--angle", angle.path)))
+        return sb.toString()
+    }
+
+    private fun run(cmd: List<String>): String = try {
+        val p = ProcessBuilder(cmd).redirectErrorStream(true).start()
+        val text = StringBuilder()
+        val reader = Thread { text.append(p.inputStream.bufferedReader().readText()) }.apply { start() }
+        if (!p.waitFor(20, TimeUnit.SECONDS)) p.destroy()
+        reader.join(2_000)
+        val code = runCatching { p.exitValue() }.getOrNull()
+        text.toString() + if (code != 0) "(${cmd.drop(1).joinToString(" ").ifEmpty { "report" }} exited with ${code ?: "timeout"})\n\n" else ""
+    } catch (e: Exception) {
+        "(could not run ${cmd[0]}: ${e.message})\n\n"
     }
 }

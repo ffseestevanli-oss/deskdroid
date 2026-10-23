@@ -17,6 +17,10 @@ object Prefs {
     fun gpuMode(c: Context) = prefs(c).getString("gpu_mode", "auto")!!
     fun setGpuMode(c: Context, mode: String) = prefs(c).edit().putString("gpu_mode", mode).apply()
 
+    /** virgl's Android-side backend: "auto" (ANGLE when the phone has it), "angle" or "gles". */
+    fun virglBackend(c: Context) = prefs(c).getString("virgl_backend", "auto")!!
+    fun setVirglBackend(c: Context, b: String) = prefs(c).edit().putString("virgl_backend", b).apply()
+
     fun touchMode(c: Context) = prefs(c).getString("touch_mode", "touchpad")!!
     fun setTouchMode(c: Context, mode: String) = prefs(c).edit().putString("touch_mode", mode).apply()
 

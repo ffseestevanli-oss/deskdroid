@@ -19,6 +19,7 @@ import java.util.TimeZone
 class SessionService : Service() {
     private var xServer: Process? = null
     private var session: Process? = null
+    private var virgl: Process? = null
     private var audio: AudioBridge? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var displayId = 0
@@ -73,7 +74,15 @@ class SessionService : Service() {
             waitFor(paths.x11Socket, 15_000)
             if (!headless) showDesktop(displayId)
 
-            val gpu = GpuProfile.resolve(Prefs.gpuMode(this), paths)
+            var gpu = GpuProfile.resolve(Prefs.gpuMode(this), paths)
+            if (gpu == "virgl") {
+                AppLog.setStatus("Starting the GPU server")
+                virgl = VirglServer.start(this, paths) { pump("virgl", it) }
+                if (virgl == null) {
+                    AppLog.i("GPU server unavailable; using software rendering")
+                    gpu = "llvmpipe"
+                }
+            }
             AppLog.setStatus("Starting the desktop (${GpuProfile.describe(gpu)})")
             session = Proot.sessionCommand(paths, sessionEnv(gpu)).start().also { pump("session", it) }
             AppLog.setStatus("Desktop running")
@@ -158,6 +167,7 @@ class SessionService : Service() {
     @Synchronized
     private fun stopSession() {
         session?.destroy(); session = null
+        virgl?.destroy(); virgl = null
         xServer?.destroy(); xServer = null
         audio?.stop(); audio = null
         wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null

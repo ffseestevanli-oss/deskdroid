@@ -1,0 +1,17 @@
+Do not detect memfd_create through meson's has_function(): DeskDroid builds
+for API 29 and memfd_create is API 30+, so vtest_shm.c falls back to ashmem
+(patch 0004). timespec_get is API 29+ and stays detected, otherwise Mesa's
+c11 compat header redefines it and clashes with the NDK's declaration.
+Adapted from Termux (which builds for API 24 and drops both).
+
+--- a/meson.build
++++ b/meson.build
+@@ -228,7 +228,7 @@ foreach a : supported_function_attributes
+   endif
+ endforeach
+ 
+-foreach f : ['memfd_create', 'strtok_r', 'timespec_get']
++foreach f : ['strtok_r', 'timespec_get']
+   if cc.has_function(f)
+     conf_data.set('HAVE_@0@'.format(f.to_upper()), 1)
+   endif
