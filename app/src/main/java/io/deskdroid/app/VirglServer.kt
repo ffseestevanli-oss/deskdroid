@@ -9,10 +9,33 @@ import java.io.File
  * use Mesa's virgl driver (GALLIUM_DRIVER=virpipe), which sends OpenGL work over
  * /tmp/.virgl_test; the server runs it on Android's GPU driver, either the
  * vendor's OpenGL ES or ANGLE (GLES on top of Vulkan), which behaves better on
- * Mali according to Termux users. This is the GPU path for non-Adreno phones
- * until Vulkan forwarding (Venus) lands.
+ * Mali according to Termux users. Opt-in GPU path for non-Adreno phones until
+ * Vulkan forwarding (Venus) lands.
  */
 object VirglServer {
+    private const val KWIN_WRAPPER_TAG = "deskdroid-virgl-kwin"
+
+    /**
+     * KWin crashed repeatedly on virgl (Pixel 10 Pro), so in virgl mode it keeps
+     * compositing with llvmpipe while apps use the GPU. ksmserver starts kwin_x11
+     * through PATH, so a wrapper in /usr/local/bin (ahead of /usr/bin) sets that.
+     * Written into the rootfs at session start so existing installs get it too,
+     * and removed in other modes.
+     */
+    fun setKwinWrapper(paths: Paths, on: Boolean) {
+        val f = File(paths.rootfs, "usr/local/bin/kwin_x11")
+        if (on) {
+            f.writeText(
+                "#!/bin/sh\n# $KWIN_WRAPPER_TAG: written by the DeskDroid app (VirglServer.kt) in virgl mode.\n" +
+                    "# KWin composites in software; apps keep the GPU through virgl.\n" +
+                    "GALLIUM_DRIVER=llvmpipe exec /usr/bin/kwin_x11 \"\$@\"\n"
+            )
+            f.setExecutable(true, false)
+        } else if (f.exists() && f.readText().contains(KWIN_WRAPPER_TAG)) {
+            f.delete()
+        }
+    }
+
     private val angleDirs = listOf("/system/lib64", "/system_ext/lib64", "/product/lib64", "/vendor/lib64")
 
     /** The system's ANGLE build, if the phone ships one. */
