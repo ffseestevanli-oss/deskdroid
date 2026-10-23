@@ -2,11 +2,30 @@
 # Starts the desktop session as the deskdroid user. Launched by deskdroid-boot.
 # DESKDROID_GPU: llvmpipe | nocomp | turnip | venus
 # DESKDROID_SCALE: Plasma scale factor from the screen's density (1, 1.25, ... 2)
+# DESKDROID_SESSION: x11 | wayland (experimental: kwin_wayland nested in Termux:X11)
 
 export XDG_RUNTIME_DIR=/tmp/runtime-$USER
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
-export XDG_SESSION_TYPE=x11 XDG_CURRENT_DESKTOP=KDE KDE_FULL_SESSION=true
-export QT_QPA_PLATFORM=xcb
+
+# Images built before the Wayland session lack KWin's Wayland side; use X11 there.
+SESSION="${DESKDROID_SESSION:-x11}"
+if [ "$SESSION" = wayland ]; then
+  for f in /usr/bin/startplasma-wayland /usr/bin/kwin_wayland /usr/bin/kwin_wayland_wrapper /usr/bin/Xwayland; do
+    if [ ! -x "$f" ]; then
+      echo "deskdroid-session: $f missing (reinstall the system for Wayland), using X11"
+      SESSION=x11
+      break
+    fi
+  done
+fi
+
+export XDG_CURRENT_DESKTOP=KDE KDE_FULL_SESSION=true
+if [ "$SESSION" = wayland ]; then
+  # Qt picks its Wayland plugin from WAYLAND_DISPLAY, which KWin sets.
+  export XDG_SESSION_TYPE=wayland
+else
+  export XDG_SESSION_TYPE=x11 QT_QPA_PLATFORM=xcb
+fi
 # Plasma's systemd boot can't work under proot; the rootfs ships ~/.config/startkderc with systemdBoot=false.
 
 case "${DESKDROID_GPU:-llvmpipe}" in
@@ -39,7 +58,7 @@ case "${DESKDROID_GPU:-llvmpipe}" in
     fi ;;
 esac
 
-echo "deskdroid-session: GPU mode ${DESKDROID_GPU}, scale ${DESKDROID_SCALE:-1}"
+echo "deskdroid-session: ${SESSION} session, GPU mode ${DESKDROID_GPU}, scale ${DESKDROID_SCALE:-1}"
 glxinfo -B 2>&1 | grep -E 'renderer|version' || true
 
 # Sound: PulseAudio writes into the FIFO the app plays from (/etc/deskdroid/pulse.pa).
@@ -48,24 +67,40 @@ if command -v pulseaudio >/dev/null; then
     || echo "deskdroid-session: pulseaudio failed"
 fi
 
-# Scale: Qt/KDE read the X DPI, GTK takes an integer scale.
 SCALE="${DESKDROID_SCALE:-1}"
-DPI=$(awk -v s="$SCALE" 'BEGIN { printf "%d", 96 * s }')
-echo "Xft.dpi: $DPI" | xrdb -merge
-if command -v kwriteconfig6 >/dev/null; then
-  kwriteconfig6 --file kcmfonts --group General --key forceFontDPI "$DPI"
-  kwriteconfig6 --file kdeglobals --group KScreen --key ScaleFactor "$SCALE"
+if [ "$SESSION" = wayland ]; then
+  # Scale: KWin's output scale (deskdroid-kwin-wayland); Wayland apps follow it.
+  # The X11 session's forced font DPI would scale text twice.
+  command -v kwriteconfig6 >/dev/null && kwriteconfig6 --file kcmfonts --group General --key forceFontDPI --delete
+else
+  # Scale: Qt/KDE read the X DPI, GTK takes an integer scale.
+  DPI=$(awk -v s="$SCALE" 'BEGIN { printf "%d", 96 * s }')
+  echo "Xft.dpi: $DPI" | xrdb -merge
+  if command -v kwriteconfig6 >/dev/null; then
+    kwriteconfig6 --file kcmfonts --group General --key forceFontDPI "$DPI"
+    kwriteconfig6 --file kdeglobals --group KScreen --key ScaleFactor "$SCALE"
+  fi
+  export GDK_SCALE=$(awk -v s="$SCALE" 'BEGIN { printf "%d", (s >= 1.75) ? 2 : 1 }')
+  # GTK already sizes text from Xft.dpi, which carries the whole scale; GDK_SCALE
+  # would double that, so GDK_DPI_SCALE takes it back out.
+  export GDK_DPI_SCALE=$(awk -v g="$GDK_SCALE" 'BEGIN { printf "%.2f", 1 / g }')
 fi
-export GDK_SCALE=$(awk -v s="$SCALE" 'BEGIN { printf "%d", (s >= 1.75) ? 2 : 1 }')
-# GTK already sizes text from Xft.dpi, which carries the whole scale; GDK_SCALE
-# would double that, so GDK_DPI_SCALE takes it back out.
-export GDK_DPI_SCALE=$(awk -v g="$GDK_SCALE" 'BEGIN { printf "%.2f", 1 / g }')
 
 # Gecko browsers (Floorp): their sandboxes need seccomp and user namespaces,
 # which proot can't provide, so tabs crash without these.
 export MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 \
   MOZ_DISABLE_RDD_SANDBOX=1 MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 \
   MOZ_DISABLE_UTILITY_SANDBOX=1
+
+# Wayland (experimental): plasma_session starts kwin_wayland_wrapper, which runs
+# "kwin_wayland" from PATH. The wrapper directory puts deskdroid-kwin-wayland
+# there, so KWin uses its X11 backend: one window covering Termux:X11's screen,
+# drawn with QPainter (no render node under proot). Apps and Xwayland run on it.
+if [ "$SESSION" = wayland ]; then
+  export DESKDROID_X11_DISPLAY="$DISPLAY" DESKDROID_SCALE="$SCALE" KWIN_COMPOSE=Q
+  export PATH=/usr/local/lib/deskdroid/wayland:$PATH
+  exec dbus-launch --exit-with-session startplasma-wayland
+fi
 
 # Light/Full run Plasma; Ultra-lite runs MATE.
 if command -v startplasma-x11 >/dev/null; then

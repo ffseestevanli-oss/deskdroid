@@ -30,5 +30,5 @@ fi
 exec runuser -u deskdroid -- env \
   HOME=/home/deskdroid USER=deskdroid LOGNAME=deskdroid SHELL=/bin/bash \
   LANG="${LANG:-C.UTF-8}" PATH="$PATH" TMPDIR=/tmp DISPLAY="$DISPLAY" TZ="$TZ" \
-  DESKDROID_GPU="$DESKDROID_GPU" DESKDROID_SCALE="$DESKDROID_SCALE" \
+  DESKDROID_GPU="$DESKDROID_GPU" DESKDROID_SCALE="$DESKDROID_SCALE" DESKDROID_SESSION="$DESKDROID_SESSION" \
   /bin/sh /usr/local/bin/deskdroid-session

@@ -1,0 +1,17 @@
+#!/bin/sh
+# kwin_wayland for the experimental Wayland session, nested in Termux:X11.
+# kwin_wayland_wrapper runs it (through /usr/local/lib/deskdroid/wayland) with
+# its socket arguments; this adds KWin's X11 backend options so the output
+# window fills the X screen at the desktop scale (KWin's default is 1024x768).
+# DESKDROID_X11_DISPLAY and DESKDROID_SCALE come from deskdroid-session.
+
+d="${DESKDROID_X11_DISPLAY:-:0}"
+s="${DESKDROID_SCALE:-1}"
+# --width/--height are logical; KWin multiplies them by the scale.
+size=$(DISPLAY="$d" xwininfo -root 2>/dev/null | awk -v s="$s" '
+  /Width:/ { w = $2 } /Height:/ { h = $2 }
+  END { if (w > 0 && h > 0) printf "--width %d --height %d", w / s + 0.5, h / s + 0.5 }')
+[ -n "$size" ] || echo "deskdroid-kwin-wayland: no X screen size on $d, using KWin's default"
+
+# shellcheck disable=SC2086 # $size is two option pairs
+exec /usr/bin/kwin_wayland --x11-display "$d" $size --scale "$s" "$@"

@@ -2,6 +2,10 @@
 plasma-desktop
 plasma-workspace
 kwin-x11
+# Experimental Wayland session: KWin nested in Termux:X11 (deskdroid-kwin-wayland).
+kwin-wayland
+xwayland
+qt6-wayland
 systemsettings
 breeze
 konsole
