@@ -1,6 +1,6 @@
 #!/bin/sh
 # Starts the desktop session as the deskdroid user. Launched by deskdroid-boot.
-# DESKDROID_GPU: llvmpipe | nocomp | turnip | virgl
+# DESKDROID_GPU: llvmpipe | nocomp | turnip | venus
 # DESKDROID_SCALE: Plasma scale factor from the screen's density (1, 1.25, ... 2)
 
 export XDG_RUNTIME_DIR=/tmp/runtime-$USER
@@ -22,15 +22,19 @@ case "${DESKDROID_GPU:-llvmpipe}" in
       export LIBGL_DRIVERS_PATH=/opt/deskdroid-mesa/lib/dri
     fi
     export MESA_LOADER_DRIVER_OVERRIDE=zink TU_DEBUG=noconform ;;
-  virgl)
-    # Mesa's virgl driver talks to the app's virgl server on /tmp/.virgl_test,
-    # which runs OpenGL on Android's GPU driver (VirglServer.kt). The app falls
-    # back to llvmpipe when the server won't start; this covers a socket that vanished.
-    if [ -S /tmp/.virgl_test ]; then
-      export GALLIUM_DRIVER=virpipe
+  venus)
+    # Mesa's Venus driver talks to the app's Venus server on /tmp/.virgl_test,
+    # which runs Vulkan on Android's GPU driver; OpenGL goes through Zink. The
+    # app writes the variables to a Plasma env file (VenusServer.kt), which
+    # startplasma sources; reading it here too puts them in glxinfo's log line.
+    # The app falls back to llvmpipe when the server won't start; this covers a socket that vanished.
+    env=$HOME/.config/plasma-workspace/env/deskdroid-gpu.sh
+    if [ -S /tmp/.virgl_test ] && [ -f "$env" ]; then
+      . "$env"
     else
-      echo "deskdroid-session: no virgl server socket, using llvmpipe"
+      echo "deskdroid-session: no Venus server socket, using llvmpipe"
       DESKDROID_GPU=llvmpipe
+      rm -f "$env"
       export GALLIUM_DRIVER=llvmpipe
     fi ;;
 esac

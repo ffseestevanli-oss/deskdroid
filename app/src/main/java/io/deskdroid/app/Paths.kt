@@ -17,12 +17,11 @@ class Paths(context: Context) {
     val prootLoader = File(nativeLibs, "libproot-loader.so")
     val ddtool = File(nativeLibs, "libddtool.so")
     val gpuReport = File(nativeLibs, "libgpureport.so")
-    val virglServer = File(nativeLibs, "libvirgl_test_server.so")
-    /** The virgl server's working directory (holds its link to ANGLE). */
+    /** The Venus server's working directory (holds libexec/virgl_render_server). */
     val virglDir = File(files, "virgl")
     val rootfsTmp = File(rootfs, "tmp")
     val x11Socket = File(rootfsTmp, ".X11-unix/X0")
-    /** Mesa's virgl driver connects to /tmp/.virgl_test inside the rootfs. */
+    /** Mesa's Venus driver connects to /tmp/.virgl_test inside the rootfs. */
     val virglSocket = File(rootfsTmp, ".virgl_test")
     /** Runtime files shared with the session (audio pipe, status). */
     val runtime = File(rootfsTmp, "deskdroid")

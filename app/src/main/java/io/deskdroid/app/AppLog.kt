@@ -6,7 +6,7 @@ import android.util.Log
 
 /** Small in-memory log shown on the main screen, mirrored to logcat. */
 object AppLog {
-    // Enough to hold a session's start-up plus a crash (KWin, the virgl server).
+    // Enough to hold a session's start-up plus a crash (KWin, the Venus server).
     private const val MAX_LINES = 2000
     private val lines = ArrayDeque<String>()
     private val main = Handler(Looper.getMainLooper())

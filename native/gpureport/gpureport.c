@@ -6,6 +6,7 @@
  *
  * Usage: gpureport                 system GLES and Vulkan
  *        gpureport --angle <dir>   ANGLE's GLES (libEGL_angle.so in <dir>)
+ *        gpureport --venus-memory  "dmabuf" or "ahb": which Venus server build fits
  * ANGLE runs in its own process so a crash there can't hide the rest.
  */
 #include <dlfcn.h>
@@ -176,9 +177,52 @@ static void report_vulkan(void)
     printf("\n");
 }
 
+/*
+ * Prints "dmabuf" if the first Vulkan device can export memory as dma-bufs
+ * (upstream Venus works), else "ahb" (the AHardwareBuffer server build).
+ * VenusServer.kt runs this to pick a server build in Automatic mode.
+ */
+static int venus_memory(void)
+{
+    const char *mode = "ahb";
+    void *lib = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
+    PFN_vkGetInstanceProcAddr gipa = lib ? (PFN_vkGetInstanceProcAddr)dlsym(lib, "vkGetInstanceProcAddr") : NULL;
+    PFN_vkCreateInstance createInstance = gipa ? (PFN_vkCreateInstance)gipa(NULL, "vkCreateInstance") : NULL;
+    VkApplicationInfo app = { .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .apiVersion = VK_API_VERSION_1_1 };
+    VkInstanceCreateInfo ici = { .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app };
+    VkInstance inst;
+    if (createInstance && createInstance(&ici, NULL, &inst) == VK_SUCCESS) {
+        PFN_vkEnumeratePhysicalDevices enumDevices =
+            (PFN_vkEnumeratePhysicalDevices)gipa(inst, "vkEnumeratePhysicalDevices");
+        PFN_vkEnumerateDeviceExtensionProperties enumExts =
+            (PFN_vkEnumerateDeviceExtensionProperties)gipa(inst, "vkEnumerateDeviceExtensionProperties");
+        PFN_vkDestroyInstance destroyInstance = (PFN_vkDestroyInstance)gipa(inst, "vkDestroyInstance");
+        uint32_t count = 1;
+        VkPhysicalDevice dev;
+        VkResult r = enumDevices(inst, &count, &dev);
+        if ((r == VK_SUCCESS || r == VK_INCOMPLETE) && count) {
+            uint32_t n = 0;
+            enumExts(dev, NULL, &n, NULL);
+            VkExtensionProperties *exts = calloc(n ? n : 1, sizeof(*exts));
+            enumExts(dev, NULL, &n, exts);
+            int fd = 0, dmabuf = 0;
+            for (uint32_t j = 0; j < n; j++) {
+                if (!strcmp(exts[j].extensionName, "VK_KHR_external_memory_fd")) fd = 1;
+                if (!strcmp(exts[j].extensionName, "VK_EXT_external_memory_dma_buf")) dmabuf = 1;
+            }
+            if (fd && dmabuf) mode = "dmabuf";
+            free(exts);
+        }
+        destroyInstance(inst, NULL);
+    }
+    printf("%s\n", mode);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     setvbuf(stdout, NULL, _IOLBF, 0);
+    if (argc > 1 && !strcmp(argv[1], "--venus-memory")) return venus_memory();
     if (argc > 2 && !strcmp(argv[1], "--angle")) {
         char egl[512], gles[512];
         snprintf(egl, sizeof(egl), "%s/libEGL_angle.so", argv[2]);

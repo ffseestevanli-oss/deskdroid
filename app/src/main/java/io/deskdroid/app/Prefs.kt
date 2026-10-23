@@ -14,12 +14,16 @@ object Prefs {
     fun setLockDesktop(c: Context, on: Boolean) = prefs(c).edit().putBoolean("lock_desktop", on).apply()
 
     /** "auto" picks from the GPU found on the device (GpuProfile). */
-    fun gpuMode(c: Context) = prefs(c).getString("gpu_mode", "auto")!!
+    fun gpuMode(c: Context) = prefs(c).getString("gpu_mode", "auto")!!.let { if (it == "virgl") "venus" else it }
     fun setGpuMode(c: Context, mode: String) = prefs(c).edit().putString("gpu_mode", mode).apply()
 
-    /** virgl's Android-side backend: "auto" (ANGLE when the phone has it), "angle" or "gles". */
-    fun virglBackend(c: Context) = prefs(c).getString("virgl_backend", "auto")!!
-    fun setVirglBackend(c: Context, b: String) = prefs(c).edit().putString("virgl_backend", b).apply()
+    /** Venus GPU memory sharing: "auto" (asks the driver), "dmabuf" or "ahb" (VenusServer). */
+    fun venusMemory(c: Context) = prefs(c).getString("venus_memory", "auto")!!
+    fun setVenusMemory(c: Context, m: String) = prefs(c).edit().putString("venus_memory", m).apply()
+
+    /** In Venus mode, also put KWin (desktop effects) on the GPU. Off: KWin uses llvmpipe. */
+    fun gpuDesktop(c: Context) = prefs(c).getBoolean("gpu_desktop", false)
+    fun setGpuDesktop(c: Context, on: Boolean) = prefs(c).edit().putBoolean("gpu_desktop", on).apply()
 
     fun touchMode(c: Context) = prefs(c).getString("touch_mode", "touchpad")!!
     fun setTouchMode(c: Context, mode: String) = prefs(c).edit().putString("touch_mode", mode).apply()
