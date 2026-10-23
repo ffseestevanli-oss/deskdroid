@@ -32,7 +32,7 @@ The patches make it build and run on Android (EGL without GBM, ashmem instead
 of memfd, ANGLE loading, DXTn texture decoding). Our change to Termux's 0007:
 ANGLE is loaded from `angle/` relative to the server's working directory
 (`VirglServer.kt` links that to the system's ANGLE) and the default socket is
-`/tmp/.virgl_test`.
+`/tmp/.virgl_test`. Our change to 0010: keep detecting `timespec_get`, which API 29 has.
 
 `talloc/shim/replace.h` is ours: a small stand-in for Samba's `lib/replace`, so
 talloc builds without Samba's waf configure step.

@@ -1,12 +1,8 @@
-Android 7 does not have memfd_create or timespec_get,
-so do not allow them to be activated through detection
-in /system/lib64/libc.so via meson's has_function() method
-if virglrenderer-android is being compiled on an Android 14
-device that does not have the 'ndk-multilib' package installed.
-This virglrenderer-specific Meson code is used to compile
-some mesa-derived code, so here is a link to the solution currently in
-upstream mesa, the patch for which does not apply cleanly here:
-https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/37630
+Do not detect memfd_create through meson's has_function(): DeskDroid builds
+for API 29 and memfd_create is API 30+, so vtest_shm.c falls back to ashmem
+(patch 0004). timespec_get is API 29+ and stays detected, otherwise Mesa's
+c11 compat header redefines it and clashes with the NDK's declaration.
+Adapted from Termux (which builds for API 24 and drops both).
 
 --- a/meson.build
 +++ b/meson.build
@@ -15,7 +11,7 @@ https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/37630
  endforeach
  
 -foreach f : ['memfd_create', 'strtok_r', 'timespec_get']
-+foreach f : ['strtok_r']
++foreach f : ['strtok_r', 'timespec_get']
    if cc.has_function(f)
      conf_data.set('HAVE_@0@'.format(f.to_upper()), 1)
    endif
