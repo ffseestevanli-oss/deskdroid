@@ -92,7 +92,7 @@ object VenusServer {
 
     /**
      * Writes the GPU environment for the Plasma session. startplasma sources
-     * ~/.config/plasma-workspace/env/*.sh, so this reaches KWin, plasmashell and
+     * the .sh files in ~/.config/plasma-workspace/env, so this reaches KWin, plasmashell and
      * every app, and works on system images that predate Venus (their
      * deskdroid-session doesn't know the mode). Removed in other modes.
      */
