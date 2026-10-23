@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds libtalloc, proot, proot's loader and ddtool from the vendored sources in
-# native/ and installs them as lib*.so files, so Android puts them in the
+# native/, plus (NDK builds only) the GPU report tool and the virgl server, and
+# installs them as lib*.so files, so Android puts them in the
 # app's executable nativeLibraryDir (W^X rule for targetSdk 29+).
 #
 # Called by the :app Gradle build (task buildNativeTools) with the NDK, and
@@ -65,6 +66,21 @@ mkdir -p "$WORK/ddtool"
   "$HERE"/zstd/common/*.c "$HERE"/zstd/decompress/*.c \
   "$HERE/monocypher/monocypher.c" "$HERE/monocypher/monocypher-ed25519.c" \
   -Wl,--build-id=none -Wl,-z,noexecstack -o "$WORK/ddtool/ddtool"
+
+if [ -n "$NDK" ]; then
+  echo "== gpureport"
+  # GPU/driver report for Settings (gpureport/gpureport.c).
+  mkdir -p "$WORK/gpureport"
+  "$CC" -O2 -Wall $REPRO "$HERE/gpureport/gpureport.c" -ldl \
+    -Wl,--build-id=none -Wl,-z,noexecstack -o "$WORK/gpureport/gpureport"
+  install -m 755 "$WORK/gpureport/gpureport" "$OUT/libgpureport.so"
+  "$STRIP" --strip-unneeded "$OUT/libgpureport.so"
+
+  echo "== virgl server"
+  "$HERE/virgl/build.sh" "$OUT" "$NDK" "$API"
+else
+  echo "== skipping gpureport and the virgl server (Android-only, need the NDK)"
+fi
 
 install -m 755 "$WORK/ddtool/ddtool" "$OUT/libddtool.so"
 install -m 755 "$WORK/proot/proot" "$OUT/libproot.so"

@@ -23,8 +23,16 @@ case "${DESKDROID_GPU:-llvmpipe}" in
     fi
     export MESA_LOADER_DRIVER_OVERRIDE=zink TU_DEBUG=noconform ;;
   virgl)
-    # Needs a virgl server on the Android side listening on /tmp/.virgl_test.
-    export GALLIUM_DRIVER=virpipe ;;
+    # Mesa's virgl driver talks to the app's virgl server on /tmp/.virgl_test,
+    # which runs OpenGL on Android's GPU driver (VirglServer.kt). The app falls
+    # back to llvmpipe when the server won't start; this covers a socket that vanished.
+    if [ -S /tmp/.virgl_test ]; then
+      export GALLIUM_DRIVER=virpipe
+    else
+      echo "deskdroid-session: no virgl server socket, using llvmpipe"
+      DESKDROID_GPU=llvmpipe
+      export GALLIUM_DRIVER=llvmpipe
+    fi ;;
 esac
 
 echo "deskdroid-session: GPU mode ${DESKDROID_GPU}, scale ${DESKDROID_SCALE:-1}"

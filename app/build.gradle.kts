@@ -13,8 +13,8 @@ android {
         applicationId = "io.deskdroid.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.1.1-phase1"
+        versionCode = 4
+        versionName = "0.1.2-virgl"
         ndk { abiFilters += "arm64-v8a" }
         buildConfigField(
             "String", "ROOTFS_BASE_URL",
@@ -57,7 +57,8 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.27.1")
 }
 
-// proot, its loader, talloc and ddtool, compiled from native/ with the NDK (native/README.md).
+// proot, its loader, talloc, ddtool, the GPU report tool and the virgl server,
+// compiled from native/ with the NDK (native/README.md).
 val buildNativeTools by tasks.registering(Exec::class) {
     val script = rootProject.file("native/build.sh")
     val abiDir = layout.buildDirectory.dir("generated/nativeTools/lib/arm64-v8a")

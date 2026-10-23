@@ -4,8 +4,8 @@ import java.io.File
 
 /**
  * Picks how Linux apps render. Plan section 1: Turnip + Zink on Adreno (through
- * /dev/kgsl, reachable without root), llvmpipe everywhere else until the Vulkan
- * forwarding layer for Mali/PowerVR (Pixel) lands.
+ * /dev/kgsl, reachable without root), virgl on everything else (Mali, PowerVR),
+ * llvmpipe when neither works. Vulkan forwarding (Venus) replaces virgl later.
  */
 object GpuProfile {
     /** Mesa built with Turnip's kgsl backend, installed by the deskdroid-mesa package. */
@@ -16,13 +16,17 @@ object GpuProfile {
     /** Resolves "auto" to a concrete mode the session script understands. */
     fun resolve(mode: String, paths: Paths): String {
         if (mode != "auto") return mode
-        return if (hasKgsl() && File(paths.rootfs, KGSL_MESA).exists()) "turnip" else "llvmpipe"
+        return when {
+            hasKgsl() && File(paths.rootfs, KGSL_MESA).exists() -> "turnip"
+            paths.virglServer.exists() -> "virgl"
+            else -> "llvmpipe"
+        }
     }
 
     fun describe(mode: String): String = when (mode) {
         "turnip" -> "Adreno GPU (Turnip + Zink)"
         "nocomp" -> "Software, effects off"
-        "virgl" -> "VirGL (experimental)"
+        "virgl" -> "GPU via virgl (OpenGL)"
         else -> "Software (llvmpipe)"
     }
 }

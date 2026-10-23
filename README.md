@@ -18,7 +18,9 @@ How the pieces fit at run time:
 2. "Start desktop" runs the X server (lorie's `CmdEntryPoint`, as a child process), opens `DesktopActivity`, then boots Debian under proot: system D-Bus, PulseAudio, then Plasma.
 3. Sound: PulseAudio writes into a FIFO that the app plays with `AudioTrack`.
 
-Not done yet in Phase 1: GPU acceleration (Turnip/kgsl Mesa build, Vulkan forwarding for Mali/PowerVR; software rendering for now), the Android 12-13 one-tap phantom-process fix over Wireless debugging, and device testing ([docs/phase1-checklist.md](docs/phase1-checklist.md)).
+GPU acceleration on Mali and PowerVR (Pixel 10): in progress. OpenGL through virgl comes first (the app's virgl server runs Linux apps' OpenGL on Android's GPU driver or ANGLE), then Vulkan forwarding with Venus + Zink. Checklist: [docs/gpu-virgl-checklist.md](docs/gpu-virgl-checklist.md).
+
+Not done yet in Phase 1: Turnip/kgsl Mesa build for Adreno, the Android 12-13 one-tap phantom-process fix over Wireless debugging, and device testing ([docs/phase1-checklist.md](docs/phase1-checklist.md)).
 
 ## Build
 

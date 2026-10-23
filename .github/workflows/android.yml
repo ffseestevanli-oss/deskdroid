@@ -28,6 +28,9 @@ jobs:
           yes | "$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin | sort -V | tail -1)/sdkmanager" --install
           "ndk;$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)"
           "platforms;android-36"
+      # The virgl server (native/virgl) builds with meson.
+      - name: Install meson and ninja
+        run: pipx install meson==1.12.1 && pipx install ninja
       - uses: actions/cache@v4
         with:
           path: |
