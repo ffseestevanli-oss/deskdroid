@@ -10,7 +10,6 @@ dolphin
 kate
 ark
 plasma-discover
-plasma-discover-backend-packagekit
 plasma-discover-backend-flatpak
 flatpak
 fonts-noto-color-emoji
