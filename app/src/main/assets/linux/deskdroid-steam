@@ -1,0 +1,102 @@
+#!/bin/bash
+# Installed by the DeskDroid app (Steam.kt) at every session start; the
+# Steam menu entry runs it. Starts Valve's x86 Steam client under FEX-Emu
+# (deskdroid-fex), the same way Valve runs Steam on ARM.
+#   deskdroid-steam [STEAM ARGS]  installs on first use, then starts Steam
+#   deskdroid-steam --reinstall   downloads Valve's bootstrap again
+# The first start installs FEX, its x86 rootfs and Valve's Steam bootstrap in
+# a Konsole window so progress shows; Steam then downloads and updates its own
+# client (about 1 GB) and shows Valve's license on first run.
+# Log: ~/.local/share/deskdroid-steam/steam.log
+
+STEAMDIR=$HOME/.local/share/Steam
+STATE=$HOME/.local/share/deskdroid-steam
+LOG=$STATE/steam.log
+DEB_URLS="https://cdn.fastly.steamstatic.com/client/installer/steam.deb
+https://repo.steampowered.com/steam/archive/stable/steam_latest.deb"
+# steamwebhelper (Chromium) can't use its sandbox under proot. The GPU flags
+# make it draw in software, which beats emulated llvmpipe GL. Add your own in
+# ~/.config/deskdroid-steam-args (one line, e.g. -bigpicture).
+STEAM_ARGS="-no-cef-sandbox -cef-disable-gpu -cef-disable-gpu-compositing"
+
+say() { echo "deskdroid-steam: $*" >&2; }
+die() { say "$*"; exit 1; }
+
+installed() {
+  [ -x "$STEAMDIR/steam.sh" ] && command -v FEX >/dev/null && [ -f /usr/local/share/deskdroid-fex/version ] \
+    && ls "$HOME"/.fex-emu/RootFS/*/usr/bin/bash >/dev/null 2>&1
+}
+
+# Valve's bootstrap: steam.sh plus the 32-bit client that updates itself.
+install_steam() {
+  [ -x "$STEAMDIR/steam.sh" ] && [ "${1:-}" != force ] && return 0
+  local tmp url ok=""
+  tmp=$(mktemp -d) || die "no temporary folder"
+  say "downloading Valve's Steam bootstrap"
+  for url in $DEB_URLS; do
+    curl -fL --retry 3 -o "$tmp/steam.deb" "$url" && ok=1 && break
+  done
+  [ -n "$ok" ] || { rm -rf "$tmp"; die "couldn't download Steam (offline?)"; }
+  dpkg-deb -x "$tmp/steam.deb" "$tmp/deb" || { rm -rf "$tmp"; die "the Steam download is damaged, try again"; }
+  local boot
+  boot=$(find "$tmp/deb" -name 'bootstraplinux_ubuntu12_32.tar.xz' | head -n 1)
+  [ -n "$boot" ] || { rm -rf "$tmp"; die "no bootstrap in Valve's package"; }
+  mkdir -p "$STEAMDIR"
+  tar -C "$STEAMDIR" -xJf "$boot" || { rm -rf "$tmp"; die "couldn't unpack Steam"; }
+  # Steam's icons, for the menu entry and the taskbar.
+  if [ -d "$tmp/deb/usr/share/icons" ]; then
+    mkdir -p "$HOME/.local/share/icons"
+    cp -r "$tmp/deb/usr/share/icons/." "$HOME/.local/share/icons/"
+  fi
+  rm -rf "$tmp"
+  # What Valve's /usr/bin/steam sets up before running steam.sh.
+  mkdir -p "$HOME/.steam"
+  ln -sfn "$STEAMDIR" "$HOME/.steam/steam"
+  ln -sfn "$STEAMDIR" "$HOME/.steam/root"
+  say "Steam bootstrap installed in $STEAMDIR"
+}
+
+run_steam() {
+  local extra=""
+  [ -f "$HOME/.config/deskdroid-steam-args" ] && extra=$(head -n 1 "$HOME/.config/deskdroid-steam-args")
+  {
+    echo "=== $(date) deskdroid-steam: $(uname -srm), FEX $(cat /usr/local/share/deskdroid-fex/version 2>/dev/null)"
+  } >>"$LOG"
+  # steam.sh starts with #!/usr/bin/env bash; FEX runs it with the rootfs's x86 bash.
+  # shellcheck disable=SC2086
+  exec deskdroid-fex /bin/bash "$STEAMDIR/steam.sh" $STEAM_ARGS $extra "$@" >>"$LOG" 2>&1
+}
+
+mkdir -p "$STATE"
+
+case "${1:-}" in
+  -h | --help)
+    sed -n '5,7p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0 ;;
+  --reinstall)
+    shift
+    install_steam force || exit 1 ;;
+  --setup)
+    # In the Konsole window from the menu launch below.
+    shift
+    if deskdroid-fex install && install_steam; then
+      echo
+      say "done, starting Steam (it updates itself first, which takes a while)"
+      setsid "$0" "$@" </dev/null >/dev/null 2>&1 &
+      sleep 5
+      exit 0
+    fi
+    echo
+    say "setup failed. Start Steam again to retry. Press Enter to close."
+    read -r _
+    exit 1 ;;
+esac
+
+if ! installed; then
+  if [ -t 1 ]; then
+    deskdroid-fex install && install_steam || exit 1
+  else
+    exec konsole --hide-menubar -p tabtitle="Setting up Steam" -e "$0" --setup "$@"
+  fi
+fi
+run_steam "$@"

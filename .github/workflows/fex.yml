@@ -1,0 +1,47 @@
+name: FEX-Emu
+
+# Builds FEX-Emu for the rootfs (fex/build.sh). Pull requests only build it;
+# main and manual runs publish it as the fex-latest release, which the
+# deskdroid-fex script downloads the first time Steam or an x86 app starts.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['fex/**', '.github/workflows/fex.yml']
+  pull_request:
+    paths: ['fex/**', '.github/workflows/fex.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build FEX
+        run: fex/build.sh "$PWD/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deskdroid-fex
+          path: out/*
+          compression-level: 0
+
+  publish:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deskdroid-fex
+          path: out
+      - name: Publish as the fex-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete fex-latest --yes --cleanup-tag || true
+          gh release create fex-latest out/* \
+            --title "FEX-Emu (latest)" --notes "$(cat out/deskdroid-fex-arm64.version) for Debian trixie arm64, built from ${{ github.sha }}" --prerelease --latest=false

@@ -1,0 +1,128 @@
+#!/bin/bash
+# Installed by the DeskDroid app (Steam.kt) at every session start.
+# Runs x86 and x86-64 Linux programs with FEX-Emu, as the desktop user.
+#   deskdroid-fex install        installs FEX and its x86 rootfs (first use only)
+#   deskdroid-fex PROGRAM [ARGS] installs if needed, then runs PROGRAM under FEX
+# Without root there's no binfmt_misc, so x86 programs start through this (or
+# FEX directly) instead of running on their own.
+#
+# - FEX comes from DeskDroid's fex-latest release (built by fex/build.sh) and
+#   goes to /usr/local (sudo works for the user under proot).
+# - The x86 rootfs (Ubuntu 24.04 with the 32-bit libraries Steam needs) comes
+#   from FEX's own server. It is a SquashFS image that FEX normally mounts with
+#   FUSE; proot has no FUSE, so it is unpacked into ~/.fex-emu/RootFS instead.
+
+FEX_RELEASE=https://github.com/ffseestevanli-oss/deskdroid/releases/download/fex-latest
+FEX_TARBALL=deskdroid-fex-arm64.tar.zst
+ROOTFS_DISTRO=ubuntu
+ROOTFS_VERSION=24.04
+FEXDIR=$HOME/.fex-emu
+# The unpacked rootfs is ~3 GB and the download ~1 GB more while it unpacks.
+NEED_MB=5000
+
+say() { echo "deskdroid-fex: $*" >&2; }
+die() { say "$*"; exit 1; }
+
+# Downloads, checks and unpacks the FEX build into /usr/local.
+install_fex() {
+  command -v FEX >/dev/null && [ -f /usr/local/share/deskdroid-fex/version ] && return 0
+  local tools="" t
+  for t in curl:curl zstd:zstd unsquashfs:squashfs-tools xz:xz-utils; do
+    command -v "${t%%:*}" >/dev/null || tools="$tools ${t#*:}"
+  done
+  if [ -n "$tools" ]; then
+    say "installing$tools"
+    ls /var/lib/apt/lists/*_Packages >/dev/null 2>&1 || sudo apt-get update -q
+    # shellcheck disable=SC2086
+    sudo apt-get install -y -q $tools || die "couldn't install$tools"
+  fi
+  local tmp
+  tmp=$(mktemp -d) || die "no temporary folder"
+  say "downloading FEX-Emu"
+  curl -fL --retry 3 -o "$tmp/$FEX_TARBALL" "$FEX_RELEASE/$FEX_TARBALL" \
+    && curl -fsSL --retry 3 -o "$tmp/$FEX_TARBALL.sha256" "$FEX_RELEASE/$FEX_TARBALL.sha256" \
+    || { rm -rf "$tmp"; die "couldn't download FEX-Emu (offline?)"; }
+  (cd "$tmp" && sha256sum -c --quiet "$FEX_TARBALL.sha256") || { rm -rf "$tmp"; die "FEX-Emu download is damaged, try again"; }
+  sudo tar -C / --zstd -xf "$tmp/$FEX_TARBALL" && sudo ldconfig
+  local rc=$?
+  rm -rf "$tmp"
+  [ $rc -eq 0 ] && command -v FEX >/dev/null || die "couldn't unpack FEX-Emu"
+  say "installed $(cat /usr/local/share/deskdroid-fex/version)"
+}
+
+# The rootfs folder FEX's config points at, if it is unpacked and usable.
+rootfs_dir() {
+  local name
+  name=$(sed -n 's/.*"RootFS"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FEXDIR/Config.json" 2>/dev/null | head -n 1)
+  [ -n "$name" ] || return 1
+  case "$name" in /*) ;; *) name=$FEXDIR/RootFS/$name ;; esac
+  [ -d "$name" ] && [ -e "$name/usr/bin/bash" ] && echo "$name"
+}
+
+install_rootfs() {
+  rootfs_dir >/dev/null && return 0
+  mkdir -p "$FEXDIR/RootFS" # FEX uses ~/.fex-emu once it exists
+  local free
+  free=$(df -Pm "$FEXDIR" | awk 'NR == 2 { print $4 }')
+  [ "${free:-0}" -ge $NEED_MB ] || die "the x86 system needs about $((NEED_MB / 1000)) GB free, only $((free / 1000)) GB left"
+
+  # FEXRootFSFetcher downloads the image and checks its hash (it resumes a
+  # finished download). It offers only SquashFS images here (no erofs tools
+  # installed); -a keeps the image as is, and it gets unpacked below.
+  say "downloading the x86 system (about 1 GB)"
+  FEXRootFSFetcher -y -a --force-ui=tty --distro-name="$ROOTFS_DISTRO" --distro-version="$ROOTFS_VERSION" </dev/null
+  local img dir
+  for img in "$FEXDIR"/RootFS/*.sqsh; do
+    [ -f "$img" ] || continue
+    dir=${img%.sqsh}
+    # unsquashfs fails on device nodes and security xattrs, which a normal user
+    # can't create; FEX doesn't need them, so its error exit is fine here.
+    if [ ! -e "$dir/usr/bin/bash" ]; then
+      say "unpacking ${img##*/}"
+      rm -rf "$dir"
+      unsquashfs -no-xattrs -ignore-errors -no-progress -f -d "$dir" "$img" >/dev/null
+    fi
+    if [ -e "$dir/usr/bin/bash" ]; then
+      printf '{\n  "Config": {\n    "RootFS": "%s"\n  }\n}\n' "${dir##*/}" > "$FEXDIR/Config.json"
+      rm -f "$img"
+    fi
+  done
+  local root
+  root=$(rootfs_dir) || die "couldn't set up the x86 system (see the messages above)"
+  say "x86 system ready in $root"
+}
+
+# The session's GPU variables point at arm64 Mesa; x86 programs load the x86
+# Mesa inside the rootfs, so translate them.
+fix_gpu_env() {
+  unset LD_LIBRARY_PATH LIBGL_DRIVERS_PATH TU_DEBUG
+  if [ -n "${VN_DEBUG:-}" ]; then
+    # Venus: the x86 Venus driver talks to the same server socket.
+    local root icds="" f
+    root=$(rootfs_dir)
+    for f in virtio_icd.x86_64.json virtio_icd.i686.json; do
+      [ -e "$root/usr/share/vulkan/icd.d/$f" ] && icds="$icds${icds:+:}/usr/share/vulkan/icd.d/$f"
+    done
+    if [ -n "$icds" ]; then
+      export VK_ICD_FILENAMES=$icds
+      return
+    fi
+  fi
+  # Turnip (kgsl) has no x86 build in the rootfs, and llvmpipe is safer than
+  # Zink on a driver that isn't there.
+  unset VK_ICD_FILENAMES VN_DEBUG MESA_LOADER_DRIVER_OVERRIDE ZINK_DESCRIPTORS
+  export GALLIUM_DRIVER=llvmpipe
+}
+
+case "${1:-}" in
+  "" | -h | --help)
+    sed -n '3,6p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0 ;;
+  install)
+    install_fex && install_rootfs
+    exit ;;
+esac
+
+install_fex && install_rootfs || exit 1
+fix_gpu_env
+exec FEX "$@"

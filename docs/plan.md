@@ -189,11 +189,11 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 Steam ships in the image as a desktop and menu icon, ready on first click. Valve does not officially support Steam on ARM Linux, so it runs as the x86 client under FEX, the same approach as Valve's Steam Frame and [Ubuntu's arm64 Steam snap](https://phoronix.com/news/Steam-Snap-ARM64-FEX).
 
 **What it needs:**
-- **FEX-Emu** (arm64), with its x86 rootfs (x86_64 + i386 glibc, 32-bit libraries the Steam client needs). Not in Debian, so we build it in CI and publish it in our own apt repo.
+- **FEX-Emu** (arm64), with its x86 rootfs (x86_64 + i386 glibc, 32-bit libraries the Steam client needs). Not in Debian, so we build it in CI (`fex/build.sh`, release `fex-latest`). Done as a first-launch download for now, with FEX's own Ubuntu 24.04 x86 rootfs unpacked to `~/.fex-emu` (proot has no FUSE to mount it): [steam-checklist.md](steam-checklist.md).
 - **FEX thunks** so x86 games call our arm64 Mesa (Vulkan/OpenGL) directly instead of emulated x86 drivers.
 - **Steam launcher** (Valve's small bootstrap). The full client (~1 GB) downloads and updates itself on first launch, which also keeps us from redistributing Valve's binaries. The user accepts Steam's license in Valve's own first-run dialog.
 - **Proton** for Windows games, downloaded by Steam as usual and run under FEX.
-- Launcher shim instead of binfmt_misc (no root): `steam` → `FEXInterpreter /usr/lib/steam/steam`.
+- Launcher shim instead of binfmt_misc (no root): `deskdroid-steam` → `FEX /bin/bash ~/.local/share/Steam/steam.sh`, and `deskdroid-fex PROGRAM` for other x86 apps. Written by the app at session start (`Steam.kt`).
 
 **Size impact (estimates, to measure in Phase 3):** FEX x86 rootfs about +1.5 to 2 GB on disk (+0.5 to 0.8 GB to the compressed download). Steam client +1 GB on first launch. Each Proton version +1 GB. Total free space recommended goes from ~6 GB to ~10 GB. Phase 1 images can leave the FEX rootfs as a first-click download if the base download size hurts.
 

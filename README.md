@@ -20,6 +20,8 @@ How the pieces fit at run time:
 
 GPU acceleration on Mali and PowerVR (Pixel 10): in progress, through Venus Vulkan forwarding (the app's Venus server runs Linux apps' Vulkan on Android's GPU driver) with Zink for OpenGL. It replaced an earlier virgl attempt that crashed KWin. Checklist: [docs/gpu-venus-checklist.md](docs/gpu-venus-checklist.md).
 
+Steam (Light and Full): runs Valve's x86 client under FEX-Emu, which `fex/build.sh` builds in CI (Actions → FEX-Emu, release `fex-latest`). FEX, its x86 rootfs and Steam's bootstrap download on Steam's first start. Checklist: [docs/steam-checklist.md](docs/steam-checklist.md).
+
 Not done yet in Phase 1: Turnip/kgsl Mesa build for Adreno, the Android 12-13 one-tap phantom-process fix over Wireless debugging, and device testing ([docs/phase1-checklist.md](docs/phase1-checklist.md)).
 
 ## Build
