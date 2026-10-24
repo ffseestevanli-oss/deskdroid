@@ -150,7 +150,7 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 **Flatpak (must have).** Flathub is enabled in Discover next to apt. Flatpak normally sandboxes every app with bubblewrap, which needs Linux user namespaces that Android doesn't give apps. Plan:
 - First check whether unprivileged user namespaces happen to work on the Pixel 10 Pro; if they do, use real bubblewrap.
 - Otherwise ship a **bubblewrap stand-in** (`/usr/bin/bwrap` shim) that translates bubblewrap's arguments (`--bind`, `--ro-bind`, `--symlink`, `--dev`, `--proc`, `--tmpfs`, `--setenv`, `--args FD`, …) into proot bind mounts and ignores the namespace and seccomp flags. Apps run without Flatpak's sandbox, like everything else in DeskDroid, which is already isolated from Android by the app sandbox.
-- Use per-user installs (`flatpak --user`) by default so no system helper or polkit is needed. Many Flathub apps have aarch64 builds; x86_64-only ones can run under FEX later.
+- Use per-user installs (`flatpak --user`) by default so no system helper or polkit is needed. Done: the app adds Flathub as a user remote and makes Flatpak Discover's default source at each start (`Flatpak.kt`, `assets/linux/deskdroid-flatpak`). Many Flathub apps have aarch64 builds; x86_64-only ones can run under FEX later.
 - The same shim also runs Steam's game containers (section 6b), so it is one piece of work for two features. Prove it in Phase 1 with a few popular Flathub apps.
 
 **Where the system lives: a plain folder, not an image file.**

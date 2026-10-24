@@ -92,6 +92,7 @@ class SessionService : Service() {
             }
             VenusServer.writeSessionEnv(this, paths, gpu == "venus")
             Browsers.install(this, paths)
+            Flatpak.install(this, paths)
             AppLog.setStatus("Starting the desktop (${if (wayland) "Wayland, " else ""}${GpuProfile.describe(gpu)})")
             session = Proot.sessionCommand(paths, sessionEnv(gpu, wayland)).start().also { pump("session", it) }
             AppLog.setStatus("Desktop running")

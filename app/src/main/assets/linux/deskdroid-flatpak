@@ -1,0 +1,31 @@
+#!/bin/sh
+# Installed by the DeskDroid app (Flatpak.kt) at every session start. Runs as
+# root before the desktop starts. Makes Flathub the default source in Discover:
+# - adds Flathub as a per-user remote of the deskdroid user. Per-user installs
+#   need no flatpak system helper (polkit, revokefs-fuse), which proot can't
+#   give it, so apps installed from Discover land in ~/.local/share/flatpak.
+# - once, sets Discover's default source (for apps both apt and Flathub offer)
+#   to Flatpak. Changing it in Discover's settings afterwards sticks.
+# Images without flatpak (Ultra-lite) are left alone.
+
+command -v flatpak >/dev/null || exit 0
+
+U=deskdroid
+H=/home/$U
+MARK=/etc/deskdroid/flatpak-default
+as_user() { runuser -u "$U" -- env HOME="$H" USER="$U" PATH=/usr/sbin:/usr/bin:/sbin:/bin "$@"; }
+
+if [ ! -e "$MARK" ] && command -v kwriteconfig6 >/dev/null; then
+  as_user kwriteconfig6 --file discoverrc --group ResourcesModel --key currentApplicationBackend flatpak-backend \
+    && mkdir -p "${MARK%/*}" && touch "$MARK"
+fi
+
+# Adding the remote downloads Flathub's .flatpakrepo, so it runs in the
+# background and is retried next session if the phone was offline.
+if ! as_user flatpak remotes --user --columns=name 2>/dev/null | grep -qx flathub; then
+  ( as_user timeout 120 flatpak remote-add --user --if-not-exists flathub \
+      https://dl.flathub.org/repo/flathub.flatpakrepo \
+      && echo "deskdroid-flatpak: added Flathub" \
+      || echo "deskdroid-flatpak: adding Flathub failed (offline?), will retry next start" ) &
+fi
+exit 0
