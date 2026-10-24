@@ -3034,6 +3034,19 @@ int translate_syscall_enter(Tracee *tracee)
 			if (0 == strncmp(memfd_name, "lib/apk/exec/", 13)) {
 				status = -EACCES;
 			}
+			/* Gecko (Firefox, Floorp) probes memfd with "mozilla-ipc-test".
+			 * The parent process then gives up on memfd, because Android's
+			 * SELinux denies reopening it through /proc/self/fd, and shares
+			 * memory through /dev/shm files instead; child processes still
+			 * pick memfd, require seals on everything they receive, reject
+			 * the parent's unsealed files and crash ("Shared memory
+			 * PlatformHandle is not safe to map": every tab crashes).
+			 * Report no memfd so both sides use /dev/shm.
+			 * https://searchfox.org/mozilla-central/source/ipc/glue/SharedMemoryPlatform_posix.cpp
+			 */
+			if (0 == strncmp(memfd_name, "mozilla-ipc", 11)) {
+				status = -ENOSYS;
+			}
 			break;
 		}
 	case PR_close: {
