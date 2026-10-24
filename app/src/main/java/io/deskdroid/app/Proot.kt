@@ -7,9 +7,10 @@ object Proot {
 
     /** [env] is passed through deskdroid-boot to the session (DESKDROID_* settings). */
     fun sessionCommand(paths: Paths, env: Map<String, String>): ProcessBuilder =
-        // Browser fixes first, as root (see Browsers); they never block the boot.
+        // Browser and Flatpak fixes first, as root (see Browsers, Flatpak); they never block the boot.
         shellCommand(paths, env,
-            "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; exec /bin/sh /usr/local/bin/deskdroid-boot")
+            "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; /bin/sh ${Flatpak.SETUP_SCRIPT} || true; " +
+                "exec /bin/sh /usr/local/bin/deskdroid-boot")
 
     /** Runs [script] with /bin/sh as (fake) root inside the rootfs. */
     fun shellCommand(paths: Paths, env: Map<String, String>, script: String): ProcessBuilder {
