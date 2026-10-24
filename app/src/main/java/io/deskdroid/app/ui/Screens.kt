@@ -611,17 +611,36 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             LinearLayout.LayoutParams(-1, -2))
 
         addView(ui.text("LOG", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        addView(ui.outlineButton("Share log", Party.CYAN, Party.CYAN) {
-            c.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
-                .putExtra(Intent.EXTRA_SUBJECT, "DeskDroid log")
-                .putExtra(Intent.EXTRA_TEXT, "DeskDroid ${BuildConfig.VERSION_NAME}\n\n${AppLog.text()}"), "Share log"))
-        }, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.outlineButton("Share log", Party.CYAN, Party.CYAN) { shareLog() },
+            LinearLayout.LayoutParams(-1, -2))
         log = ui.text(AppLog.text(), 11f, Party.MUTED).apply {
             typeface = android.graphics.Typeface.MONOSPACE
             setTextIsSelectable(true)
         }
         addView(log, LinearLayout.LayoutParams(-1, -2))
         addView(ui.text("DeskDroid ${BuildConfig.VERSION_NAME} · GPL-3.0", 12f, Party.DIM))
+    }
+
+    /** Shares the log as a .txt attachment: as plain text it is too long to paste anywhere. */
+    private fun shareLog() {
+        try {
+            val dir = File(c.cacheDir, "logs").apply { mkdirs() }
+            dir.listFiles()?.forEach { it.delete() }
+            val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
+            val f = File(dir, "deskdroid-log-$stamp.txt")
+            f.writeText("DeskDroid ${BuildConfig.VERSION_NAME}\n" +
+                "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}\n\n" +
+                AppLog.text() + "\n")
+            val uri = androidx.core.content.FileProvider.getUriForFile(c, "${c.packageName}.logs", f)
+            val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_SUBJECT, "DeskDroid log")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            send.clipData = ClipData.newRawUri(f.name, uri)
+            c.startActivity(Intent.createChooser(send, "Share log").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        } catch (e: Exception) {
+            AppLog.i("Share log failed: $e")
+        }
     }
 
     private val logListener: (String) -> Unit = { log.text = it }
