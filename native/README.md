@@ -47,6 +47,9 @@ talloc builds without Samba's waf configure step.
 Local changes to vendored sources (keep them when updating):
 - `proot/src/extension/ashmem_memfd/ashmem_memfd.c`: adds `#include <string.h>`,
   which NDK clang requires.
+- `proot/src/syscall/enter.c`: `memfd_create` fails with ENOSYS for Gecko's
+  `mozilla-ipc` names, so Firefox and Floorp share memory through /dev/shm in
+  every process (their tabs crash on Android otherwise).
 
 Outputs (`app/build/generated/nativeTools/lib/arm64-v8a/`):
 - `libproot.so`: the proot executable
