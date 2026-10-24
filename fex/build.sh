@@ -17,7 +17,7 @@ mkdir -p "$OUT"
 
 apt-get update -q
 apt-get install -y -q --no-install-recommends \
-  ca-certificates git cmake ninja-build clang lld llvm python3 pkg-config zstd file
+  ca-certificates git cmake ninja-build clang clang-tools lld llvm python3 pkg-config zstd file
 
 git clone -q --depth 1 -b "$TAG" https://github.com/FEX-Emu/FEX.git "$WORK/src"
 git -C "$WORK/src" submodule update -q --init --depth 1
@@ -29,7 +29,7 @@ cmake -S "$WORK/src" -B "$WORK/build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DUSE_LINKER=lld \
   -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_INSTALL_LIBDIR=lib \
-  -DTUNE_CPU=none \
+  -DTUNE_CPU=none -DCMAKE_CXX_SCAN_FOR_MODULES=OFF \
   -DENABLE_LTO=True -DENABLE_ASSERTIONS=False -DENABLE_CCACHE=False \
   -DBUILD_TESTING=False -DBUILD_THUNKS=False -DBUILD_FEXCONFIG=False
 cmake --build "$WORK/build"
