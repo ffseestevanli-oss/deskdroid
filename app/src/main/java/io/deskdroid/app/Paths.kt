@@ -26,6 +26,8 @@ class Paths(context: Context) {
     /** Runtime files shared with the session (audio pipe, status). */
     val runtime = File(rootfsTmp, "deskdroid")
     val audioPipe = File(runtime, "audio.pipe")
+    /** The splash watcher (Splash) creates it once the desktop shell is up. */
+    val readyFile = File(runtime, "ready")
     val editionFile = File(rootfs, "etc/deskdroid/edition")
 
     val isInstalled: Boolean get() = File(rootfs, "usr/local/bin/deskdroid-session").exists()

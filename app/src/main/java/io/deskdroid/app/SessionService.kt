@@ -65,6 +65,7 @@ class SessionService : Service() {
                 .apply { acquire() }
 
             paths.runtime.mkdirs()
+            paths.readyFile.delete()
             audio = AudioBridge(paths.audioPipe).also { it.start() }
 
             AppLog.setStatus("Starting display server")
@@ -94,10 +95,12 @@ class SessionService : Service() {
             Browsers.install(this, paths)
             Flatpak.install(this, paths)
             Steam.install(this, paths)
+            Splash.install(this, paths)
             AppLog.setStatus("Starting the desktop (${if (wayland) "Wayland, " else ""}${GpuProfile.describe(gpu)})")
             session = Proot.sessionCommand(paths, sessionEnv(gpu, wayland)).start().also { pump("session", it) }
-            AppLog.setStatus("Desktop running")
-            notify("Desktop running · tap to open")
+            AppLog.setStatus("Loading the desktop")
+            notify("Desktop starting · tap to open")
+            watchReady(paths, session!!)
             val code = session!!.waitFor()
             AppLog.setStatus("Desktop exited (code $code)")
         } catch (e: Exception) {
@@ -108,6 +111,16 @@ class SessionService : Service() {
             stopSelf()
         }
     }
+
+    /** Waits for the splash watcher's ready file (Splash), which takes the splash screen down. */
+    private fun watchReady(paths: Paths, p: Process) = Thread {
+        while (p.isAlive && !paths.readyFile.exists()) Thread.sleep(500)
+        if (p.isAlive) {
+            ready = true
+            AppLog.setStatus("Desktop running")
+            notify("Desktop running · tap to open")
+        }
+    }.start()
 
     private fun sessionEnv(gpu: String, wayland: Boolean): Map<String, String> {
         val scale = Prefs.scale(this).takeIf { it > 0f } ?: DesktopDefaults.scaleFor(this)
@@ -185,6 +198,7 @@ class SessionService : Service() {
         wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
         sendBroadcast(Intent("com.termux.x11.ACTION_STOP").setPackage(packageName))
         running = false
+        ready = false
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -200,6 +214,10 @@ class SessionService : Service() {
         const val EXTRA_HEADLESS = "headless"
 
         @Volatile var running = false
+            private set
+
+        /** The desktop shell is up, so the splash screen can go. */
+        @Volatile var ready = false
             private set
 
         fun start(c: Context, displayId: Int) = c.startForegroundService(

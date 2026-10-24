@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Display
 import android.view.Gravity
 import android.view.MotionEvent
@@ -16,20 +18,26 @@ import io.deskdroid.app.ui.ChamferDrawable
 import io.deskdroid.app.ui.Party
 import io.deskdroid.app.ui.RainbowStrip
 import io.deskdroid.app.ui.Segmented
+import io.deskdroid.app.ui.SegmentedProgress
 import io.deskdroid.app.ui.Ui
 import io.deskdroid.app.ui.dp
+import io.deskdroid.app.ui.logo
+import io.deskdroid.app.ui.rainbowTitle
 import io.deskdroid.app.ui.spacer
 import io.deskdroid.app.ui.tile
 
 /**
  * The desktop window: Termux:X11's activity (X server view, touch/mouse/keyboard
  * input, extra keys bar, clipboard) with DeskDroid's overlay drawer on top.
- * The drawer opens from a handle on the right edge.
+ * The drawer opens from a handle on the right edge. Until the desktop shell is
+ * up, a splash screen covers the X screen (see Splash).
  */
 class DesktopActivity : com.termux.x11.MainActivity() {
     private lateinit var drawer: View
     private lateinit var handle: View
     private lateinit var segmented: Segmented
+    private var splash: View? = null
+    private val main = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,6 +45,12 @@ class DesktopActivity : com.termux.x11.MainActivity() {
         if (isFinishing) return
         hideTermuxChrome()
         addContentView(buildOverlay(), ViewGroup.LayoutParams(-1, -1))
+        if (!SessionService.ready) addContentView(buildSplash(), ViewGroup.LayoutParams(-1, -1))
+    }
+
+    override fun onDestroy() {
+        main.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -155,6 +169,45 @@ class DesktopActivity : com.termux.x11.MainActivity() {
 
     private var scrimView: View? = null
 
+    /** Logo, progress and the session's start-up status; it fades out once the desktop is ready. */
+    private fun buildSplash(): View {
+        val ui = Ui(this)
+        val status = ui.text(AppLog.status, 14f, Party.MUTED, 600).apply { gravity = Gravity.CENTER }
+        val skip = ui.linkButton("Show the desktop now") { hideSplash() }.apply { visibility = View.INVISIBLE }
+        val content = ui.column(20) {
+            gravity = Gravity.CENTER
+            setPadding(dp(32), dp(32), dp(32), dp(32))
+            addView(ui.logo(132), LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL })
+            addView(ui.rainbowTitle("DeskDroid", 34f), LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL })
+            addView(SegmentedProgress(context).apply { indeterminate = true },
+                LinearLayout.LayoutParams(dp(260), dp(22)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+            addView(status, LinearLayout.LayoutParams(-1, -2))
+            addView(skip, LinearLayout.LayoutParams(-1, -2))
+        }
+        val view = ui.screen(listOf(Triple(0.1f, 0.3f, Party.PURPLE), Triple(0.95f, 0.6f, Party.CYAN)), content).apply {
+            isClickable = true // touches don't reach the desktop underneath
+        }
+        splash = view
+        val started = System.currentTimeMillis()
+        main.post(object : Runnable {
+            override fun run() {
+                if (splash == null) return
+                if (SessionService.ready) { hideSplash(); return }
+                if (AppLog.status.isNotEmpty()) status.text = AppLog.status
+                // Slow phones, or a shell the watcher doesn't know: let the user through.
+                if (System.currentTimeMillis() - started > SPLASH_SKIP_MS) skip.visibility = View.VISIBLE
+                main.postDelayed(this, 500)
+            }
+        })
+        return view
+    }
+
+    private fun hideSplash() {
+        val v = splash ?: return
+        splash = null
+        v.animate().alpha(0f).setDuration(400).withEndAction { (v.parent as? ViewGroup)?.removeView(v) }.start()
+    }
+
     private fun openDrawer(open: Boolean) {
         val w = drawer.width.takeIf { it > 0 }?.toFloat() ?: dp(304f)
         if (open) {
@@ -233,6 +286,7 @@ class DesktopActivity : com.termux.x11.MainActivity() {
 
     companion object {
         private val ZOOMS = listOf(100, 125, 150, 200)
+        private const val SPLASH_SKIP_MS = 20_000L
         private val ZOOMS_LABEL = listOf("1×", "1.25×", "1.5×", "2×")
     }
 }
