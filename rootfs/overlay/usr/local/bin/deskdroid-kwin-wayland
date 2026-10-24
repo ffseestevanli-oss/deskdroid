@@ -18,22 +18,36 @@ size=$(DISPLAY="$d" xwininfo -root 2>/dev/null | awk -v s="$s" '
 # the screen size every second and resize the window to match; KWin then
 # resizes its output and Plasma follows. (Polling: RandR events didn't arrive
 # on the phone.) The window is found by KWin's _NET_WM_PID, which is ours
-# after exec, or by its title.
+# after exec, or by its title; failing both, every large top-level window,
+# since in this session only KWin draws on Termux:X11 (X11 apps use Xwayland).
 kwin=$$
+kwin_windows() {
+  { DISPLAY="$d" xdotool search --pid "$kwin"
+    DISPLAY="$d" xdotool search --name '^KDE Wayland Compositor'; } 2>/dev/null | sort -u | grep . && return
+  DISPLAY="$d" xwininfo -root -children 2>/dev/null | awk '$1 ~ /^0x/ {
+    for (i = 2; i <= NF; i++) if (split($i, g, /[x+-]/) >= 2 && g[1] >= 200 && g[2] >= 200) { print $1; break } }'
+}
 follow_screen() {
-  done_size=
+  done_size= tries=0
   while sleep 1 && kill -0 "$kwin" 2>/dev/null; do
     size=$(DISPLAY="$d" xwininfo -root 2>/dev/null | awk '/Width:/ { w = $2 } /Height:/ { h = $2 } END { if (w > 0 && h > 0) print w, h }')
     [ -n "$size" ] && [ "$size" != "$done_size" ] || continue
-    wins=$( { DISPLAY="$d" xdotool search --pid "$kwin"
-              DISPLAY="$d" xdotool search --name '^KDE Wayland Compositor'; } 2>/dev/null | sort -u)
-    [ -n "$wins" ] || continue # KWin's window isn't up yet
+    wins=$(kwin_windows)
+    if [ -z "$wins" ]; then
+      # KWin's window may not be up yet; say once if it never shows.
+      tries=$((tries + 1))
+      if [ "$tries" = 15 ]; then
+        echo "deskdroid-kwin-wayland: no KWin window on $d to resize; top-level windows:"
+        DISPLAY="$d" xwininfo -root -children 2>&1 | sed 's/^/  /'
+      fi
+      continue
+    fi
     for win in $wins; do
       # shellcheck disable=SC2086 # width and height
-      DISPLAY="$d" xdotool windowsize "$win" $size
+      DISPLAY="$d" xdotool windowsize "$win" $size || echo "deskdroid-kwin-wayland: resizing $win failed"
     done
     echo "deskdroid-kwin-wayland: screen $size, sized KWin's window" $wins
-    done_size=$size
+    done_size=$size tries=0
   done
 }
 if command -v xdotool >/dev/null; then
@@ -42,5 +56,6 @@ else
   echo "deskdroid-kwin-wayland: xdotool missing, the desktop won't follow rotation"
 fi
 
+echo "deskdroid-kwin-wayland: starting KWin on $d, $size, scale $s"
 # shellcheck disable=SC2086 # $size is two option pairs
 exec /usr/bin/kwin_wayland --x11-display "$d" $size --scale "$s" "$@"

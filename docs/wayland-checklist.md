@@ -57,3 +57,8 @@ and starts X11. Ultra-lite (MATE) is X11 only.
 - 2026-10-24: still no resize with that fix on the phone (RandR events or the
   window lookup didn't work there). Replaced with polling the screen size,
   which logs each resize.
+- 2026-10-24: the log from the polling image had no `deskdroid-kwin-wayland`
+  lines at all, so either the watcher never found KWin's window (it stayed
+  silent then) or the script didn't run. It now logs `starting KWin` when it
+  runs, finds the window by any large top-level window as a last resort, and
+  lists the X windows if it finds none within 15 s.
