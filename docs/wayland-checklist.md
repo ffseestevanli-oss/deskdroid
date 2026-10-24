@@ -26,8 +26,10 @@ and starts X11. Ultra-lite (MATE) is X11 only.
 
 ## Known limits
 
-- Rotating the phone or plugging in a monitor changes the X screen but not
-  KWin's window: restart the desktop after either.
+- Rotating the phone or plugging in a monitor changes the X screen; no window
+  manager runs there, so `deskdroid-kwin-wayland` watches RandR (`xev`) and
+  resizes KWin's window with `xdotool`, and KWin resizes its output. Images
+  without `xdotool` log a line and keep the old size until a restart.
 - Software rendering only, plus one extra copy per frame into the X server.
 - Plasma's lock screen at start isn't used (startplasma-wayland passes `--no-lockscreen`).
 
@@ -45,6 +47,10 @@ and starts X11. Ultra-lite (MATE) is X11 only.
 7. An X11 app (`xmessage hi`, Floorp on Full) opens through Xwayland.
 8. Switch back to Plasma X11: the next start is the X11 desktop with its usual scale.
 
+9. Rotate the phone with auto-rotate on: the desktop resizes to the new
+   orientation within a second, panel and wallpaper included.
+
 ## Results so far
 
-None yet.
+- 2026-10-23: works with llvmpipe and Venus. Rotation didn't resize the
+  desktop; fixed by following RandR screen changes.

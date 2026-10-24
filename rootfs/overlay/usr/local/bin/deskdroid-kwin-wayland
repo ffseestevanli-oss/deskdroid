@@ -13,5 +13,27 @@ size=$(DISPLAY="$d" xwininfo -root 2>/dev/null | awk -v s="$s" '
   END { if (w > 0 && h > 0) printf "--width %d --height %d", w / s + 0.5, h / s + 0.5 }')
 [ -n "$size" ] || echo "deskdroid-kwin-wayland: no X screen size on $d, using KWin's default"
 
+# Termux:X11 resizes its screen when the phone rotates or a monitor is plugged
+# in, but no window manager runs there to resize KWin's window with it. Follow
+# RandR's screen changes and resize the window (found by KWin's _NET_WM_PID,
+# which is ours after exec); KWin then resizes its output and Plasma follows.
+kwin=$$
+follow_screen() {
+  DISPLAY="$d" stdbuf -oL xev -root -event randr 2>/dev/null | while read -r line; do
+    case "$line" in RRScreenChangeNotify*) ;; *) continue ;; esac
+    kill -0 "$kwin" 2>/dev/null || break
+    # shellcheck disable=SC2046 # width and height
+    set -- $(DISPLAY="$d" xwininfo -root | awk '/Width:/ { w = $2 } /Height:/ { h = $2 } END { print w, h }')
+    for win in $(DISPLAY="$d" xdotool search --pid "$kwin" 2>/dev/null); do
+      DISPLAY="$d" xdotool windowsize "$win" "$1" "$2"
+    done
+  done
+}
+if command -v xdotool >/dev/null && command -v xev >/dev/null; then
+  follow_screen &
+else
+  echo "deskdroid-kwin-wayland: xdotool or xev missing, the desktop won't follow rotation"
+fi
+
 # shellcheck disable=SC2086 # $size is two option pairs
 exec /usr/bin/kwin_wayland --x11-display "$d" $size --scale "$s" "$@"

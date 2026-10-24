@@ -6,6 +6,8 @@ kwin-x11
 kwin-wayland
 xwayland
 qt6-wayland
+# Resizes KWin's window when the X screen rotates (deskdroid-kwin-wayland).
+xdotool
 systemsettings
 breeze
 konsole
