@@ -1,0 +1,21 @@
+#!/bin/sh
+# Installed by the DeskDroid app (Splash.kt) at every session start. Runs as
+# root in the background while the desktop starts. The app's splash screen
+# stays up until /tmp/deskdroid/ready exists: once the desktop shell
+# (plasmashell, or mate-panel on Ultra-lite) runs, give it a few seconds to
+# draw, then create the file. Processes are found in /proc/*/cmdline, since
+# the image may not ship pgrep.
+
+READY=/tmp/deskdroid/ready
+rm -f "$READY"
+i=0
+while [ "$i" -lt 180 ]; do
+  if cat /proc/[0-9]*/cmdline 2>/dev/null | tr '\0' '\n' | grep -qE '^(/usr/bin/)?(plasmashell|mate-panel)$'; then
+    sleep 3
+    break
+  fi
+  sleep 1
+  i=$((i + 1))
+done
+[ "$i" -lt 180 ] || echo "deskdroid-splash: no desktop shell after 3 minutes, hiding the splash anyway"
+mkdir -p "${READY%/*}" && touch "$READY"

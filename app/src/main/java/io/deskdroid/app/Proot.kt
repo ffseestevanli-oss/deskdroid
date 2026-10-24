@@ -8,8 +8,10 @@ object Proot {
     /** [env] is passed through deskdroid-boot to the session (DESKDROID_* settings). */
     fun sessionCommand(paths: Paths, env: Map<String, String>): ProcessBuilder =
         // Browser and Flatpak fixes first, as root (see Browsers, Flatpak); they never block the boot.
+        // The splash watcher runs alongside the session (see Splash).
         shellCommand(paths, env,
             "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; /bin/sh ${Flatpak.SETUP_SCRIPT} || true; " +
+                "/bin/sh ${Splash.WATCH_SCRIPT} & " +
                 "exec /bin/sh /usr/local/bin/deskdroid-boot")
 
     /** Runs [script] with /bin/sh as (fake) root inside the rootfs. */
