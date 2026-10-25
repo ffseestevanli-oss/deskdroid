@@ -8,6 +8,8 @@ xwayland
 qt6-wayland
 # Resizes KWin's window when the X screen rotates (deskdroid-kwin-wayland).
 xdotool
+# kscreen-doctor: re-applies the output config after a resize so Plasma lays out again.
+libkscreen-bin
 systemsettings
 breeze
 konsole
