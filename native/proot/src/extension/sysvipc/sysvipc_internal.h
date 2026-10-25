@@ -38,6 +38,7 @@ struct SysVIpcSemaphore {
 	int16_t generation;
 	bool valid;
 	uint16_t *sems;
+	int32_t *last_pids;
 	int nsems;
 };
 
@@ -148,6 +149,11 @@ struct SysVIpcProcess {
 struct SysVIpcConfig {
 	struct SysVIpcNamespace *ipc_namespace;
 	struct SysVIpcProcess *process;
+
+	/* Android's app seccomp policy blocks set_robust_list.  Keep the
+	 * per-thread registration here so glibc applications can query it. */
+	word_t robust_list_head;
+	word_t robust_list_len;
 
 	/* Reason why this tracee should wait
 	 *
@@ -269,4 +275,3 @@ void sysvipc_shm_fill_proc(FILE *proc_file, struct SysVIpcNamespace *ipc_namespa
 int sysvipc_shm_namespace_destructor(struct SysVIpcNamespace *ipc_namespace);
 
 #endif // SYSVIPC_INTERNAL_H
-

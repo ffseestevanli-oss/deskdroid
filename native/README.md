@@ -49,7 +49,15 @@ Local changes to vendored sources (keep them when updating):
   which NDK clang requires.
 - `proot/src/syscall/enter.c`: `memfd_create` fails with ENOSYS for Gecko's
   `mozilla-ipc` names, so Firefox and Floorp share memory through /dev/shm in
-  every process (their tabs crash on Android otherwise).
+  every process (their tabs crash on Android otherwise). `execveat` with a
+  directory fd or `AT_EMPTY_PATH` (FEX, Steam) runs the path the fd points at.
+- `proot/src/extension/sysvipc/`: emulates `set_robust_list` and
+  `get_robust_list`, which Android's seccomp policy blocks, and adds the
+  semaphore calls Steam uses (`GETPID`, `SETALL`, `GETNCNT`, `GETZCNT`, waking
+  `semop` waiters after `SETVAL`/`SETALL`). From steamclienttermux's
+  `patches/proot-steam-android.patch` (https://github.com/huntergdavis/steamclienttermux,
+  GPL-2.0-or-later), without its crash-log part. `PROOT_SYSVIPC_LOG=1` logs the
+  calls.
 
 Outputs (`app/build/generated/nativeTools/lib/arm64-v8a/`):
 - `libproot.so`: the proot executable

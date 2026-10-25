@@ -1,5 +1,6 @@
 #include "extension/sysvipc/sysvipc.h"
 #include "tracee/seccomp.h"
+#include "tracee/mem.h"
 #include "syscall/chain.h"
 #include "path/path.h"
 #include "path/temp.h"
@@ -29,6 +30,8 @@ static FilteredSysnum filtered_sysnums[] = {
 	{ PR_shmat,		0 },
 	{ PR_shmdt,		0 },
 	{ PR_shmctl,		0 },
+	{ PR_set_robust_list,	0 },
+	{ PR_get_robust_list,	0 },
 	FILTERED_SYSNUM_END,
 };
 
@@ -77,6 +80,38 @@ static int sysvipc_syscall_common(Tracee *tracee, struct SysVIpcConfig *config, 
 	case PR_shmctl:
 		status = sysvipc_shmctl(tracee, config);
 		break;
+	case PR_set_robust_list:
+		config->robust_list_head = peek_reg(tracee, CURRENT, SYSARG_1);
+		config->robust_list_len = peek_reg(tracee, CURRENT, SYSARG_2);
+		status = config->robust_list_head == 0 ? -EINVAL : 0;
+		break;
+	case PR_get_robust_list:
+	{
+		pid_t pid = (pid_t) peek_reg(tracee, CURRENT, SYSARG_1);
+		struct SysVIpcConfig *target_config = config;
+		if (pid != 0 && pid != tracee->pid) {
+			Tracee *target = get_tracee(NULL, pid, false);
+			if (target == NULL) {
+				status = -ESRCH;
+				break;
+			}
+			target_config = sysvipc_get_config(target);
+			if (target_config == NULL) {
+				status = -ESRCH;
+				break;
+			}
+		}
+		word_t head_out = target_config->robust_list_head;
+		word_t len_out = target_config->robust_list_len;
+		status = write_data(tracee,
+			peek_reg(tracee, CURRENT, SYSARG_2), &head_out, sizeof(head_out));
+		if (status < 0) break;
+		status = write_data(tracee,
+			peek_reg(tracee, CURRENT, SYSARG_3), &len_out, sizeof(len_out));
+		if (status < 0) break;
+		status = 0;
+		break;
+	}
 	default:
 		return 0;
 	}
