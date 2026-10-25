@@ -94,6 +94,7 @@ class SessionService : Service() {
             VenusServer.writeSessionEnv(this, paths, gpu == "venus")
             Browsers.install(this, paths)
             Flatpak.install(this, paths)
+            ScreenLock.install(paths)
             Steam.install(this, paths)
             Splash.install(this, paths)
             AppLog.setStatus("Linking your phone's files")
