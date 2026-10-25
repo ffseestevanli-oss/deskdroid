@@ -17,7 +17,7 @@ How the pieces fit at run time:
 1. The installer reads `deskdroid-images.json`, downloads the chosen edition (resumable, in parts if over 2 GB), checks its minisign signature, and unpacks it into app-private storage.
 2. "Start desktop" runs the X server (lorie's `CmdEntryPoint`, as a child process), opens `DesktopActivity`, then boots Debian under proot: system D-Bus, PulseAudio, then Plasma.
 3. Sound: PulseAudio writes into a FIFO that the app plays with `AudioTrack`.
-4. Files: with All files access, phone storage is bound into Debian at `/storage/emulated/0` (also `/sdcard`, `~/Phone` and Dolphin's Places), and `~/Documents`, `~/Downloads`, `~/Pictures`, `~/Music`, `~/Videos` are the phone's own folders. Android's `Android/` folder is hidden by default (`Storage.kt`).
+4. Files: with All files access, phone storage shows up in Debian like a USB drive at `/media/deskdroid/Phone` (also `/sdcard`, and Phone/Camera in Dolphin's Places); the Linux home folder stays separate. Android's `Android/` folder is hidden by default (`Storage.kt`).
 
 GPU acceleration on Mali and PowerVR (Pixel 10): in progress, through Venus Vulkan forwarding (the app's Venus server runs Linux apps' Vulkan on Android's GPU driver) with Zink for OpenGL. It replaced an earlier virgl attempt that crashed KWin. Checklist: [docs/gpu-venus-checklist.md](docs/gpu-venus-checklist.md).
 

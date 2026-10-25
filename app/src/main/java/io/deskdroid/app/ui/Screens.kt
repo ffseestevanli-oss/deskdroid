@@ -404,8 +404,8 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
         }
         batteryStatus.setTextColor(if (battery && notes) Party.GREEN else Party.MUTED)
         val files = Storage.granted(c)
-        filesStatus.text = if (files) "All set. Documents, Downloads, Pictures, Music and Videos are your phone's."
-            else "Tap to allow All files access, so the desktop and Android see the same files"
+        filesStatus.text = if (files) "All set. Your phone's storage shows up on the desktop as a drive called Phone."
+            else "Tap to allow All files access, so the desktop can open and save files on your phone"
         filesStatus.setTextColor(if (files) Party.GREEN else Party.MUTED)
     }
 
@@ -628,10 +628,10 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.text("PHONE FILES", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
         files = ui.outlineButton("", Party.PURPLE, Party.PURPLE) { Storage.request(activity) }
         addView(files, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("With All files access, the desktop's Documents, Downloads, Pictures, Music and Videos are " +
-            "the same folders as on Android, and the whole phone storage is under Phone (also /sdcard). Android's " +
-            "own folder is hidden; Show hidden files in Dolphin reveals it. Applies the next time the desktop " +
-            "starts.", 13f, Party.MUTED))
+        addView(ui.text("With All files access, your phone's storage shows up on the desktop like a USB drive: " +
+            "Phone and Camera in Dolphin's sidebar, at ${Storage.MOUNT} (also /sdcard). The Linux home folder " +
+            "stays separate. Android's own folder is hidden; Show hidden files in Dolphin reveals it. Applies " +
+            "the next time the desktop starts.", 13f, Party.MUTED))
         addView(ui.outlineButton("Background limits", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
         addView(ui.outlineButton("Reinstall the system", Party.RED, Party.RED) { confirmReinstall() },

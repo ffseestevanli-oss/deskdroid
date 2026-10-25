@@ -13,26 +13,19 @@ import android.system.Os
 import java.io.File
 
 /**
- * Shares the phone's storage (/storage/emulated/0) with the desktop. With
- * "All files access" granted, proot binds it at the same path inside Debian,
- * and the standard home folders are the phone's own: a file saved to
- * ~/Downloads on the desktop is in Download on Android, and the other way
- * round. Desktop, Templates and Public stay Linux-only (Android has no
- * equivalent). Android's own folder is listed in a .hidden file, which Dolphin
- * and GTK file pickers hide until "Show hidden files" is on. Android itself
- * blocks Android/data and Android/obb whatever this app does. Phone and Camera
- * are added to the Places panel of Dolphin and the file dialogs.
+ * Shows the phone's storage (/storage/emulated/0) on the desktop like a USB
+ * drive: with "All files access" granted, proot binds it at [MOUNT] (also
+ * /sdcard), and Phone and Camera are added to the Places panel of Dolphin and
+ * the file dialogs. Linux keeps its own home folder (Desktop, Documents,
+ * Downloads, ... in /home/deskdroid); nothing in it is shared. Android's own
+ * folder is listed in a .hidden file, which Dolphin and GTK file pickers hide
+ * until "Show hidden files" is on. Android itself blocks Android/data and
+ * Android/obb whatever this app does.
  */
 object Storage {
-    /** Linux home folder to the phone folder it shows. */
-    val SHARED_DIRS = linkedMapOf(
-        "Documents" to "Documents",
-        "Downloads" to Environment.DIRECTORY_DOWNLOADS,
-        "Pictures" to Environment.DIRECTORY_PICTURES,
-        "Music" to Environment.DIRECTORY_MUSIC,
-        "Videos" to Environment.DIRECTORY_MOVIES,
-    )
-    private val LOCAL_DIRS = listOf("Desktop", "Templates", "Public")
+    /** Where the phone's storage shows up inside Debian, as udisks would mount a USB drive. */
+    const val MOUNT = "/media/deskdroid/Phone"
+    private val HOME_DIRS = listOf("Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos", "Templates", "Public")
 
     /** Folders in the storage root hidden from the desktop's file managers by default. */
     private val HIDDEN = listOf("Android")
@@ -40,14 +33,14 @@ object Storage {
     private const val HOME = "home/deskdroid"
 
     /**
-     * Logs, as the desktop user, what the shared folders look like from inside
-     * Debian and whether a file can be created in them, so the log shows why a
-     * folder is read-only or empty. Runs before deskdroid-boot (Proot.sessionCommand).
+     * Logs, as the desktop user, what the phone storage looks like from inside
+     * Debian and whether a file can be created in it, so the log shows why it
+     * is read-only or empty. Runs before deskdroid-boot (Proot.sessionCommand).
      */
-    val PROBE_SCRIPT = "runuser -u deskdroid -- sh -c 'cd /$HOME && ls -ldn . ${SHARED_DIRS.keys.joinToString(" ")} Phone/ " +
-        "&& for d in ${SHARED_DIRS.keys.joinToString(" ")}; do " +
-        "printf \"%s: %s entries, \" \$d \$(ls -A \$d | wc -l); " +
-        "touch \$d/.deskdroid-rw-test && rm -f \$d/.deskdroid-rw-test && echo writable || echo not writable; done' " +
+    val PROBE_SCRIPT = "runuser -u deskdroid -- sh -c 'ls -ldn $MOUNT $MOUNT/${Environment.DIRECTORY_DOWNLOADS} " +
+        "&& echo \"\$(ls -A $MOUNT | wc -l) entries in $MOUNT\" " +
+        "&& touch $MOUNT/${Environment.DIRECTORY_DOWNLOADS}/.deskdroid-rw-test " +
+        "&& rm -f $MOUNT/${Environment.DIRECTORY_DOWNLOADS}/.deskdroid-rw-test && echo writable || echo not writable' " +
         "2>&1 | sed 's/^/storage check: /' || true; "
     /** Marks the Places entries this app adds, so they can be told apart from the user's. */
     private const val PLACE_ID = "deskdroid/"
@@ -73,51 +66,45 @@ object Storage {
     }
 
     /**
-     * Sets up the home folder and, if access is granted, the phone folders.
-     * Called at session start, before proot runs, so the home folders are
-     * plain directories here. Returns proot binds as (phone path, Linux path).
+     * Sets up the home folder and, if access is granted, the phone storage.
+     * Called at session start, before proot runs. Returns proot binds as
+     * (phone path, Linux path).
      */
     fun prepare(c: Context, paths: Paths): List<Pair<String, String>> {
         val home = File(paths.rootfs, HOME)
         writeUserDirs(home)
-        for (d in LOCAL_DIRS + SHARED_DIRS.keys) File(home, d).mkdirs()
+        for (d in HOME_DIRS) File(home, d).mkdirs()
         // Places used to be added by a script in the rootfs, racing KDE for the file.
         File(paths.rootfs, "usr/local/bin/deskdroid-storage").delete()
+        // Earlier versions linked ~/Phone to the storage; it's a separate drive now.
+        File(home, "Phone").let { if (isSymlink(it)) it.delete() }
 
         val phone = root
-        val phoneLink = File(home, "Phone")
         val sdcard = File(paths.rootfs, "sdcard")
         if (!granted(c) || !phone.canWrite()) {
-            AppLog.i("Phone storage not shared (no All files access); home folders are Linux-only")
-            for (l in listOf(phoneLink, sdcard)) if (isSymlink(l)) l.delete()
+            AppLog.i("Phone storage not shown on the desktop (no All files access)")
+            if (isSymlink(sdcard)) sdcard.delete()
             writePlaces(home, emptyList())
             return emptyList()
         }
 
-        val binds = mutableListOf(phone.path to phone.path)
-        File(paths.rootfs, phone.path.removePrefix("/")).mkdirs()
-        symlink(phone.path, sdcard)
-        symlink(phone.path, phoneLink)
+        File(paths.rootfs, MOUNT.removePrefix("/")).mkdirs()
+        symlink(MOUNT, sdcard)
         writeHidden(phone)
         writePlaces(home, listOfNotNull(
-            Triple("phone", "Phone", phone) to "smartphone",
-            File(phone, Environment.DIRECTORY_DCIM).takeIf { it.isDirectory }?.let { Triple("camera", "Camera", it) to "camera-photo" },
+            Triple("phone", "Phone", MOUNT) to "smartphone",
+            File(phone, Environment.DIRECTORY_DCIM).takeIf { it.isDirectory }
+                ?.let { Triple("camera", "Camera", "$MOUNT/${it.name}") to "camera-photo" },
         ))
-        for ((linux, android) in SHARED_DIRS) {
-            val target = File(phone, android).apply { mkdirs() }
-            // proot's bind would hide anything already in the Linux folder; move it to the phone.
-            moveInto(File(home, linux), target)
-            binds += target.path to "/$HOME/$linux"
-        }
-        AppLog.i("Phone storage shared: ${phone.path}, home folders ${SHARED_DIRS.keys.joinToString()}")
-        for (android in SHARED_DIRS.values) try {
-            val st = Os.stat(File(phone, android).path)
-            AppLog.i("  $android: uid ${st.st_uid} gid ${st.st_gid} mode ${Integer.toOctalString(st.st_mode and 0xfff)}, " +
-                "${File(phone, android).list()?.size ?: "unlistable"} entries")
+        AppLog.i("Phone storage ${phone.path} shown at $MOUNT")
+        for (f in listOf(phone, File(phone, Environment.DIRECTORY_DOWNLOADS))) try {
+            val st = Os.stat(f.path)
+            AppLog.i("  ${f.path}: uid ${st.st_uid} gid ${st.st_gid} mode ${Integer.toOctalString(st.st_mode and 0xfff)}, " +
+                "${f.list()?.size ?: "unlistable"} entries")
         } catch (e: Exception) {
-            AppLog.i("  $android: ${e.message}")
+            AppLog.i("  ${f.path}: ${e.message}")
         }
-        return binds
+        return listOf(phone.path to MOUNT)
     }
 
     private fun writeUserDirs(home: File) {
@@ -125,8 +112,7 @@ object Storage {
         if (f.exists()) return
         f.parentFile!!.mkdirs()
         f.writeText(
-            "# Written by the DeskDroid app (Storage.kt). Documents, Downloads, Music,\n" +
-                "# Pictures and Videos are the phone's own folders when DeskDroid has All files access.\n" +
+            "# Written by the DeskDroid app (Storage.kt). The phone's storage is at $MOUNT.\n" +
                 listOf("DESKTOP" to "Desktop", "DOCUMENTS" to "Documents", "DOWNLOAD" to "Downloads",
                     "MUSIC" to "Music", "PICTURES" to "Pictures", "VIDEOS" to "Videos",
                     "TEMPLATES" to "Templates", "PUBLICSHARE" to "Public")
@@ -146,31 +132,6 @@ object Storage {
         }
     }
 
-    /**
-     * Moves what's in [from] (app storage) to [to] (phone storage). They are
-     * different file systems, so it's copy then delete. A name the phone already
-     * has gets " (Linux)" added; symlinks, which phone storage can't hold, stay.
-     */
-    private fun moveInto(from: File, to: File) {
-        val entries = from.listFiles() ?: return
-        for (src in entries) {
-            if (isSymlink(src)) {
-                AppLog.i("Left ${src.name} in ~/${from.name}: phone storage can't hold symlinks (hidden while shared)")
-                continue
-            }
-            var dest = File(to, src.name)
-            if (dest.exists()) dest = File(to, "${src.nameWithoutExtension} (Linux)${src.name.removePrefix(src.nameWithoutExtension)}")
-            try {
-                check(!dest.exists()) { "${dest.name} exists" }
-                check(src.copyRecursively(dest)) { "copy failed" }
-                src.deleteRecursively()
-                AppLog.i("Moved ~/${from.name}/${src.name} to ${dest.path}")
-            } catch (e: Exception) {
-                AppLog.i("Couldn't move ~/${from.name}/${src.name} to the phone: ${e.message}")
-            }
-        }
-    }
-
     /** Home folders KDE shows in Places, in its order, with its icons. */
     private val PLACES_DIRS = listOf(
         "Desktop" to "user-desktop", "Documents" to "folder-documents", "Downloads" to "folder-downloads",
@@ -183,13 +144,13 @@ object Storage {
      * - Desktop, Documents, Downloads, Music, Pictures and Videos, once each
      *   (removing one afterwards sticks). KDE only adds these when it first
      *   writes the file, and older images had no such folders then.
-     * - [devices] ((id, title, folder) to icon) right after them, replacing
+     * - [devices] ((id, title, Linux path) to icon) right after them, replacing
      *   the ones added before. KDE's Devices group only lists drives it
      *   detects itself (udisks, which proot can't run), so they stay in Places.
      * With no file yet, Home goes in too and there's no kde_places_version, so
      * KDE adds the rest of its defaults (Network, Trash) below.
      */
-    private fun writePlaces(home: File, devices: List<Pair<Triple<String, String, File>, String>>) {
+    private fun writePlaces(home: File, devices: List<Pair<Triple<String, String, String>, String>>) {
         val f = File(home, ".local/share/user-places.xbel")
         val added = File(home, ".config/deskdroid/places-added")
         try {
@@ -218,7 +179,7 @@ object Storage {
             xml = Regex("""[ \t]*<bookmark\s(?:(?!</bookmark>).)*?<ID>${Regex.escape(PLACE_ID)}[^<]*</ID>.*?</bookmark>[ \t]*\n?""",
                 RegexOption.DOT_MATCHES_ALL).replace(xml, "")
             xml = insertAfterLast(xml, listOf(homeUrl) + dirUrls, devices.joinToString("") { (place, icon) ->
-                bookmark(Uri.fromFile(place.third).toString(), place.second, icon, PLACE_ID + place.first, system = false)
+                bookmark(Uri.fromFile(File(place.third)).toString(), place.second, icon, PLACE_ID + place.first, system = false)
             })
             if (xml != old) {
                 f.parentFile!!.mkdirs()
