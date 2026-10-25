@@ -5,17 +5,23 @@ import java.io.File
 /** Builds the proot command line that boots the Debian rootfs and starts the desktop. */
 object Proot {
 
-    /** [env] is passed through deskdroid-boot to the session (DESKDROID_* settings). */
-    fun sessionCommand(paths: Paths, env: Map<String, String>): ProcessBuilder =
+    /**
+     * [env] is passed through deskdroid-boot to the session (DESKDROID_* settings).
+     * [binds] are extra (host path, guest path) binds: the phone's storage (Storage).
+     */
+    fun sessionCommand(paths: Paths, env: Map<String, String>, binds: List<Pair<String, String>>): ProcessBuilder =
         // Browser and Flatpak fixes first, as root (see Browsers, Flatpak); they never block the boot.
-        // The splash watcher runs alongside the session (see Splash).
+        // The splash watcher and the Places entries for phone storage run alongside the session (see Splash, Storage).
         shellCommand(paths, env,
             "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; /bin/sh ${Flatpak.SETUP_SCRIPT} || true; " +
-                "/bin/sh ${Splash.WATCH_SCRIPT} & " +
-                "exec /bin/sh /usr/local/bin/deskdroid-boot")
+                "/bin/sh ${Splash.WATCH_SCRIPT} & /bin/sh ${Storage.PLACES_SCRIPT} & " +
+                "exec /bin/sh /usr/local/bin/deskdroid-boot", binds)
 
     /** Runs [script] with /bin/sh as (fake) root inside the rootfs. */
-    fun shellCommand(paths: Paths, env: Map<String, String>, script: String): ProcessBuilder {
+    fun shellCommand(
+        paths: Paths, env: Map<String, String>, script: String,
+        binds: List<Pair<String, String>> = emptyList(),
+    ): ProcessBuilder {
         paths.prootTmp.mkdirs()
         val args = mutableListOf(
             paths.proot.path,
@@ -31,6 +37,7 @@ object Proot {
             "-b", "${paths.rootfs.path}/tmp:/dev/shm",
             "-w", "/root",
         )
+        for ((host, guest) in binds) args += listOf("-b", "$host:$guest")
         // Android hides some /proc files from apps; bind harmless stand-ins.
         for ((name, content) in fakeProcFiles()) {
             if (!File("/proc/$name").canRead()) {

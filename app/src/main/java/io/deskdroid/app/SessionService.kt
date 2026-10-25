@@ -96,8 +96,10 @@ class SessionService : Service() {
             Flatpak.install(this, paths)
             Steam.install(this, paths)
             Splash.install(this, paths)
+            AppLog.setStatus("Linking your phone's files")
+            val binds = Storage.prepare(this, paths)
             AppLog.setStatus("Starting the desktop (${if (wayland) "Wayland, " else ""}${GpuProfile.describe(gpu)})")
-            session = Proot.sessionCommand(paths, sessionEnv(gpu, wayland)).start().also { pump("session", it) }
+            session = Proot.sessionCommand(paths, sessionEnv(gpu, wayland, binds.isNotEmpty()), binds).start().also { pump("session", it) }
             AppLog.setStatus("Loading the desktop")
             notify("Desktop starting · tap to open")
             watchReady(paths, session!!)
@@ -122,13 +124,15 @@ class SessionService : Service() {
         }
     }.start()
 
-    private fun sessionEnv(gpu: String, wayland: Boolean): Map<String, String> {
+    private fun sessionEnv(gpu: String, wayland: Boolean, storage: Boolean): Map<String, String> {
         val scale = Prefs.scale(this).takeIf { it > 0f } ?: DesktopDefaults.scaleFor(this)
         return mapOf(
             "DESKDROID_GPU" to gpu,
             "DESKDROID_SESSION" to if (wayland) "wayland" else "x11",
             "DESKDROID_SCALE" to "%.2f".format(java.util.Locale.ROOT, scale),
             "TZ" to TimeZone.getDefault().id,
+            // Empty when the phone's storage isn't shared (deskdroid-storage then does nothing).
+            "DESKDROID_STORAGE" to if (storage) Storage.root.path else "",
         ) + Browsers.geckoEnv
     }
 
