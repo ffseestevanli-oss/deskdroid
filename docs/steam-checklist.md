@@ -58,6 +58,9 @@ Steam needs about 1.5 GB for its client, plus games. FEX's x86 system (about
 
 ## Known limits and next steps
 
+- The ARM64 client checks its threads' robust futex lists (`get_robust_list`),
+  which Android blocks; proot answers those calls itself (native/README.md).
+
 - Games that run in Steam's pressure-vessel container (Proton, newer native
   games) need bubblewrap and user namespaces, which proot can't give. Next:
   the `bwrap` shim from plan section 6b.

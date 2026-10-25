@@ -1,6 +1,23 @@
 #include "sysvipc.h"
 #include "sysvipc_internal.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
+static bool sysvipc_shm_debug_enabled(void) {
+	static int enabled = -1;
+	if (enabled < 0) enabled = getenv("PROOT_SYSVIPC_LOG") != NULL;
+	return enabled != 0;
+}
+
+#define SHM_DEBUG(...) do { \
+	if (sysvipc_shm_debug_enabled()) { \
+		fprintf(stderr, "PROOT_SYSVIPC pid=%d ", tracee->pid); \
+		fprintf(stderr, __VA_ARGS__); \
+		fputc('\n', stderr); \
+	} \
+} while (0)
+
 #include "tracee/reg.h"
 #include "tracee/mem.h"
 #include "tracee/tracee.h"
@@ -201,6 +218,9 @@ int sysvipc_shmget(Tracee *tracee, struct SysVIpcConfig *config)
 	word_t shm_key = peek_reg(tracee, CURRENT, SYSARG_1);
 	size_t shm_size = peek_reg(tracee, CURRENT, SYSARG_2);
 	word_t shmflg = peek_reg(tracee, CURRENT, SYSARG_3);
+	SHM_DEBUG("shmget key=%#lx size=%zu flags=%#lx libandroid=%d",
+		(unsigned long) shm_key, shm_size, (unsigned long) shmflg,
+		config->ipc_namespace->shm_use_libandroid);
 	if (config->ipc_namespace->shm_use_libandroid) {
 		struct SysVIpcShmHelperRequest request = {
 			.op = SHMHELPER_LIBANDROID_SHMGET,
@@ -210,6 +230,7 @@ int sysvipc_shmget(Tracee *tracee, struct SysVIpcConfig *config)
 		};
 		int response = -EIO;
 		sysvipc_shm_send_helper_request(&request, &response, sizeof(response));
+		SHM_DEBUG("shmget(libandroid) -> %d", response);
 		return response;
 	}
 	struct SysVIpcSharedMem *shms = config->ipc_namespace->shms;
@@ -269,7 +290,9 @@ int sysvipc_shmget(Tracee *tracee, struct SysVIpcConfig *config)
 			return -EINVAL;
 		}
 	}
-	return IPC_OBJECT_ID(shm_index, shm);
+	int result = IPC_OBJECT_ID(shm_index, shm);
+	SHM_DEBUG("shmget -> %d fd=%d", result, shm->fd);
+	return result;
 }
 
 /* Only used when shm_use_libandroid is false */
@@ -341,6 +364,11 @@ static void sysvipc_shm_wake_pending_shmat()
 
 int sysvipc_shmat(Tracee *tracee, struct SysVIpcConfig *config)
 {
+	SHM_DEBUG("shmat id=%#lx requested=%#lx flags=%#lx libandroid=%d",
+		(unsigned long) peek_reg(tracee, CURRENT, SYSARG_1),
+		(unsigned long) peek_reg(tracee, CURRENT, SYSARG_2),
+		(unsigned long) peek_reg(tracee, CURRENT, SYSARG_3),
+		config->ipc_namespace->shm_use_libandroid);
 	size_t shm_index;
 	struct SysVIpcSharedMem *shm;
 	if (!config->ipc_namespace->shm_use_libandroid) {
@@ -421,6 +449,8 @@ int sysvipc_shmat(Tracee *tracee, struct SysVIpcConfig *config)
 	poke_reg(tracee, SYSARG_2, SOCK_SEQPACKET);
 	poke_reg(tracee, SYSARG_3, 0);
 	config->chain_state = CSTATE_SHMAT_SOCKET;
+	SHM_DEBUG("shmat begin index=%zu fd=%d size=%zu", shm_index, shm->fd,
+		(size_t) shm->stats.shm_segsz);
 	return 0;
 }
 
@@ -439,6 +469,9 @@ int sysvipc_shmat_chain(Tracee *tracee, struct SysVIpcConfig *config)
 {
 	assert(config->waiting_object_index < talloc_array_length(config->ipc_namespace->shms));
 	struct SysVIpcSharedMem *shm = &config->ipc_namespace->shms[config->waiting_object_index];
+	SHM_DEBUG("shmat_chain state=%d syscall_result=%#lx index=%zu",
+		config->chain_state, (unsigned long) peek_reg(tracee, CURRENT, SYSARG_RESULT),
+		config->waiting_object_index);
 	assert(shm->valid);
 	switch (config->chain_state) {
 	case CSTATE_SHMAT_SOCKET:
@@ -530,6 +563,7 @@ int sysvipc_shmat_chain(Tracee *tracee, struct SysVIpcConfig *config)
 		force_chain_final_result(tracee, addr);
 		config->chain_state = CSTATE_NOT_CHAINED;
 		sysvipc_shm_wake_pending_shmat();
+		SHM_DEBUG("shmat complete addr=%#lx size=%zu", (unsigned long) addr, mapping->size);
 
 		return 1;
 	}
@@ -556,6 +590,7 @@ fail_dont_close:
 int sysvipc_shmdt(Tracee *tracee, struct SysVIpcConfig *config)
 {
 	word_t addr = peek_reg(tracee, CURRENT, SYSARG_1);
+	SHM_DEBUG("shmdt addr=%#lx", (unsigned long) addr);
 	struct SysVIpcSharedMemMap *mapped;
 	LIST_FOREACH(mapped, &config->process->mapped_shms, link_process) {
 		if (mapped->addr == addr) {
@@ -582,6 +617,9 @@ static void sysvipc_shm_update_stats(struct SysVIpcSharedMem *shm)
 int sysvipc_shmctl(Tracee *tracee, struct SysVIpcConfig *config)
 {
 	int object_id = peek_reg(tracee, CURRENT, SYSARG_1);
+	SHM_DEBUG("shmctl id=%d cmd=%#lx buf=%#lx", object_id,
+		(unsigned long) peek_reg(tracee, CURRENT, SYSARG_2),
+		(unsigned long) peek_reg(tracee, CURRENT, SYSARG_3));
 	size_t shm_index;
 	struct SysVIpcSharedMem *shm = NULL;
 	if (!config->ipc_namespace->shm_use_libandroid) {

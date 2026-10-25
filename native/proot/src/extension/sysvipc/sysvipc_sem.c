@@ -6,6 +6,22 @@
 #include <sys/errno.h> /* E* */
 #include <string.h> /* memset */
 #include <assert.h> /* assert */
+#include <stdio.h>
+#include <stdlib.h>
+
+static bool sysvipc_debug_enabled(void) {
+	static int enabled = -1;
+	if (enabled < 0) enabled = getenv("PROOT_SYSVIPC_LOG") != NULL;
+	return enabled != 0;
+}
+
+#define SYSVIPC_DEBUG(...) do { \
+	if (sysvipc_debug_enabled()) { \
+		fprintf(stderr, "PROOT_SYSVIPC pid=%d ", tracee->pid); \
+		fprintf(stderr, __VA_ARGS__); \
+		fputc('\n', stderr); \
+	} \
+} while (0)
 
 #define SYSVIPC_MAX_SEMS 512
 #define SYSVIPC_MAX_NSEMS 512
@@ -16,6 +32,7 @@ int sysvipc_semget(Tracee *tracee, struct SysVIpcConfig *config) {
 	word_t semaphore_id = peek_reg(tracee, CURRENT, SYSARG_1);
 	int nsems = peek_reg(tracee, CURRENT, SYSARG_2);
 	int semflg = peek_reg(tracee, CURRENT, SYSARG_3);
+	SYSVIPC_DEBUG("semget key=%#lx nsems=%d flags=%#x", (unsigned long) semaphore_id, nsems, semflg);
 
 	if (nsems <= 0 || nsems > SYSVIPC_MAX_NSEMS) {
 		return -EINVAL;
@@ -58,6 +75,8 @@ int sysvipc_semget(Tracee *tracee, struct SysVIpcConfig *config) {
 		semaphore->valid = true;
 		semaphore->sems = talloc_array(config->ipc_namespace, uint16_t, nsems);
 		memset(semaphore->sems, 0, nsems * sizeof(uint16_t));
+		semaphore->last_pids = talloc_array(config->ipc_namespace, int32_t, nsems);
+		memset(semaphore->last_pids, 0, nsems * sizeof(int32_t));
 		semaphore->nsems = nsems;
 	} else {
 		if ((semflg & IPC_CREAT) && (semflg & IPC_EXCL)) {
@@ -68,7 +87,9 @@ int sysvipc_semget(Tracee *tracee, struct SysVIpcConfig *config) {
 			return -EINVAL;
 		}
 	}
-	return (semaphore_index + 1) | (semaphore->generation << 12);
+	int result = (semaphore_index + 1) | (semaphore->generation << 12);
+	SYSVIPC_DEBUG("semget -> %d", result);
+	return result;
 }
 
 /**
@@ -119,6 +140,31 @@ static int sysvipc_sem_check(struct SysVIpcConfig *config, struct SysVIpcSemapho
 	return 0;
 }
 
+/*
+ * A successful SETVAL/SETALL can make blocked semop operations runnable.
+ * Linux wakes those waiters; leaving them asleep causes applications which
+ * use SysV semaphores for process startup (including Steam) to deadlock.
+ */
+static void sysvipc_sem_wake_waiters(struct SysVIpcConfig *config,
+		struct SysVIpcSemaphore *semaphore, size_t semaphore_index) {
+	Tracee *waiting_tracee;
+	struct SysVIpcConfig *waiting_config;
+	SYSVIPC_FOREACH_TRACEE(waiting_tracee, waiting_config, config->ipc_namespace) {
+		if (waiting_config->wait_reason != WR_WAIT_SEMOP ||
+			waiting_config->waiting_object_index != semaphore_index) continue;
+		int status = sysvipc_sem_check(waiting_config, semaphore, NULL);
+		if (status != 1) {
+			if (status == 0) {
+				size_t nsops = talloc_array_length(waiting_config->semop_sops);
+				for (size_t i = 0; i < nsops; i++)
+					semaphore->last_pids[waiting_config->semop_sops[i].sem_num] = waiting_tracee->pid;
+			}
+			TALLOC_FREE(waiting_config->semop_sops);
+			sysvipc_wake_tracee(waiting_tracee, waiting_config, status);
+		}
+	}
+}
+
 int sysvipc_semop(Tracee *tracee, struct SysVIpcConfig *config)
 {
 	/** Lookup semaphore */
@@ -129,6 +175,7 @@ int sysvipc_semop(Tracee *tracee, struct SysVIpcConfig *config)
 	/** Read and check arguments */
 	word_t sops_ptr = peek_reg(tracee, CURRENT, SYSARG_2);
 	size_t nsops = peek_reg(tracee, CURRENT, SYSARG_3);
+	SYSVIPC_DEBUG("semop id=%#lx nsops=%zu", (unsigned long) peek_reg(tracee, CURRENT, SYSARG_1), nsops);
 
 	if (nsops > SYSVIPC_MAX_NSOPS) {
 		return -E2BIG;
@@ -156,6 +203,17 @@ int sysvipc_semop(Tracee *tracee, struct SysVIpcConfig *config)
 	config->waiting_object_index = semaphore_index;
 	config->semop_sops = sops;
 	int this_semop_status = sysvipc_sem_check(config, semaphore, NULL);
+	if (this_semop_status == 0) {
+		for (size_t i = 0; i < nsops; i++)
+			semaphore->last_pids[sops[i].sem_num] = tracee->pid;
+	}
+	if (sysvipc_debug_enabled()) {
+		for (size_t i = 0; i < nsops; i++) {
+			fprintf(stderr, "PROOT_SYSVIPC pid=%d semop[%zu] num=%u op=%d flags=%#x\n",
+				tracee->pid, i, sops[i].sem_num, sops[i].sem_op, sops[i].sem_flg);
+		}
+		fprintf(stderr, "PROOT_SYSVIPC pid=%d semop status=%d\n", tracee->pid, this_semop_status);
+	}
 
 	Tracee *other_tracee;
 	struct SysVIpcConfig *other_config;
@@ -199,6 +257,8 @@ int sysvipc_semctl(Tracee *tracee, struct SysVIpcConfig *config) {
 	int semnum = peek_reg(tracee, CURRENT, SYSARG_2);
 	int cmd = peek_reg(tracee, CURRENT, SYSARG_3);
 	word_t cmdarg = peek_reg(tracee, CURRENT, SYSARG_4);
+	SYSVIPC_DEBUG("semctl id=%#lx num=%d cmd=%#x arg=%#lx",
+		(unsigned long) peek_reg(tracee, CURRENT, SYSARG_1), semnum, cmd, (unsigned long) cmdarg);
 	
 	switch (cmd & ~SYSVIPC_IPC_64) {
 	case SYSVIPC_GETVAL:
@@ -206,11 +266,18 @@ int sysvipc_semctl(Tracee *tracee, struct SysVIpcConfig *config) {
 		if (semnum < 0 || semnum >= semaphore->nsems) return -EINVAL;
 		return semaphore->sems[semnum];
 	}
+	case SYSVIPC_GETPID:
+	{
+		if (semnum < 0 || semnum >= semaphore->nsems) return -EINVAL;
+		return semaphore->last_pids[semnum];
+	}
 	case SYSVIPC_SETVAL:
 	{
 		if (cmdarg > SYSVIPC_MAX_SEMVAL) return -ERANGE;
 		if (semnum < 0 || semnum >= semaphore->nsems) return -EINVAL;
 		semaphore->sems[semnum] = cmdarg;
+		semaphore->last_pids[semnum] = tracee->pid;
+		sysvipc_sem_wake_waiters(config, semaphore, semaphore_index);
 		return 0;
 	}
 	case SYSVIPC_GETALL:
@@ -218,6 +285,43 @@ int sysvipc_semctl(Tracee *tracee, struct SysVIpcConfig *config) {
 		int status = write_data(tracee, cmdarg, semaphore->sems, semaphore->nsems * sizeof(uint16_t));
 		if (status < 0) return status;
 		return 0;
+	}
+	case SYSVIPC_SETALL:
+	{
+		uint16_t values[semaphore->nsems];
+		int status = read_data(tracee, values, cmdarg,
+			semaphore->nsems * sizeof(uint16_t));
+		if (status < 0) return status;
+		for (int i = 0; i < semaphore->nsems; i++) {
+			if (values[i] > SYSVIPC_MAX_SEMVAL) return -ERANGE;
+		}
+		memcpy(semaphore->sems, values, semaphore->nsems * sizeof(uint16_t));
+		for (int i = 0; i < semaphore->nsems; i++)
+			semaphore->last_pids[i] = tracee->pid;
+		sysvipc_sem_wake_waiters(config, semaphore, semaphore_index);
+		return 0;
+	}
+	case SYSVIPC_GETNCNT:
+	case SYSVIPC_GETZCNT:
+	{
+		if (semnum < 0 || semnum >= semaphore->nsems) return -EINVAL;
+		int count = 0;
+		Tracee *waiting_tracee;
+		struct SysVIpcConfig *waiting_config;
+		SYSVIPC_FOREACH_TRACEE(waiting_tracee, waiting_config, config->ipc_namespace) {
+			if (waiting_config->wait_reason != WR_WAIT_SEMOP ||
+				waiting_config->waiting_object_index != semaphore_index) continue;
+			size_t nsops = talloc_array_length(waiting_config->semop_sops);
+			for (size_t i = 0; i < nsops; i++) {
+				struct SysVIpcSembuf *op = &waiting_config->semop_sops[i];
+				if (op->sem_num != semnum) continue;
+				if ((cmd & ~SYSVIPC_IPC_64) == SYSVIPC_GETNCNT && op->sem_op < 0) count++;
+				if ((cmd & ~SYSVIPC_IPC_64) == SYSVIPC_GETZCNT && op->sem_op == 0) count++;
+				break;
+			}
+		}
+		SYSVIPC_DEBUG("semctl waiter-count -> %d", count);
+		return count;
 	}
 	case IPC_RMID:
 	{
@@ -235,6 +339,7 @@ int sysvipc_semctl(Tracee *tracee, struct SysVIpcConfig *config) {
 		semaphore->valid = false;
 		semaphore->generation++;
 		TALLOC_FREE(semaphore->sems);
+		TALLOC_FREE(semaphore->last_pids);
 		return 0;
 	}
 #if 0
