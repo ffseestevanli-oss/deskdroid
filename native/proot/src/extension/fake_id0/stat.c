@@ -14,6 +14,23 @@
 #include "extension/fake_id0/helper_functions.h"
 #include "tracee/statx.h"
 
+/* Android's shared storage (/storage/emulated/N, through FUSE) reports each
+ * file as owned by the app that made it, in group media_rw, mode 2770 or 0660;
+ * older sdcardfs used root and sdcard_rw or everybody. The guest user is in
+ * none of those groups, so file managers would show the phone's files as
+ * unreadable and read-only, although the app (with All files access) can read
+ * and write all of it. Show them as owned by the emulated user instead.  */
+#ifndef USERLAND
+#define AID_SDCARD_RW	1015
+#define AID_MEDIA_RW	1023
+#define AID_EVERYBODY	9997
+
+static int is_shared_storage_gid(gid_t gid)
+{
+	return gid == AID_MEDIA_RW || gid == AID_SDCARD_RW || gid == AID_EVERYBODY;
+}
+#endif
+
 #ifndef USERLAND
 int handle_stat_exit_end(Tracee *tracee, Config *config, Reg stat_sysarg) {
 	word_t address;
@@ -41,12 +58,12 @@ int handle_stat_exit_end(Tracee *tracee, Config *config, Reg stat_sysarg) {
 	if (errno != 0)
 		gid = 0; /* Not fatal.  */
 
-	/* Override only if the file is owned by the current user.
-	 * Errors are not fatal here.  */
-	if (uid == getuid())
+	/* Override only if the file is owned by the current user, or is on
+	 * Android's shared storage.  Errors are not fatal here.  */
+	if (uid == getuid() || is_shared_storage_gid(gid))
 		poke_uint32(tracee, address + offsetof_stat_uid(tracee), config->suid);
 
-	if (gid == getgid())
+	if (gid == getgid() || is_shared_storage_gid(gid))
 		poke_uint32(tracee, address + offsetof_stat_gid(tracee), config->sgid);
 
 	return 0;
@@ -196,6 +213,12 @@ int fake_id0_handle_statx_syscall(Tracee *tracee, Config *config, uintptr_t stat
 	}
 #else
 	(void) tracee;
+	if ((state->statx_buf.stx_mask & STATX_GID) && is_shared_storage_gid(state->statx_buf.stx_gid)) {
+		state->statx_buf.stx_uid = config->suid;
+		state->statx_buf.stx_gid = config->sgid;
+		state->updated_stats = true;
+		return 0;
+	}
 #endif
 	if (state->statx_buf.stx_mask & STATX_UID) {
 		if (state->statx_buf.stx_uid == getuid()) {
