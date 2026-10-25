@@ -11,10 +11,10 @@ object Proot {
      */
     fun sessionCommand(paths: Paths, env: Map<String, String>, binds: List<Pair<String, String>>): ProcessBuilder =
         // Browser and Flatpak fixes first, as root (see Browsers, Flatpak); they never block the boot.
-        // The splash watcher and the Places entries for phone storage run alongside the session (see Splash, Storage).
+        // The splash watcher runs alongside the session (see Splash).
         shellCommand(paths, env,
             "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; /bin/sh ${Flatpak.SETUP_SCRIPT} || true; " +
-                "/bin/sh ${Splash.WATCH_SCRIPT} & /bin/sh ${Storage.PLACES_SCRIPT} & " +
+                "/bin/sh ${Splash.WATCH_SCRIPT} & " +
                 "exec /bin/sh /usr/local/bin/deskdroid-boot", binds)
 
     /** Runs [script] with /bin/sh as (fake) root inside the rootfs. */

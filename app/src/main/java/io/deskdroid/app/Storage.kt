@@ -20,7 +20,8 @@ import java.io.File
  * round. Desktop, Templates and Public stay Linux-only (Android has no
  * equivalent). Android's own folder is listed in a .hidden file, which Dolphin
  * and GTK file pickers hide until "Show hidden files" is on. Android itself
- * blocks Android/data and Android/obb whatever this app does.
+ * blocks Android/data and Android/obb whatever this app does. Phone and Camera
+ * are added to the Places panel of Dolphin and the file dialogs.
  */
 object Storage {
     /** Linux home folder to the phone folder it shows. */
@@ -36,9 +37,9 @@ object Storage {
     /** Folders in the storage root hidden from the desktop's file managers by default. */
     private val HIDDEN = listOf("Android")
 
-    /** Runs as root, in the background, before deskdroid-boot (Proot.sessionCommand). */
-    const val PLACES_SCRIPT = "/usr/local/bin/deskdroid-storage"
     private const val HOME = "home/deskdroid"
+    /** Marks the Places entries this app adds, so they can be told apart from the user's. */
+    private const val PLACE_ID = "deskdroid/"
 
     @Suppress("DEPRECATION")
     val root: File get() = Environment.getExternalStorageDirectory()
@@ -69,7 +70,9 @@ object Storage {
         val home = File(paths.rootfs, HOME)
         writeUserDirs(home)
         for (d in LOCAL_DIRS + SHARED_DIRS.keys) File(home, d).mkdirs()
-        installScript(c, paths)
+        // Places used to be added by a script in the rootfs, racing KDE for the file.
+        File(paths.rootfs, "usr/local/bin/deskdroid-storage").delete()
+        val places = File(home, ".local/share/user-places.xbel")
 
         val phone = root
         val phoneLink = File(home, "Phone")
@@ -77,6 +80,7 @@ object Storage {
         if (!granted(c) || !phone.canWrite()) {
             AppLog.i("Phone storage not shared (no All files access); home folders are Linux-only")
             for (l in listOf(phoneLink, sdcard)) if (isSymlink(l)) l.delete()
+            writePlaces(places, emptyList())
             return emptyList()
         }
 
@@ -85,6 +89,10 @@ object Storage {
         symlink(phone.path, sdcard)
         symlink(phone.path, phoneLink)
         writeHidden(phone)
+        writePlaces(places, listOfNotNull(
+            Triple("phone", "Phone", phone) to "smartphone",
+            File(phone, Environment.DIRECTORY_DCIM).takeIf { it.isDirectory }?.let { Triple("camera", "Camera", it) to "camera-photo" },
+        ))
         for ((linux, android) in SHARED_DIRS) {
             val target = File(phone, android).apply { mkdirs() }
             // proot's bind would hide anything already in the Linux folder; move it to the phone.
@@ -146,13 +154,46 @@ object Storage {
         }
     }
 
-    private fun installScript(c: Context, paths: Paths) {
-        val script = File(paths.rootfs, PLACES_SCRIPT.removePrefix("/"))
-        script.parentFile!!.mkdirs()
-        c.assets.open("linux/deskdroid-storage").use { input ->
-            script.outputStream().use { input.copyTo(it) }
+    /**
+     * Makes KDE's Places (~/.local/share/user-places.xbel) hold exactly [places]
+     * ((id, title, folder) to icon) among the entries this app added. Done before
+     * the desktop starts, so nothing in KDE has the file open. With no file yet,
+     * it's written with just these entries and no kde_places_version: KDE then
+     * adds its usual Home, Desktop, Documents, Downloads, Music, Pictures,
+     * Videos, Network and Trash below them, skipping folders already listed.
+     */
+    private fun writePlaces(f: File, places: List<Pair<Triple<String, String, File>, String>>) {
+        try {
+            var xml = if (f.exists()) f.readText() else ""
+            if (!xml.contains("</xbel>")) {
+                if (places.isEmpty()) return
+                xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE xbel>\n" +
+                    "<xbel xmlns:bookmark=\"http://www.freedesktop.org/standards/desktop-bookmarks\" " +
+                    "xmlns:kdepriv=\"http://www.kde.org/kdepriv\" " +
+                    "xmlns:mime=\"http://www.freedesktop.org/standards/shared-mime-info\">\n</xbel>\n"
+            }
+            val old = xml
+            // Drop this app's entries, then add the current ones back (the phone path can change).
+            xml = Regex("""[ \t]*<bookmark\s(?:(?!</bookmark>).)*?<ID>${Regex.escape(PLACE_ID)}[^<]*</ID>.*?</bookmark>[ \t]*\n?""",
+                RegexOption.DOT_MATCHES_ALL).replace(xml, "")
+            val entries = places.joinToString("") { (place, icon) ->
+                val (id, title, dir) = place
+                " <bookmark href=\"${Uri.fromFile(dir)}\">\n  <title>$title</title>\n  <info>\n" +
+                    "   <metadata owner=\"http://freedesktop.org\">\n    <bookmark:icon name=\"$icon\"/>\n   </metadata>\n" +
+                    "   <metadata owner=\"http://www.kde.org\">\n    <ID>$PLACE_ID$id</ID>\n   </metadata>\n" +
+                    "  </info>\n </bookmark>\n"
+            }
+            // Before the first bookmark, so they sit at the top; else before </xbel>.
+            val at = Regex("""[ \t]*<bookmark\s""").find(xml)?.range?.first ?: xml.lastIndexOf("</xbel>")
+            xml = xml.substring(0, at) + entries + xml.substring(at)
+            if (xml != old) {
+                f.parentFile!!.mkdirs()
+                f.writeText(xml)
+                AppLog.i("Places: ${places.joinToString { it.first.second }.ifEmpty { "phone storage entries removed" }}")
+            }
+        } catch (e: Exception) {
+            AppLog.i("Couldn't update ${f.path}: ${e.message}")
         }
-        script.setExecutable(true, false)
     }
 
     private fun isSymlink(f: File) = try {
