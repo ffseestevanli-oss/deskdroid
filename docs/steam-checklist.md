@@ -1,7 +1,11 @@
 # Steam and FEX-Emu: device test checklist
 
-Plan section 6b: Valve's x86 Steam client running under FEX-Emu. Untested on a
-device so far.
+Plan section 6b. Steam runs Valve's native ARM64 client; x86 Linux programs
+run under FEX-Emu. First device test (Pixel 10 Pro): the x86 client under FEX
+got as far as steam.sh's check for user namespaces, which proot can't pass, so
+Steam moved to the ARM64 client, started directly without steam.sh (the
+approach [steamclienttermux](https://github.com/huntergdavis/steamclienttermux)
+proved under proot).
 
 ## How it works
 
@@ -23,26 +27,29 @@ Light and Full only; Ultra-lite has no x86 support.
     `VK_ICD_FILENAMES` at the rootfs's x86 Venus driver (same server socket);
     otherwise x86 apps get llvmpipe.
 - `deskdroid-steam` is what the Steam menu entry runs. The first time, it opens
-  a Konsole window that installs FEX, the rootfs and Valve's bootstrap
-  (`steam.deb` → `~/.local/share/Steam`), then starts Steam, which downloads
-  its own client and shows Valve's license. Later starts go straight to
-  `steam.sh` under FEX with `-no-cef-sandbox -cef-disable-gpu
-  -cef-disable-gpu-compositing`. Extra arguments: `~/.config/deskdroid-steam-args`.
-  Log: `~/.local/share/deskdroid-steam/steam.log`.
+  a Konsole window that installs the Debian libraries the client needs (apt)
+  and Valve's ARM64 client seed: it reads `bins_linuxarm64_linuxarm64` from
+  `client-update.steamstatic.com/steam_client_linuxarm64` (falling back to a
+  pinned seed known to work) and unzips it into `~/.local/share/Steam`. Then
+  it runs `steamrtarm64/steam -no-cef-sandbox -cef-disable-gpu
+  -chromeosnopreallocate -noverifyfiles` directly; steam.sh is skipped because
+  it requires user namespaces for its containers. Steam downloads the rest of
+  itself and shows Valve's license. Extra arguments:
+  `~/.config/deskdroid-steam-args`. Log: `~/.local/share/deskdroid-steam/steam.log`.
 
-Needs about 5 GB free for the first setup, plus Steam's client (~1 GB) and games.
+Steam needs about 1.5 GB for its client, plus games. FEX's x86 system (about
+5 GB during setup) is only installed when `deskdroid-fex` is first used.
 
 ## Before testing
 
-- [ ] Run Actions → FEX-Emu once (or merge to main) so the `fex-latest`
-      release exists.
+- [x] The `fex-latest` release exists (only needed for `deskdroid-fex`).
 
 ## On the device
 
 - [ ] Steam shows in the app menu (Games) after an app update, without
       reinstalling the system.
-- [ ] First click opens "Setting up Steam" and finishes: FEX, x86 system,
-      bootstrap. Note how long each step takes.
+- [ ] First click opens "Setting up Steam" and finishes: libraries, ARM64
+      client seed. Note how long each step takes.
 - [ ] `deskdroid-fex /bin/uname -m` in Konsole prints `x86_64`.
 - [ ] Steam updates itself, shows the license, then the login window.
 - [ ] Logging in works; the store and library pages draw (steamwebhelper).
@@ -55,8 +62,8 @@ Needs about 5 GB free for the first setup, plus Steam's client (~1 GB) and games
   games) need bubblewrap and user namespaces, which proot can't give. Next:
   the `bwrap` shim from plan section 6b.
 - Android kernels often have a 39-bit address space; FEX expects 48-bit, so
-  some 64-bit x86 programs may fail to map memory. 32-bit ones (most of the
-  Steam client) are fine. Check `steam.log` if Steam exits early.
+  some 64-bit x86 programs may fail to map memory. Check `steam.log` if
+  Steam exits early.
 - No FEX thunks yet, so games use the emulated x86 Mesa (slower).
-- The Steam UI is an emulated Chromium and will be slow; Big Picture (menu
-  entry action) is lighter.
+- The Steam UI is Chromium drawing in software; Big Picture (menu entry
+  action) may be lighter.

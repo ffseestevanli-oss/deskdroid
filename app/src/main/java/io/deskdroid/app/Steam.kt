@@ -4,10 +4,10 @@ import android.content.Context
 import java.io.File
 
 /**
- * Steam and other x86 Linux apps, through FEX-Emu (plan section 6b). The
- * scripts (assets/linux/) download FEX, its x86 rootfs and Valve's Steam
- * bootstrap the first time Steam starts, so the image stays small and existing
- * installs get Steam with an app update. Ultra-lite has no x86 support.
+ * Steam (Valve's native ARM64 client) and x86 Linux apps through FEX-Emu
+ * (plan section 6b). The scripts (assets/linux/) download what they need the
+ * first time they run, so the image stays small and existing installs get them
+ * with an app update. Ultra-lite has neither.
  */
 object Steam {
     private val SCRIPTS = listOf("deskdroid-fex", "deskdroid-steam")
@@ -34,7 +34,7 @@ object Steam {
             |# Written by the DeskDroid app (Steam.kt) at each start.
             |Type=Application
             |Name=Steam
-            |Comment=Application for managing and playing games on Steam (x86, runs under FEX-Emu)
+            |Comment=Application for managing and playing games on Steam
             |Exec=/usr/local/bin/deskdroid-steam %U
             |Icon=steam
             |Terminal=false
