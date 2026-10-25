@@ -490,9 +490,9 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
             addView(settingRow("Touch mode", if (Prefs.touchMode(c) == "direct") "Direct touch" else "Touchpad") {
                 nav.go(SettingsScreen(activity, nav))
             })
-            addView(settingRow("Graphics", if (Prefs.sessionType(c) == "wayland") "Wayland · ${GpuProfile.describe("llvmpipe")}"
-                else GpuProfile.describe(GpuProfile.resolve(Prefs.gpuMode(c), Paths(c)))
-                    .let { if (Prefs.gpuMode(c) == "auto") "Automatic · $it" else it }) {
+            addView(settingRow("Graphics", GpuProfile.describe(GpuProfile.resolve(Prefs.gpuMode(c), Paths(c)))
+                .let { if (Prefs.gpuMode(c) == "auto") "Automatic · $it" else it }
+                .let { if (Prefs.sessionType(c) == "wayland") "Wayland · $it" else it }) {
                 nav.go(SettingsScreen(activity, nav))
             })
             addView(settingRow("System", "${Paths(c).installedEdition ?: "?"} edition") {
@@ -580,7 +580,7 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             Prefs.setSessionType(c, sessions[i])
         }.view, LinearLayout.LayoutParams(-1, -2))
         addView(ui.text("Applies the next time the desktop starts. Wayland runs Plasma's Wayland session inside the " +
-            "display server, with software rendering whatever the graphics setting below. It needs a system image " +
+            "display server. KWin draws the desktop in software there; apps use the graphics setting below. It needs a system image " +
             "that includes it; older images start X11 instead. Light and Full editions only.", 13f, Party.MUTED))
 
         addView(ui.text("GRAPHICS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })

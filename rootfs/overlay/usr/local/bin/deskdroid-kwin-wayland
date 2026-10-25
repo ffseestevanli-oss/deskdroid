@@ -21,6 +21,26 @@ size=$(DISPLAY="$d" xwininfo -root 2>/dev/null | awk -v s="$s" '
 # after exec, or by its title; failing both, every large top-level window,
 # since in this session only KWin draws on Termux:X11 (X11 apps use Xwayland).
 kwin=$$
+# KWin applies that resize as a bare mode change, which skips its usual
+# display-change path: Plasma keeps the panel where it was and KWin keeps the
+# old maximize area. A real output configuration change (here: the scale,
+# nudged and set back through kscreen-doctor) makes both lay out again. It
+# also applies the desktop scale, which KWin's saved output config overrides.
+wl_socket=wayland-0
+prev=
+for arg in "$@"; do
+  [ "$prev" = --socket ] && wl_socket=$arg
+  prev=$arg
+done
+relayout() {
+  command -v kscreen-doctor >/dev/null || return
+  ksd() { WAYLAND_DISPLAY="$wl_socket" kscreen-doctor "$@" 2>/dev/null; }
+  out=$(ksd -o | sed 's/\x1b\[[0-9;]*m//g' | awk '/^Output:/ { print $3; exit }')
+  [ -n "$out" ] || { echo "deskdroid-kwin-wayland: kscreen-doctor found no output"; return; }
+  ksd "output.$out.scale.$(awk -v s="$s" 'BEGIN { print s + 0.05 }')" >/dev/null
+  sleep 1
+  ksd "output.$out.scale.$s" >/dev/null
+}
 kwin_windows() {
   { DISPLAY="$d" xdotool search --pid "$kwin"
     DISPLAY="$d" xdotool search --name '^KDE Wayland Compositor'; } 2>/dev/null | sort -u | grep . && return
@@ -48,6 +68,8 @@ follow_screen() {
     done
     echo "deskdroid-kwin-wayland: screen $size, sized KWin's window" $wins
     done_size=$size tries=0
+    sleep 1
+    relayout
   done
 }
 if command -v xdotool >/dev/null; then

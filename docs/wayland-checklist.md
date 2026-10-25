@@ -17,8 +17,8 @@ X11 backend options (`--x11-display`, `--width`/`--height` from the X screen,
 KWin opens one window covering Termux:X11's screen and draws the whole Wayland
 desktop into it. There's no render node under proot, so KWin uses QPainter
 (`KWIN_COMPOSE=Q`) and hands frames to the X server through MIT-SHM and Present,
-which Termux:X11 builds in. Apps use Mesa's llvmpipe; the Graphics setting is
-ignored and the Venus server isn't started. X11 apps run on Xwayland (`:1`).
+which Termux:X11 builds in. Apps follow the Graphics setting (llvmpipe, Venus,
+Turnip); KWin stays on QPainter either way. X11 apps run on Xwayland (`:1`).
 
 Images built before this change don't have `kwin-wayland`, `xwayland` or
 `qt6-wayland`; the session logs `... missing (reinstall the system for Wayland)`
@@ -31,7 +31,13 @@ and starts X11. Ultra-lite (MATE) is X11 only.
   second and resizes KWin's window with `xdotool`, and KWin resizes its output.
   The log shows `deskdroid-kwin-wayland: screen W H, sized KWin's window ...`
   at start and on each change. Images without `xdotool` keep the old size.
-- Software rendering only, plus one extra copy per frame into the X server.
+  KWin applies that resize as a bare mode change, which leaves Plasma's panel
+  and KWin's maximize area at the old size, so the script then nudges the
+  output scale through `kscreen-doctor` and sets it back; that real output
+  configuration change makes both lay out again (and applies the desktop
+  scale, which KWin's saved output config otherwise overrides).
+- KWin draws in software (no render node under proot), plus one extra copy
+  per frame into the X server.
 - Plasma's lock screen at start isn't used (startplasma-wayland passes `--no-lockscreen`).
 
 ## Checklist
@@ -62,3 +68,11 @@ and starts X11. Ultra-lite (MATE) is X11 only.
   silent then) or the script didn't run. It now logs `starting KWin` when it
   runs, finds the window by any large top-level window as a last resort, and
   lists the X windows if it finds none within 15 s.
+- 2026-10-24: rotation resizes the desktop on the phone.
+- 2026-10-25: after rotating or zooming, the panel and maximized windows kept
+  the old size. Reproduced with KWin and Plasma 6.3.4 nested in Xvfb: KWin's
+  output and the wallpaper followed, but Plasma sent no new panel position
+  and KWin kept the old maximize area; a no-op or position change through
+  kscreen-doctor didn't help, a scale change did. Fixed with the scale nudge
+  after each resize (verified there through portrait, landscape, 1.5x zoom
+  and back).

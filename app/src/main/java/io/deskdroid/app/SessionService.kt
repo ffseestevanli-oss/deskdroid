@@ -77,8 +77,8 @@ class SessionService : Service() {
             if (!headless) showDesktop(displayId)
 
             val wayland = Prefs.sessionType(this) == "wayland"
-            // The experimental Wayland session renders in software for now (deskdroid-session).
-            var gpu = if (wayland) "llvmpipe" else GpuProfile.resolve(Prefs.gpuMode(this), paths)
+            // In the Wayland session KWin itself draws in software (deskdroid-session); apps follow this.
+            var gpu = GpuProfile.resolve(Prefs.gpuMode(this), paths)
             if (gpu == "venus") {
                 AppLog.setStatus("Starting the GPU server")
                 gpuServer = VenusServer.start(this, paths) { pump("venus", it) }
