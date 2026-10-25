@@ -13,6 +13,7 @@ object Proot {
         // Browser and Flatpak fixes first, as root (see Browsers, Flatpak); they never block the boot.
         // The splash watcher runs alongside the session (see Splash).
         shellCommand(paths, env,
+            (if (binds.isNotEmpty()) Storage.PROBE_SCRIPT else "") +
             "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; /bin/sh ${Flatpak.SETUP_SCRIPT} || true; " +
                 "/bin/sh ${Splash.WATCH_SCRIPT} & " +
                 "exec /bin/sh /usr/local/bin/deskdroid-boot", binds)
