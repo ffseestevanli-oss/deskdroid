@@ -25,6 +25,7 @@
 #include <sys/un.h>      /* struct sockaddr_un, */
 #include <linux/net.h>   /* SYS_*, */
 #include <fcntl.h>       /* AT_FDCWD, */
+#include <sys/stat.h>    /* lstat(2), */
 #include <unistd.h>      /* close(2), */
 #include <limits.h>      /* PATH_MAX, */
 #include <string.h>      /* strcpy */
@@ -1879,6 +1880,57 @@ static void maybe_redirect_userns_file(Tracee *tracee, Reg reg, int flags)
 }
 
 /**
+ * For execveat(dirfd, pathname, argv, envp, flags) with a real @dirfd:
+ * an absolute pathname ignores dirfd, as in the kernel; otherwise the
+ * pathname (or, with AT_EMPTY_PATH and "", the file itself) is resolved
+ * against the guest path of dirfd and written back as SYSARG_2.
+ * AT_SYMLINK_NOFOLLOW is ignored.  Files without a path (memfd, deleted
+ * files) can't be executed this way and fail with -ENOENT.  This
+ * function returns -errno if an error occured, otherwise 0.
+ */
+static int execveat_fd_to_path(Tracee *tracee)
+{
+	char path[PATH_MAX];
+	char base[PATH_MAX];
+	char result[PATH_MAX];
+	int dirfd = (int) peek_reg(tracee, CURRENT, SYSARG_1);
+	int flags = (int) peek_reg(tracee, CURRENT, SYSARG_5);
+	struct stat statl;
+	int status;
+
+	status = get_sysarg_path(tracee, path, SYSARG_2);
+	if (status < 0)
+		return status;
+	if (path[0] == '/')
+		return 0;
+	if (path[0] == '\0' && (flags & AT_EMPTY_PATH) == 0)
+		return -ENOENT;
+
+	status = readlink_proc_pid_fd(tracee->pid, dirfd, base);
+	if (status < 0)
+		return status;
+	/* Pipes, sockets and the like, or memfd ("/memfd:x (deleted)")
+	 * and deleted files, which have no path to run.  */
+	if (base[0] != '/' || lstat(base, &statl) < 0) {
+		VERBOSE(tracee, 1, "execveat(): fd %d (%s) has no path to execute", dirfd, base);
+		return -ENOENT;
+	}
+
+	status = detranslate_path(tracee, base, NULL);
+	if (status < 0)
+		return status;
+
+	if (path[0] == '\0')
+		strcpy(result, base);
+	else {
+		status = join_paths(2, result, base, path);
+		if (status < 0)
+			return status;
+	}
+	return set_sysarg_path(tracee, result, SYSARG_2);
+}
+
+/**
  * Translate the input arguments of the current @tracee's syscall in the
  * @tracee->pid process area. This function sets @tracee->status to
  * -errno if an error occured from the tracee's point-of-view (EFAULT
@@ -1920,16 +1972,19 @@ int translate_syscall_enter(Tracee *tracee)
 		break;
 
 	case PR_execveat:
-		if ((int) peek_reg(tracee, CURRENT, SYSARG_1) == AT_FDCWD) {
-			set_sysnum(tracee, PR_execve);
-			poke_reg(tracee, SYSARG_1, peek_reg(tracee, CURRENT, SYSARG_2));
-			poke_reg(tracee, SYSARG_2, peek_reg(tracee, CURRENT, SYSARG_3));
-			poke_reg(tracee, SYSARG_3, peek_reg(tracee, CURRENT, SYSARG_4));
-		} else {
-			note(tracee, ERROR, SYSTEM, "execveat() with non-AT_FDCWD fd is not currently supported");
-			status = -ENOSYS;
-			break;
+		if ((int) peek_reg(tracee, CURRENT, SYSARG_1) != AT_FDCWD) {
+			/* Turn the fd + path into one guest path, so the
+			 * call becomes a plain execve().  FEX-Emu does
+			 * execveat(fd, "/proc/self/exe", ...) to start
+			 * every x86 program when binfmt_misc isn't set up. */
+			status = execveat_fd_to_path(tracee);
+			if (status < 0)
+				break;
 		}
+		set_sysnum(tracee, PR_execve);
+		poke_reg(tracee, SYSARG_1, peek_reg(tracee, CURRENT, SYSARG_2));
+		poke_reg(tracee, SYSARG_2, peek_reg(tracee, CURRENT, SYSARG_3));
+		poke_reg(tracee, SYSARG_3, peek_reg(tracee, CURRENT, SYSARG_4));
 		status = translate_execve_enter(tracee);
 		break;
 
