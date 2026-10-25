@@ -611,7 +611,7 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             LinearLayout.LayoutParams(-1, -2))
 
         addView(ui.text("LOG", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        addView(ui.outlineButton("Share log", Party.CYAN, Party.CYAN) { shareLog() },
+        addView(ui.outlineButton("Save log to Downloads", Party.CYAN, Party.CYAN) { saveLog() },
             LinearLayout.LayoutParams(-1, -2))
         log = ui.text(AppLog.text(), 11f, Party.MUTED).apply {
             typeface = android.graphics.Typeface.MONOSPACE
@@ -621,26 +621,29 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.text("DeskDroid ${BuildConfig.VERSION_NAME} · GPL-3.0", 12f, Party.DIM))
     }
 
-    /** Shares the log as a .txt attachment: as plain text it is too long to paste anywhere. */
-    private fun shareLog() {
-        try {
-            val dir = File(c.cacheDir, "logs").apply { mkdirs() }
-            dir.listFiles()?.forEach { it.delete() }
-            val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
-            val f = File(dir, "deskdroid-log-$stamp.txt")
-            f.writeText("DeskDroid ${BuildConfig.VERSION_NAME}\n" +
-                "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}\n\n" +
-                AppLog.text() + "\n")
-            val uri = androidx.core.content.FileProvider.getUriForFile(c, "${c.packageName}.logs", f)
-            val send = Intent(Intent.ACTION_SEND).setType("text/plain")
-                .putExtra(Intent.EXTRA_STREAM, uri)
-                .putExtra(Intent.EXTRA_SUBJECT, "DeskDroid log")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            send.clipData = ClipData.newRawUri(f.name, uri)
-            c.startActivity(Intent.createChooser(send, "Share log").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    /** Saves the log as a .txt in Downloads, like a browser download, so it can be attached anywhere. */
+    private fun saveLog() {
+        val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
+        val name = "deskdroid-log-$stamp.txt"
+        val text = "DeskDroid ${BuildConfig.VERSION_NAME}\n" +
+            "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}\n\n" +
+            AppLog.text() + "\n"
+        val msg = try {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
+                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = c.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: error("no Downloads entry")
+            c.contentResolver.openOutputStream(uri)!!.use { it.write(text.toByteArray()) }
+            AppLog.i("Log saved to Downloads/$name")
+            "Saved to Downloads/$name"
         } catch (e: Exception) {
-            AppLog.i("Share log failed: $e")
+            AppLog.i("Save log failed: $e")
+            "Couldn't save the log: ${e.message}"
         }
+        android.widget.Toast.makeText(c, msg, android.widget.Toast.LENGTH_LONG).show()
     }
 
     private val logListener: (String) -> Unit = { log.text = it }
