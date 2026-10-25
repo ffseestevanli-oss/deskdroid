@@ -29,6 +29,7 @@ import io.deskdroid.app.Paths
 import io.deskdroid.app.Prefs
 import io.deskdroid.app.R
 import io.deskdroid.app.SessionService
+import io.deskdroid.app.Storage
 import io.deskdroid.app.VenusServer
 
 /** One full-screen page of the launcher. MainActivity swaps between them. */
@@ -318,6 +319,7 @@ class InstallingScreen(a: Activity, n: Navigator) : Screen(a, n) {
 class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private lateinit var childStatus: TextView
     private lateinit var batteryStatus: TextView
+    private lateinit var filesStatus: TextView
 
     override fun build() = page(listOf(Triple(0.85f, 0.2f, Party.GREEN))) {
         addView(ui.column(6) {
@@ -361,6 +363,14 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
             }))
             setOnClickListener { fixBattery() }
         }, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.accentRow(Party.PURPLE, Party.CARD) {
+            addView(ui.weight(ui.column(2) {
+                addView(ui.text("Share files with the desktop", 15f, Party.TEXT, 700))
+                filesStatus = ui.text("", 13f, Party.MUTED)
+                addView(filesStatus)
+            }))
+            setOnClickListener { if (!Storage.granted(c)) Storage.request(activity) }
+        }, LinearLayout.LayoutParams(-1, -2))
         addView(ui.switchRow("OPTIONAL", "Start on phone boot",
             "Desktop warms up in the background so it opens instantly. Uses some battery and about 1 GB of memory.",
             Prefs.autoStart(c)) { on ->
@@ -393,6 +403,10 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
             else -> "Tap to allow the status notification"
         }
         batteryStatus.setTextColor(if (battery && notes) Party.GREEN else Party.MUTED)
+        val files = Storage.granted(c)
+        filesStatus.text = if (files) "All set. Documents, Downloads, Pictures, Music and Videos are your phone's."
+            else "Tap to allow All files access, so the desktop and Android see the same files"
+        filesStatus.setTextColor(if (files) Party.GREEN else Party.MUTED)
     }
 
     private fun openDevOptions() {
@@ -429,6 +443,7 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private lateinit var monitorInfo: LinearLayout
     private lateinit var status: TextView
     private lateinit var startButton: TextView
+    private lateinit var filesValue: TextView
     private val statusListener: (String) -> Unit = { refreshStatus() }
 
     override fun build() = page(listOf(Triple(0.15f, 0.25f, Party.PURPLE)), top = 48) {
@@ -483,6 +498,9 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
             addView(settingRow("System", "${Paths(c).installedEdition ?: "?"} edition") {
                 nav.go(SettingsScreen(activity, nav))
             })
+            addView(settingRow("Phone files", "") {
+                if (Storage.granted(c)) nav.go(SettingsScreen(activity, nav)) else Storage.request(activity)
+            }.also { filesValue = it.getChildAt(it.childCount - 1) as TextView })
         }, LinearLayout.LayoutParams(-1, -2))
         renderMonitor()
     }
@@ -519,6 +537,7 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
         AppLog.statusListener = statusListener
         refreshStatus()
         renderMonitor()
+        filesValue.text = if (Storage.granted(c)) "Shared ›" else "Not shared · tap to allow ›"
     }
 
     override fun onHide() {
@@ -534,6 +553,7 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
 
 class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private lateinit var log: TextView
+    private lateinit var files: TextView
 
     override fun build() = page(emptyList()) {
         addView(backButton())
@@ -605,6 +625,13 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.switchRow(null, "Lock my desktop", "Fingerprint or PIN to open DeskDroid.", Prefs.lockDesktop(c)) {
             Prefs.setLockDesktop(c, it)
         }, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.text("PHONE FILES", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+        files = ui.outlineButton("", Party.PURPLE, Party.PURPLE) { Storage.request(activity) }
+        addView(files, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.text("With All files access, the desktop's Documents, Downloads, Pictures, Music and Videos are " +
+            "the same folders as on Android, and the whole phone storage is under Phone (also /sdcard). Android's " +
+            "own folder is hidden; Show hidden files in Dolphin reveals it. Applies the next time the desktop " +
+            "starts.", 13f, Party.MUTED))
         addView(ui.outlineButton("Background limits", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
         addView(ui.outlineButton("Reinstall the system", Party.RED, Party.RED) { confirmReinstall() },
@@ -647,7 +674,10 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
     }
 
     private val logListener: (String) -> Unit = { log.text = it }
-    override fun onShow() { AppLog.listener = logListener }
+    override fun onShow() {
+        AppLog.listener = logListener
+        files.text = if (Storage.granted(c)) "Phone storage shared ✓ · manage" else "Share phone storage"
+    }
     override fun onHide() { if (AppLog.listener === logListener) AppLog.listener = null }
 
     private fun confirmReinstall() {
