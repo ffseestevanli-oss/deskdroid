@@ -140,7 +140,7 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 | **W^X: apps targeting API 29+ can't exec files from app data** | Breaks naive "exec binaries from rootfs" with a modern targetSdk | Ship proot and its loader as `lib*.so` in `jniLibs` (executable `nativeLibraryDir`); proot loads rootfs ELF files via its loader (mmap, not execve), as Winlator/AndroidIDE-style apps do. Must validate on Android 15/16 early (Phase 0). Fallback, now open to us since we're not on Play: target API 28 like Termux, which allows exec from app storage. |
 | **Mali/PowerVR GPUs** | No Turnip | Vulkan forwarding to the Android driver (Vortek-style), with Zink on top for OpenGL. **Pulled into Phase 1** because the primary dev device is a Pixel (Tensor: Mali, PowerVR on G5). llvmpipe as last-resort fallback. |
 | **No `/dev/input`, no uinput** | Gamepads/joysticks need a bridge | Userspace bridge (section 4). |
-| **Storage** | Rootfs lives in app-private storage (deleted on uninstall) | Plain folder, see section 5b. Shared storage bound inside Linux (`~/Phone`, and the XDG home folders are the phone's own); backup/export built in; `hasFragileUserData` gives the "keep app data" choice on uninstall. |
+| **Storage** | Rootfs lives in app-private storage (deleted on uninstall) | Plain folder, see section 5b. Shared storage bound inside Linux like a USB drive (`/media/deskdroid/Phone`); backup/export built in; `hasFragileUserData` gives the "keep app data" choice on uninstall. |
 | **OEM breakage** (e.g. reports of Termux breaking on ColorOS/OxygenOS 15) | Some vendors restrict exec/ptrace | Device test matrix; known-issues list per OEM. |
 
 ---
@@ -157,7 +157,7 @@ GPU apps render with Turnip on `/dev/kgsl`; frames are copied into the X server'
 - The rootfs is a normal folder in the app's private storage (`/data/data/io.deskdroid.app/files/rootfs`). It already grows and shrinks with what's installed, like qcow2, with no fixed size.
 - Not `/sdcard/.DeskDroid`: shared storage has no symlinks, no Unix permissions and no exec, so Linux can't run from it, and other apps could read it.
 - Not a qcow2/ext4 image file: mounting one needs root (loop devices) or FUSE, neither available to apps.
-- Shared storage appears inside Linux at its own path (`/storage/emulated/0`, also `/sdcard` and `~/Phone`), and `~/Documents`, `~/Downloads`, `~/Pictures`, `~/Music` and `~/Videos` are the phone's Documents, Download, Pictures, Music and Movies, so files show up on both sides. Android's own `Android/` folder is hidden (a `.hidden` file, so "Show hidden files" reveals it). Needs All files access; without it the home folders stay Linux-only. (Implemented 2026-10-25, `Storage.kt`.)
+- Shared storage appears inside Linux like a USB drive at `/media/deskdroid/Phone` (also `/sdcard`, and Phone/Camera in Dolphin's Places). The Linux home folder is its own; nothing in it is shared (Steven, 2026-10-25: separate, not fused). Android's own `Android/` folder is hidden (a `.hidden` file, so "Show hidden files" reveals it). Needs All files access. (`Storage.kt`.)
 - Backup/export writes the system (or just `/home`) to one compressed archive on shared storage, and restore reads it back. That covers the "single file you can move around" need.
 - `android:hasFragileUserData="true"` so Android asks whether to keep app data when DeskDroid is uninstalled.
 

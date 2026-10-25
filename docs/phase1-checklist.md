@@ -26,11 +26,12 @@ Exit criterion: a non-technical tester gets from installing the APK to a working
 
 ## Phone files
 - [ ] Keep it running screen: "Share files with the desktop" opens All files access; status says "All set" after allowing it
-- [ ] Dolphin: Home has Documents, Downloads, Pictures, Music, Videos, Desktop, Templates, Public and Phone; Places has Phone and Camera
-- [ ] Save a file to ~/Downloads in Kate: it shows in Android's Files app under Download, and a photo taken on Android shows in Camera
-- [ ] Phone (storage root) doesn't list the Android folder until Show hidden files is on
-- [ ] Files that were in ~/Downloads before allowing access are moved to the phone's Download on the next start
-- [ ] Without the permission the desktop still starts; the home folders are Linux-only
+- [ ] Dolphin Places: Home, Desktop, Documents, Downloads, Music, Pictures, Videos, then Phone and Camera
+- [ ] Phone opens /media/deskdroid/Phone with the phone's folders; a file saved there from Kate shows in Android's Files app, and a photo taken on Android shows in Camera
+- [ ] Home folder is Linux-only: a file in ~/Downloads does not show on Android
+- [ ] Phone doesn't list the Android folder until Show hidden files is on
+- [ ] Log shows "storage check: ... writable"
+- [ ] Without the permission the desktop still starts, with no Phone entry
 
 ## Options
 - [ ] Lock my desktop: fingerprint/PIN asked when opening the app and the desktop
