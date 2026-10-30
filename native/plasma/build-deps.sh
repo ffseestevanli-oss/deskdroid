@@ -417,6 +417,8 @@ build_kwayland() {
 build_kwin() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kwin-$PLASMA_VERSION.tar.xz" "kwin-$PLASMA_VERSION.tar.xz")"
   unandroid "$s"
+  # Android is Linux underneath: /proc/self/exe, the same scheduler and so on.
+  grep -rl --include=CMakeLists.txt 'CMAKE_SYSTEM_NAME MATCHES "Linux"' "$s" | xargs sed -i 's/CMAKE_SYSTEM_NAME MATCHES "Linux"/CMAKE_SYSTEM_NAME MATCHES "Linux|Android"/'
   # No sound theme to play the system bell with.
   sed -i 's/^find_package(Canberra REQUIRED)/find_package(Canberra)/' "$s/CMakeLists.txt"
   sed -i 's/^add_subdirectory(systembell)/# add_subdirectory(systembell)/' "$s/src/plugins/CMakeLists.txt"
