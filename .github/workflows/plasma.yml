@@ -26,6 +26,19 @@ jobs:
           yes | "$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin | sort -V | tail -1)/sdkmanager" --install
           "ndk;$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)"
           && echo "NDK=$ANDROID_HOME/ndk/$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)" >> "$GITHUB_ENV"
+      # Qt's build tools (moc, qtwaylandscanner, ...) for building Qt from source.
+      - uses: actions/cache@v4
+        with:
+          path: ~/Qt
+          key: qt-6.8.3-host-tools
+      - name: Install desktop Qt
+        run: |
+          if [ ! -d ~/Qt/6.8.3/gcc_64 ]; then
+            pipx install aqtinstall
+            aqt install-qt linux desktop 6.8.3 linux_gcc_64 -O ~/Qt
+          fi
+          echo "QT_HOST_PATH=$HOME/Qt/6.8.3/gcc_64" >> "$GITHUB_ENV"
+          ls ~/Qt/6.8.3/gcc_64/libexec | head -50
       - uses: actions/cache/restore@v4
         with:
           path: |

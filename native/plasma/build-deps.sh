@@ -8,7 +8,7 @@
 #
 # With no packages, builds all of them in order; a package already in
 # <prefix> with the same recipe (its stamp in <prefix>/stamps) is skipped, so a cached prefix only
-# rebuilds what's new. Needs meson, ninja, cmake, pkg-config, bison, gperf,
+# rebuilds what's new. Qt needs QT_HOST_PATH (see build_qtbase). Needs meson, ninja, cmake, pkg-config, bison, gperf,
 # autoconf/automake/libtool and a host C compiler with expat. Sources come
 # from their upstream release tarballs or tags.
 set -euo pipefail
@@ -220,8 +220,54 @@ build_libinput() {
     -Dudev-dir="$PREFIX/lib/udev"
 }
 
+# ---- Qt (stage 3b), built from source: the prebuilt Qt for Android has no
+# D-Bus and no Wayland client, and KWin needs both. Needs QT_HOST_PATH, a
+# desktop Qt of the same version for the build tools (moc, qtwaylandscanner...).
+
+QT_VERSION=6.8.3
+qt_src() { # <module>: unpacked source of one Qt module
+  unpack "https://download.qt.io/official_releases/qt/${QT_VERSION%.*}/$QT_VERSION/submodules/$1-everywhere-src-$QT_VERSION.tar.xz" \
+    "$1-everywhere-src-$QT_VERSION.tar.xz"
+}
+qt_module() { # <module> [cmake options...]: one module on top of qtbase
+  local s; s="$(qt_src "$1")"; shift
+  mkdir -p "$s/_android"
+  (cd "$s/_android" && PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" \
+    "$PREFIX/bin/qt-configure-module" "$s" -- -DCMAKE_FIND_ROOT_PATH="$PREFIX" "$@")
+  cmake --build "$s/_android" -j "$JOBS"
+  cmake --install "$s/_android"
+}
+
+build_qtbase() {
+  : "${QT_HOST_PATH:?set QT_HOST_PATH to a desktop Qt $QT_VERSION}"
+  local s; s="$(qt_src qtbase)"
+  mkdir -p "$s/_android"
+  (cd "$s/_android" && PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" "$s/configure" \
+    -platform android-clang -android-ndk "$NDK" -android-sdk "$ANDROID_HOME" -android-abis arm64-v8a \
+    -android-ndk-platform android-$API -qt-host-path "$QT_HOST_PATH" -prefix "$PREFIX" \
+    -release -nomake tests -nomake examples -dbus-linked -pkg-config -system-freetype -fontconfig \
+    -- -DCMAKE_FIND_ROOT_PATH="$PREFIX" -DCMAKE_PREFIX_PATH="$PREFIX" \
+       -DFEATURE_xkbcommon=ON -DQT_FEATURE_vulkan=OFF)
+  cmake --build "$s/_android" -j "$JOBS"
+  cmake --install "$s/_android"
+}
+
+build_qtshadertools() { qt_module qtshadertools; }
+build_qtdeclarative() { qt_module qtdeclarative; }
+build_qtsvg() { qt_module qtsvg; }
+build_qt5compat() { qt_module qt5compat; }
+build_qtsensors() { qt_module qtsensors; }
+build_qtwayland() { qt_module qtwayland -DFEATURE_wayland_server=OFF -DFEATURE_wayland_client=ON; }
+# Only for QUiLoader, which KWin's scripting configuration uses.
+build_qttools() {
+  qt_module qttools -DFEATURE_assistant=OFF -DFEATURE_designer=ON -DFEATURE_linguist=OFF \
+    -DFEATURE_pixeltool=OFF -DFEATURE_qtdiag=OFF -DFEATURE_qtplugininfo=OFF -DFEATURE_qdoc=OFF \
+    -DFEATURE_distancefieldgenerator=OFF -DFEATURE_qtattributionsscanner=OFF -DFEATURE_qev=OFF
+}
+
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
-     libdisplay_info freetype fontconfig udev mtdev libevdev libinput)
+     libdisplay_info freetype fontconfig udev mtdev libevdev libinput
+     qtbase qtshadertools qtdeclarative qtsvg qt5compat qtsensors qtwayland qttools)
 
 failed=()
 for pkg in "${@:-${ALL[@]}}"; do
