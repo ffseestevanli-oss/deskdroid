@@ -38,11 +38,14 @@ stays as it is. Its last known-good state is the `gold-backup` branch.
 
 ## Results so far (Pixel 10 Pro, PowerVR D-Series DXT-48-1536)
 
-- Stage 1: the compositor holds 120 fps at about 2 ms of CPU per frame;
-  a light test app reaches 105-113 fps next to a heavy one.
+- Stage 1: the compositor holds 120 fps at about 1.8 ms of CPU per frame.
 - Stage 2: Qt 6.8.3 windows run on the compositor through the `deskdroid`
-  platform plugin: a raster window at 102-111 fps and an OpenGL (QPainter on
-  the GPU) window, with Android's own fonts.
+  platform plugin, with Android's own fonts. With four windows on screen at
+  once (both test apps at 120 fps), the Qt raster window runs at 84-101 fps
+  and the Qt OpenGL window (QPainter on the GPU) at 82-94 fps; the two Qt
+  windows share one thread.
+- Pacing that got there: the compositor queues up to two commits per app and
+  shows one per refresh, so each app has a frame of slack (protocol.h, FRAME).
 - Qt for Android calls into Java throughout QtCore (app version,
   QStandardPaths during QCoreApplication's constructor, OS version, time
   zones). Without a Java VM every one of those crashes, so Qt apps run in an
