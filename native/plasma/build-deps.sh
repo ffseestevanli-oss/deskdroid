@@ -227,6 +227,20 @@ build_libinput() {
     -Dudev-dir="$PREFIX/lib/udev"
 }
 
+# gbm: a stand-in (gbm-stub/), Android has no DRM device to allocate from.
+build_gbm() {
+  install -D -m 644 "$HERE/gbm-stub/gbm.h" "$PREFIX/include/gbm.h"
+  "$CC" -O2 -shared -fPIC -Wall -Wextra "$HERE/gbm-stub/gbm.c" -o "$PREFIX/lib/libgbm.so" -Wl,-soname,libgbm.so
+  cat > "$PREFIX/lib/pkgconfig/gbm.pc" <<PC
+prefix=$PREFIX
+Name: gbm
+Description: DeskDroid's gbm stand-in
+Version: 25.0.0
+Libs: -L\${prefix}/lib -lgbm
+Cflags: -I\${prefix}/include
+PC
+}
+
 # ---- Qt (stage 3b), built from source: the prebuilt Qt for Android has no
 # D-Bus and no Wayland client, and KWin needs both. Needs QT_HOST_PATH, a
 # desktop Qt of the same version for the build tools (moc, qtwaylandscanner...).
@@ -379,12 +393,31 @@ build_kdecoration() {
   kde_cmake "$s"
 }
 
+build_kwayland() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kwayland-$PLASMA_VERSION.tar.xz" "kwayland-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  kde_cmake "$s"
+}
+
+# ---- KWin (stage 3d) ---------------------------------------------------------
+
+build_kwin() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kwin-$PLASMA_VERSION.tar.xz" "kwin-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  # No sound theme to play the system bell with.
+  sed -i 's/^find_package(Canberra REQUIRED)/find_package(Canberra)/' "$s/CMakeLists.txt"
+  sed -i 's/^add_subdirectory(systembell)/# add_subdirectory(systembell)/' "$s/src/plugins/CMakeLists.txt"
+  kde_cmake "$s" -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
+    -DKWIN_BUILD_X11=OFF -DKWIN_BUILD_GLOBALSHORTCUTS=OFF -DKWIN_BUILD_RUNNERS=OFF -DKWIN_BUILD_TABBOX=OFF \
+    -DKWIN_BUILD_ACTIVITIES=OFF -DKWIN_BUILD_EIS=OFF -DBUILD_DOC=OFF
+}
+
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
-     libdisplay_info freetype fontconfig udev mtdev libevdev libinput
+     libdisplay_info freetype fontconfig udev mtdev libevdev libinput gbm
      qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice ksvg
-     plasma_wayland_protocols kdecoration)
+     plasma_wayland_protocols kdecoration kwayland kwin)
 
 failed=()
 after_qtbase=0
