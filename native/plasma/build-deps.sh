@@ -355,7 +355,7 @@ build_ki18n() {
   sed -i 's/^\( *\)loadMessageCatalogFile(domain, moFile);/\1(void)domain;/' "$s/src/i18n/kcatalog.cpp"
   grep -q "(void)domain;" "$s/src/i18n/kcatalog.cpp"
   unandroid "$s"
-  kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DBUILD_WITH_QML=ON -DLibIntl_INCLUDE_DIRS="$PREFIX/include" -DLibIntl_LIBRARIES="$PREFIX/lib/libintl.so"
+  kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DCMAKE_SHARED_LINKER_FLAGS=-landroid -DBUILD_WITH_QML=ON -DLibIntl_INCLUDE_DIRS="$PREFIX/include" -DLibIntl_LIBRARIES="$PREFIX/lib/libintl.so"
 }
 build_kwidgetsaddons() { kf kwidgetsaddons; }
 build_kguiaddons() { kf kguiaddons -DWITH_WAYLAND=ON -DBUILD_GEO_SCHEME_HANDLER=OFF; }
