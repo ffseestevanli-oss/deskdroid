@@ -11,6 +11,11 @@ on:
       - .github/workflows/plasma.yml
   workflow_dispatch:
 
+# A newer push makes an older run pointless.
+concurrency:
+  group: plasma-deps-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deps:
     runs-on: ubuntu-24.04

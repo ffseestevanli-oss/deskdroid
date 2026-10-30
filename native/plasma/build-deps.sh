@@ -218,7 +218,8 @@ build_libevdev() {
 
 build_libinput() {
   local s; s="$(unpack https://gitlab.freedesktop.org/libinput/libinput/-/archive/1.28.1/libinput-1.28.1.tar.gz libinput-1.28.1.tar.gz)"
-  meson_cross "$s" -Dlibwacom=false -Ddebug-gui=false -Dtests=false -Ddocumentation=false -Dinstall-tests=false \
+  # Bionic dropped index()/rindex().
+  meson_cross "$s" -Dc_args="-Dindex=strchr -Drindex=strrchr" -Dlibwacom=false -Ddebug-gui=false -Dtests=false -Ddocumentation=false -Dinstall-tests=false \
     -Dudev-dir="$PREFIX/lib/udev"
 }
 
@@ -231,11 +232,18 @@ qt_src() { # <module>: unpacked source of one Qt module
   unpack "https://download.qt.io/archive/qt/${QT_VERSION%.*}/$QT_VERSION/submodules/$1-everywhere-src-$QT_VERSION.tar.xz" \
     "$1-everywhere-src-$QT_VERSION.tar.xz"
 }
+# The NDK's toolchain file only searches the sysroot (and CMAKE_FIND_ROOT_PATH
+# re-roots absolute paths); let CMake take the include and library paths that
+# pkg-config reports for the prefix as they are.
+qt_find_args() {
+  echo -DCMAKE_FIND_ROOT_PATH="$PREFIX" -DCMAKE_PREFIX_PATH="$PREFIX" \
+    -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH
+}
 qt_module() { # <module> [cmake options...]: one module on top of qtbase
   local s; s="$(qt_src "$1")"; shift
   mkdir -p "$s/_android"
   (cd "$s/_android" && PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" \
-    "$PREFIX/bin/qt-configure-module" "$s" -- -DCMAKE_FIND_ROOT_PATH="$PREFIX" "$@")
+    "$PREFIX/bin/qt-configure-module" "$s" -- $(qt_find_args) "$@")
   cmake --build "$s/_android" -j "$JOBS"
   cmake --install "$s/_android"
 }
@@ -248,8 +256,7 @@ build_qtbase() {
     -platform android-clang -android-ndk "$NDK" -android-sdk "$ANDROID_HOME" -android-abis arm64-v8a \
     -android-ndk-platform android-$API -qt-host-path "$QT_HOST_PATH" -prefix "$PREFIX" \
     -release -nomake tests -nomake examples -dbus-linked -pkg-config -system-freetype -fontconfig \
-    -- -DCMAKE_FIND_ROOT_PATH="$PREFIX" -DCMAKE_PREFIX_PATH="$PREFIX" \
-       -DFEATURE_xkbcommon=ON -DQT_FEATURE_vulkan=OFF)
+    -- $(qt_find_args) -DQT_FEATURE_vulkan=OFF)
   cmake --build "$s/_android" -j "$JOBS"
   cmake --install "$s/_android"
 }
