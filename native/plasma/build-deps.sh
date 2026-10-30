@@ -46,8 +46,8 @@ pkg-config = 'pkg-config'
 [built-in options]
 c_args = ['-ffile-prefix-map=$WORK=.']
 cpp_args = ['-ffile-prefix-map=$WORK=.']
-c_link_args = ['-Wl,-z,noexecstack']
-cpp_link_args = ['-Wl,-z,noexecstack']
+c_link_args = ['-Wl,-z,noexecstack', '-L$PREFIX/lib']
+cpp_link_args = ['-Wl,-z,noexecstack', '-L$PREFIX/lib']
 
 [properties]
 pkg_config_libdir = '$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig'
@@ -63,6 +63,11 @@ cat > "$WORK/native.ini" <<EOF
 pkg_config_path = '$HOSTPREFIX/lib/pkgconfig:$HOSTPREFIX/share/pkgconfig'
 EOF
 export PATH="$HOSTPREFIX/bin:$PATH"
+# Bionic has librt's and libpthread's functions in libc; some builds still
+# ask for the libraries by name.
+for lib in rt pthread; do
+  [ -e "$PREFIX/lib/lib$lib.a" ] || "$BIN/llvm-ar" rc "$PREFIX/lib/lib$lib.a"
+done
 export PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR=
 
 # fetch <url> <file>: downloads once into the cache, prints the path.
@@ -212,7 +217,7 @@ build_libevdev() {
 build_libinput() {
   local s; s="$(unpack https://gitlab.freedesktop.org/libinput/libinput/-/archive/1.28.1/libinput-1.28.1.tar.gz libinput-1.28.1.tar.gz)"
   meson_cross "$s" -Dlibwacom=false -Ddebug-gui=false -Dtests=false -Ddocumentation=false -Dinstall-tests=false \
-    -Dudev-dir="$PREFIX/lib/udev" -Dlua-plugins=disabled
+    -Dudev-dir="$PREFIX/lib/udev"
 }
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
