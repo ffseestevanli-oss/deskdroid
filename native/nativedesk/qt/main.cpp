@@ -20,7 +20,10 @@
 #include <cmath>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
+#include <dlfcn.h>
 #include <unistd.h>
+#include <unwind.h>
 
 Q_IMPORT_PLUGIN(DeskDroidIntegrationPlugin)
 
@@ -144,11 +147,29 @@ void logToStderr(QtMsgType type, const QMessageLogContext &, const QString &msg)
     fprintf(stderr, "qt %s: %s\n", type <= QtInfoMsg ? kinds[type] : "?", qPrintable(msg));
 }
 
+_Unwind_Reason_Code printFrame(_Unwind_Context *ctx, void *depth)
+{
+    uintptr_t pc = _Unwind_GetIP(ctx);
+    if (!pc || ++*static_cast<int *>(depth) > 24) return _URC_END_OF_STACK;
+    Dl_info info = {};
+    dladdr(reinterpret_cast<void *>(pc), &info);
+    const char *lib = info.dli_fname ? strrchr(info.dli_fname, '/') : nullptr;
+    char line[256];
+    int n = snprintf(line, sizeof line, "  at %s+0x%lx %s\n", lib ? lib + 1 : "?",
+                     static_cast<unsigned long>(pc - reinterpret_cast<uintptr_t>(info.dli_fbase)),
+                     info.dli_sname ? info.dli_sname : "");
+    write(STDERR_FILENO, line, n);
+    return _URC_NO_REASON;
+}
+
+// Prints where it crashed (library, offset, symbol), then crashes as before.
 void onCrash(int sig)
 {
     char line[64];
     int n = snprintf(line, sizeof line, "crashed with signal %d\n", sig);
     write(STDERR_FILENO, line, n);
+    int depth = 0;
+    _Unwind_Backtrace(printFrame, &depth);
     signal(sig, SIG_DFL);
     raise(sig);
 }
