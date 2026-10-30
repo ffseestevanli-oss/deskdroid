@@ -1,0 +1,50 @@
+name: Native Plasma deps
+
+# Stage 3 of docs/native-plasma.md: KWin's dependencies built for Android.
+# Separate from the APK build, which doesn't use them yet. The prefix is
+# cached between runs, and saved even when a package fails, so each run only
+# builds what's new or changed.
+on:
+  pull_request:
+    paths:
+      - native/plasma/**
+      - .github/workflows/plasma.yml
+  workflow_dispatch:
+
+jobs:
+  deps:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q bison flex gperf autoconf automake libtool libexpat1-dev pkg-config
+          pipx install meson==1.12.1 && pipx install ninja
+      - name: Install the pinned NDK
+        run: >
+          yes | "$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin | sort -V | tail -1)/sdkmanager" --install
+          "ndk;$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)"
+          && echo "NDK=$ANDROID_HOME/ndk/$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)" >> "$GITHUB_ENV"
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/plasma-prefix
+            ~/.cache/deskdroid/plasma
+          key: plasma-deps-${{ github.run_id }}
+          restore-keys: plasma-deps-
+      - name: Build the dependencies
+        run: native/plasma/build-deps.sh ~/plasma-prefix "$NDK"
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            ~/plasma-prefix
+            ~/.cache/deskdroid/plasma
+          key: plasma-deps-${{ github.run_id }}
+      - name: List what was built
+        if: always()
+        run: |
+          ls ~/plasma-prefix/stamps
+          ls ~/plasma-prefix/lib | head -100
+          du -sh ~/plasma-prefix

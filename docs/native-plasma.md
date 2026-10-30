@@ -61,6 +61,34 @@ stays as it is. Its last known-good state is the `gold-backup` branch.
   has no Android Context. A native Plasma would either keep this host process
   per app or patch those calls out of a Qt built from source.
 
+## Stage 3 plan: KWin (6.4)
+
+KWin is built for Linux systems with DRM, udev, libinput, D-Bus and
+systemd. Going through its build files, it needs:
+
+- **Qt modules** the prebuilt Qt for Android doesn't have: DBus and
+  WaylandClient (plus UiTools, Sensors, Svg, Core5Compat). So from here on
+  Qt is built from source for Android, with D-Bus linked in.
+- **Linux libraries:** wayland, wayland-protocols, xkbcommon, D-Bus, epoxy,
+  lcms2, libdrm, libxcvt, libdisplay-info (+ hwdata), freetype, fontconfig,
+  libinput (+ libevdev, mtdev, libudev-zero). All are portable C and get
+  built with the NDK (`native/plasma/build-deps.sh`, CI workflow
+  `plasma.yml`). gbm and libcanberra are only stubs or patched out: there
+  is no DRM device to allocate from and no sound theme.
+- **KDE Frameworks:** Auth, ColorScheme, Config, CoreAddons, Crash,
+  DBusAddons, GlobalAccel, GuiAddons, I18n, IdleTime, Package, Service, Svg,
+  WidgetsAddons, WindowSystem; plus KDecoration3 and plasma-wayland-protocols.
+  KCMs, tabbox config and X11 support get turned off.
+- **An Android backend for KWin** next to its drm/virtual/wayland ones: an
+  output per Android `Surface` (EGL on `ANativeWindow`), input from
+  `MotionEvent`/`KeyEvent` instead of libinput. Clients stay Wayland apps;
+  their buffers are AHardwareBuffers (the stage 1 protocol, as a Wayland
+  extension or as dmabufs where the driver exports them).
+
+Order: 3a Linux libraries, 3b Qt from source, 3c KDE Frameworks, 3d KWin
+with the Android backend, 3e KWin on the phone in place of the test
+compositor.
+
 ## What to look for in stage 1
 
 - Both test windows at the panel's refresh rate (120 Hz on the Pixel 10 Pro)
