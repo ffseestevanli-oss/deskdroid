@@ -41,6 +41,13 @@ of memfd, AHardwareBuffer memory, DXTn texture decoding). Our change to Termux's
 detecting `timespec_get`, which API 29 has. 0011 is guarded by
 `DESKDROID_VENUS_AHB`; 0012 adds a missing `VKAPI_ATTR`.
 
+`nativedesk/` is ours: the native desktop test (Settings → Native desktop
+test, `NativeDesk.kt`), the first step of running Plasma as Android code
+(`docs/native-plasma.md`). `compositor.c` (JNI, `libnativedesk.so`) draws
+windows into an Android surface with the phone's own EGL/GLES driver;
+`testclient.c` (`libnativedesk_client.so`) is a stand-in app that renders into
+AHardwareBuffers and hands them over with native fences (`protocol.h`).
+
 `talloc/shim/replace.h` is ours: a small stand-in for Samba's `lib/replace`, so
 talloc builds without Samba's waf configure step.
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Builds libtalloc, proot, proot's loader and ddtool from the vendored sources in
-# native/, plus (NDK builds only) the GPU report tool and the virgl server, and
-# installs them as lib*.so files, so Android puts them in the
-# app's executable nativeLibraryDir (W^X rule for targetSdk 29+).
+# native/, plus (NDK builds only) the GPU report tool, the native desktop test
+# and the virgl server, and installs them as lib*.so files, so Android puts them
+# in the app's executable nativeLibraryDir (W^X rule for targetSdk 29+).
 #
 # Called by the :app Gradle build (task buildNativeTools) with the NDK, and
 # usable on its own:
@@ -76,10 +76,14 @@ if [ -n "$NDK" ]; then
   install -m 755 "$WORK/gpureport/gpureport" "$OUT/libgpureport.so"
   "$STRIP" --strip-unneeded "$OUT/libgpureport.so"
 
+  echo "== native desktop test"
+  # Plasma-without-proot experiment (nativedesk/, NativeDesk.kt).
+  "$HERE/nativedesk/build.sh" "$OUT" "$NDK" "$API"
+
   echo "== virgl server"
   "$HERE/virgl/build.sh" "$OUT" "$NDK" "$API"
 else
-  echo "== skipping gpureport and the virgl server (Android-only, need the NDK)"
+  echo "== skipping gpureport, the native desktop test and the virgl server (Android-only, need the NDK)"
 fi
 
 install -m 755 "$WORK/ddtool/ddtool" "$OUT/libddtool.so"

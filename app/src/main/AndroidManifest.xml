@@ -59,6 +59,14 @@
             android:resizeableActivity="true"
             android:windowSoftInputMode="stateHidden|adjustNothing" />
 
+        <!-- Native desktop test (NativeDesk.kt): opened from Settings. -->
+        <activity
+            android:name=".NativeDeskActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|smallestScreenSize|density"
+            android:resizeableActivity="true" />
+
         <!-- Termux:X11's own launcher entry and settings screen: hidden, DeskDroid has its own. -->
         <activity
             android:name="com.termux.x11.MainActivity"
