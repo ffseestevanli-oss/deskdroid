@@ -48,7 +48,8 @@ Window {
         spacing: 8
         Text { text: "Qt Quick window"; color: "white"; font.pixelSize: 30; font.bold: true }
         Text {
-            text: Math.round(win.fps) + " fps · QML scene graph on the phone's own driver"
+            text: Math.round(win.fps) + " fps · QML scene graph on "
+                  + (GraphicsInfo.api === GraphicsInfo.OpenGL ? "the GPU (OpenGL ES)" : "the CPU (software)")
             color: "white"; font.pixelSize: 20
         }
         Rectangle {

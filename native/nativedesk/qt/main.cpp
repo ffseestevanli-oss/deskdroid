@@ -11,6 +11,7 @@
  */
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QtPlugin>
+#include <QtCore/private/qabstractanimation_p.h>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QKeyEvent>
 #include <QtGui/QMouseEvent>
@@ -209,6 +210,9 @@ int demoMain(int argc, char **argv)
 
     QGuiApplication app(argc, argv);
     printf("Qt %s started on platform %s\n", qVersion(), qPrintable(QGuiApplication::platformName()));
+    // Qt Quick's basic render loop steps animations on Qt's animation timer,
+    // 16 ms by default, which caps QML at 60 fps; tick at the panel's 120 Hz.
+    QUnifiedTimer::instance()->setTimingInterval(8);
     QFont font(QStringLiteral("Roboto"));
     QGuiApplication::setFont(font);
 

@@ -28,12 +28,12 @@
 
 #include <QtCore/QMetaObject>
 #include <QtCore/QSocketNotifier>
-#include <QtCore/private/qeventdispatcher_unix_p.h>
 #include <QtGui/QImage>
 #include <QtGui/QOffscreenSurface>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QWindow>
 #include <QtGui/private/qfreetypefontdatabase_p.h>
+#include <QtGui/private/qunixeventdispatcher_qpa_p.h>
 #include <qpa/qplatformbackingstore.h>
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformintegrationplugin.h>
@@ -527,7 +527,9 @@ public:
     {
         return new OffscreenSurface(s);
     }
-    QAbstractEventDispatcher *createEventDispatcher() const override { return new QEventDispatcherUNIX; }
+    // The QPA flavour: it also hands Qt the input and expose events queued
+    // through QWindowSystemInterface (plain QEventDispatcherUNIX never does).
+    QAbstractEventDispatcher *createEventDispatcher() const override { return new QUnixEventDispatcherQPA; }
     // Qt's OpenGL code on Android asks it for "AndroidDeviceName" without a null check.
     QPlatformNativeInterface *nativeInterface() const override { return &m_native; }
     // Android's own fonts, found through QT_QPA_FONTDIR=/system/fonts.
