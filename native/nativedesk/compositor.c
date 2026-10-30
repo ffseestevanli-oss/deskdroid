@@ -43,7 +43,7 @@
 
 #define MAX_CLIENTS 8
 #define TITLE_H 36
-#define MAX_INPUT 256
+#define INPUT_QUEUE 256
 
 struct buffer {
     AHardwareBuffer *ahb;
@@ -93,7 +93,7 @@ static struct {
     uint32_t next_window;
 
     pthread_mutex_t lock;     /* guards input and stats */
-    struct input input[MAX_INPUT];
+    struct input input[INPUT_QUEUE];
     int n_input;
     char stats[512];
 
@@ -582,7 +582,7 @@ static void *loop(void *unused)
         for (int k = 2; k < n; k++)
             if (p[k].revents && C.clients[idx[k]] && !read_client(idx[k])) drop_client(idx[k]);
 
-        struct input in[MAX_INPUT];
+        struct input in[INPUT_QUEUE];
         pthread_mutex_lock(&C.lock);
         int n_in = C.n_input;
         memcpy(in, C.input, n_in * sizeof in[0]);
@@ -683,8 +683,8 @@ Java_io_deskdroid_app_NativeDesk_nativeStop(JNIEnv *env, jclass cls)
 static void queue(struct input in)
 {
     pthread_mutex_lock(&C.lock);
-    if (C.n_input < MAX_INPUT) C.input[C.n_input++] = in;
-    else if (in.type == IN_POINTER) C.input[MAX_INPUT - 1] = in; /* keep the latest position */
+    if (C.n_input < INPUT_QUEUE) C.input[C.n_input++] = in;
+    else if (in.type == IN_POINTER) C.input[INPUT_QUEUE - 1] = in; /* keep the latest position */
     pthread_mutex_unlock(&C.lock);
     wake();
 }

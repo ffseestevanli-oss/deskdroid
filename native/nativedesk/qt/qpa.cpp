@@ -100,7 +100,7 @@ public:
     {
         delete m_notifier;
         freeBuffers();
-        if (m_fd >= 0) close(m_fd);
+        if (m_fd >= 0) ::close(m_fd);
     }
 
     void setVisible(bool visible) override
@@ -205,7 +205,7 @@ private:
         m.commit.has_fence = fence >= 0;
         m.commit.y_invert = yInvert;
         send(m, fence);
-        if (fence >= 0) close(fence);
+        if (fence >= 0) ::close(fence);
         m_buf[id].busy = true;
         m_frameReady = false;
     }
