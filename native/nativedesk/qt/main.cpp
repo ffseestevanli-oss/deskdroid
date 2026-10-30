@@ -102,7 +102,7 @@ protected:
         paintScene(p, size(), m_fps.clock.isValid() ? m_fps.clock.elapsed() / 1000.0 : 0, m_pointer,
                    QStringLiteral("Qt raster window"), m_fps.fps,
                    QStringLiteral("Software QPainter, like Qt Widgets. Type here: ") + m_text +
-                       QStringLiteral("▏"));
+                       QStringLiteral("_"));
         update(); // the compositor's frame event paces this
     }
     void mouseMoveEvent(QMouseEvent *e) override { m_pointer = e->position(); }

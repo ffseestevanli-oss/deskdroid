@@ -125,10 +125,15 @@ public:
     void requestUpdate() override
     {
         if (!m_notifier) return;
-        if (m_frameReady)
-            QMetaObject::invokeMethod(m_notifier, [this] { deliverUpdateRequest(); }, Qt::QueuedConnection);
-        else
-            m_updatePending = true;
+        // Apps usually ask for the next frame while painting this one, before
+        // it is committed, so decide when the request is delivered: if a
+        // commit happened in between, wait for the compositor's FRAME.
+        QMetaObject::invokeMethod(m_notifier, [this] {
+            if (m_frameReady)
+                deliverUpdateRequest();
+            else
+                m_updatePending = true;
+        }, Qt::QueuedConnection);
     }
 
     // Raster: copy the backing store's image into a free buffer and commit it.
