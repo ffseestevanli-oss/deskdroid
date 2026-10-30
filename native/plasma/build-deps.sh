@@ -322,7 +322,7 @@ kde_cmake() {
     -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib $(qt_find_args) \
     -DKF6_HOST_TOOLING="$HOSTPREFIX/lib/cmake" -DKF_IGNORE_PLATFORM_CHECK=ON \
     -DWayland_DATADIR="$HOSTPREFIX/share/wayland" -DWaylandProtocols_DATADIR="$PREFIX/share/wayland-protocols" \
-    -DBUILD_TESTING=OFF -DBUILD_QCH=OFF -DBUILD_PYTHON_BINDINGS=OFF -DBUILD_DESIGNERPLUGIN=OFF "$@"
+    -DSKIP_APPSTREAM=ON -DBUILD_TESTING=OFF -DBUILD_QCH=OFF -DBUILD_PYTHON_BINDINGS=OFF -DBUILD_DESIGNERPLUGIN=OFF "$@"
   cmake --build "$src/_android" -j "$JOBS"
   cmake --install "$src/_android"
 }
@@ -380,7 +380,20 @@ build_kidletime() { kf kidletime; }
 build_kauth() { kf kauth -DKAUTH_BACKEND_NAME=FAKE; }
 build_kcrash() { kf kcrash; }
 build_kglobalaccel() { kf kglobalaccel; }
-build_kpackage() { kf kpackage; }
+# kpackagetool6 only runs at build time to write AppStream files, which nothing
+# here needs (SKIP_APPSTREAM), so the host side gets a stand-in target instead
+# of a second, host build of KPackage and everything under it.
+build_kpackage() {
+  kf kpackage
+  mkdir -p "$HOSTPREFIX/lib/cmake/KF6Package"
+  cat > "$HOSTPREFIX/lib/cmake/KF6Package/KF6PackageToolsTargets.cmake" <<'CMAKE'
+if(NOT TARGET KF6::kpackagetool6)
+  add_executable(KF6::kpackagetool6 IMPORTED)
+  set_target_properties(KF6::kpackagetool6 PROPERTIES IMPORTED_LOCATION /bin/true)
+endif()
+CMAKE
+}
+build_kirigami() { kf kirigami; }
 build_kservice() { kf kservice; }
 build_ksvg() { kf ksvg; }
 
@@ -416,7 +429,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput gbm
      qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
-     kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice ksvg
+     kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kwin)
 
 failed=()
