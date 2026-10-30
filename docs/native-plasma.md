@@ -36,6 +36,20 @@ stays as it is. Its last known-good state is the `gold-backup` branch.
    compositor.
 4. plasmashell and the KDE apps; then bridge proot apps in as windows.
 
+## Results so far (Pixel 10 Pro, PowerVR D-Series DXT-48-1536)
+
+- Stage 1: the compositor holds 120 fps at about 2 ms of CPU per frame;
+  a light test app reaches 105-113 fps next to a heavy one.
+- Stage 2: Qt 6.8.3 windows run on the compositor through the `deskdroid`
+  platform plugin: a raster window at 102-111 fps and an OpenGL (QPainter on
+  the GPU) window, with Android's own fonts.
+- Qt for Android calls into Java throughout QtCore (app version,
+  QStandardPaths during QCoreApplication's constructor, OS version, time
+  zones). Without a Java VM every one of those crashes, so Qt apps run in an
+  app_process with Qt6Android.jar (`QtHost.kt`). There is no Activity, so Qt
+  has no Android Context. A native Plasma would either keep this host process
+  per app or patch those calls out of a Qt built from source.
+
 ## What to look for in stage 1
 
 - Both test windows at the panel's refresh rate (120 Hz on the Pixel 10 Pro)
