@@ -7,3 +7,4 @@ local.properties
 app/src/main/jniLibs/
 prebuilts-cache/
 rootfs/out/
+__pycache__/

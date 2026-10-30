@@ -1,0 +1,8 @@
+# DeskDroid: the image ships without documentation, manual pages and info
+# files (build-rootfs.sh), and this keeps apt and Discover from installing
+# them later, to save phone storage. Licence files stay.
+path-exclude=/usr/share/doc/*
+path-include=/usr/share/doc/*/copyright
+path-exclude=/usr/share/man/*
+path-exclude=/usr/share/info/*
+path-exclude=/usr/share/lintian/*

@@ -14,7 +14,7 @@ object Proot {
         // The splash watcher runs alongside the session (see Splash).
         shellCommand(paths, env,
             (if (binds.isNotEmpty()) Storage.PROBE_SCRIPT else "") +
-            "/bin/sh ${Browsers.FLAGS_SCRIPT} || true; /bin/sh ${Flatpak.SETUP_SCRIPT} || true; " +
+            "/bin/sh ${Browsers.FLAGS_SCRIPT} ${Browsers.BOOT_ARGS} || true; /bin/sh ${Flatpak.SETUP_SCRIPT} || true; " +
                 "/bin/sh ${Splash.WATCH_SCRIPT} & " +
                 "exec /bin/sh /usr/local/bin/deskdroid-boot", binds)
 

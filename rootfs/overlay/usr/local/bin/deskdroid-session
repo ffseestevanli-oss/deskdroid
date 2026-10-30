@@ -59,7 +59,8 @@ case "${DESKDROID_GPU:-llvmpipe}" in
 esac
 
 echo "deskdroid-session: ${SESSION} session, GPU mode ${DESKDROID_GPU}, scale ${DESKDROID_SCALE:-1}"
-glxinfo -B 2>&1 | grep -E 'renderer|version' || true
+# Just for the log; in the background, since starting a GL driver takes a while.
+( glxinfo -B 2>&1 | grep -E 'renderer|version' ) &
 
 # Sound: PulseAudio writes into the FIFO the app plays from (/etc/deskdroid/pulse.pa).
 if command -v pulseaudio >/dev/null; then
@@ -71,14 +72,18 @@ SCALE="${DESKDROID_SCALE:-1}"
 if [ "$SESSION" = wayland ]; then
   # Scale: KWin's output scale (deskdroid-kwin-wayland); Wayland apps follow it.
   # The X11 session's forced font DPI would scale text twice.
-  command -v kwriteconfig6 >/dev/null && kwriteconfig6 --file kcmfonts --group General --key forceFontDPI --delete
+  grep -qs '^forceFontDPI=' "$HOME/.config/kcmfonts" && command -v kwriteconfig6 >/dev/null \
+    && kwriteconfig6 --file kcmfonts --group General --key forceFontDPI --delete
 else
   # Scale: Qt/KDE read the X DPI, GTK takes an integer scale.
   DPI=$(awk -v s="$SCALE" 'BEGIN { printf "%d", 96 * s }')
   echo "Xft.dpi: $DPI" | xrdb -merge
+  # kwriteconfig6 is a Qt program, slow to start under proot: only run it on a change.
   if command -v kwriteconfig6 >/dev/null; then
-    kwriteconfig6 --file kcmfonts --group General --key forceFontDPI "$DPI"
-    kwriteconfig6 --file kdeglobals --group KScreen --key ScaleFactor "$SCALE"
+    grep -qsx "forceFontDPI=$DPI" "$HOME/.config/kcmfonts" \
+      || kwriteconfig6 --file kcmfonts --group General --key forceFontDPI "$DPI"
+    grep -qsx "ScaleFactor=$SCALE" "$HOME/.config/kdeglobals" \
+      || kwriteconfig6 --file kdeglobals --group KScreen --key ScaleFactor "$SCALE"
   fi
   export GDK_SCALE=$(awk -v s="$SCALE" 'BEGIN { printf "%d", (s >= 1.75) ? 2 : 1 }')
   # GTK already sizes text from Xft.dpi, which carries the whole scale; GDK_SCALE

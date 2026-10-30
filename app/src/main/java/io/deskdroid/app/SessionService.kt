@@ -92,6 +92,10 @@ class SessionService : Service() {
                 }
             }
             VenusServer.writeSessionEnv(this, paths, gpu == "venus")
+            // In Venus mode the desktop itself stays on llvmpipe unless the GPU desktop option is on.
+            val softwareDesktop = wayland || gpu == "llvmpipe" || gpu == "nocomp" ||
+                (gpu == "venus" && !Prefs.gpuDesktop(this))
+            Tuning.install(paths, softwareDesktop)
             Browsers.install(this, paths)
             Flatpak.install(this, paths)
             ScreenLock.install(paths)

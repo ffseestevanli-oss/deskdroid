@@ -5,9 +5,10 @@
 
 # The app drops setuid bits when it unpacks the image; put back the ones the
 # image was built with (build-rootfs.sh lists them), so sudo and pkexec work.
+# Only where missing: every chmod is a program start, which proot makes slow.
 if [ -f /etc/deskdroid/setuid-files ]; then
   while read -r f; do
-    [ -f "$f" ] && chmod u+s "$f" 2>/dev/null
+    [ -f "$f" ] && [ ! -u "$f" ] && chmod u+s "$f" 2>/dev/null
   done < /etc/deskdroid/setuid-files
 fi
 

@@ -35,13 +35,14 @@ object Storage {
     /**
      * Logs, as the desktop user, what the phone storage looks like from inside
      * Debian and whether a file can be created in it, so the log shows why it
-     * is read-only or empty. Runs before deskdroid-boot (Proot.sessionCommand).
+     * is read-only or empty. Runs in the background while deskdroid-boot starts
+     * (Proot.sessionCommand), so it doesn't hold up the desktop.
      */
-    val PROBE_SCRIPT = "runuser -u deskdroid -- sh -c 'ls -ldn $MOUNT $MOUNT/${Environment.DIRECTORY_DOWNLOADS} " +
+    val PROBE_SCRIPT = "( runuser -u deskdroid -- sh -c 'ls -ldn $MOUNT $MOUNT/${Environment.DIRECTORY_DOWNLOADS} " +
         "&& echo \"\$(ls -A $MOUNT | wc -l) entries in $MOUNT\" " +
         "&& touch $MOUNT/${Environment.DIRECTORY_DOWNLOADS}/.deskdroid-rw-test " +
         "&& rm -f $MOUNT/${Environment.DIRECTORY_DOWNLOADS}/.deskdroid-rw-test && echo writable || echo not writable' " +
-        "2>&1 | sed 's/^/storage check: /' || true; "
+        "2>&1 | sed 's/^/storage check: /' ) & "
     /** Marks the Places entries this app adds, so they can be told apart from the user's. */
     private const val PLACE_ID = "deskdroid/"
 

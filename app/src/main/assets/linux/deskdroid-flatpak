@@ -21,8 +21,11 @@ if [ ! -e "$MARK" ] && command -v kwriteconfig6 >/dev/null; then
 fi
 
 # Adding the remote downloads Flathub's .flatpakrepo, so it runs in the
-# background and is retried next session if the phone was offline.
-if ! as_user flatpak remotes --user --columns=name 2>/dev/null | grep -qx flathub; then
+# background and is retried next session if the phone was offline. The user
+# repo's config lists its remotes; reading it is much quicker under proot than
+# starting flatpak to ask.
+if ! grep -qs '^\[remote "flathub"\]' "$H/.local/share/flatpak/repo/config" \
+    && ! as_user flatpak remotes --user --columns=name 2>/dev/null | grep -qx flathub; then
   ( as_user timeout 120 flatpak remote-add --user --if-not-exists flathub \
       https://dl.flathub.org/repo/flathub.flatpakrepo \
       && echo "deskdroid-flatpak: added Flathub" \
