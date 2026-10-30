@@ -162,7 +162,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     AppLog.i("[nativedesk-qt] $it")
                     synchronized(qtLines) {
                         qtLines.addLast(it.take(160))
-                        while (qtLines.size > 8) qtLines.removeFirst()
+                        while (qtLines.size > 14) qtLines.removeFirst()
                     }
                 }
                 val code = p.waitFor()

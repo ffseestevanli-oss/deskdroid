@@ -20,11 +20,18 @@ object QtHost {
         val libs = args[0]
         giveQtClassLoader()
         // Core first: only the library passed to System.load gets JNI_OnLoad.
-        System.load(File(libs, "libc++_shared.so").path)
-        System.load(File(libs, "libQt6Core_arm64-v8a.so").path)
-        loadInAnyOrder(File(libs).listFiles { f -> f.name.startsWith("libQt6") }.orEmpty().toList())
-        System.load(File(libs, "libnativedesk_qt.so").path)
+        load(File(libs, "libc++_shared.so"))
+        load(File(libs, "libQt6Core_arm64-v8a.so"))
+        loadInAnyOrder(File(libs).listFiles { f -> f.name.startsWith("libQt6") }.orEmpty().sortedBy { it.name })
+        load(File(libs, "libnativedesk_qt.so"))
+        println("QtHost: libraries loaded, starting Qt")
         System.exit(run(args.copyOfRange(1, args.size)))
+    }
+
+    /** Loads one library, saying so first: a crash while loading prints nothing else. */
+    private fun load(lib: File) {
+        println("QtHost: loading ${lib.name}")
+        System.load(lib.path)
     }
 
     /**
@@ -35,7 +42,10 @@ object QtHost {
         var left = libs.filter { !it.name.startsWith("libQt6Core_") }
         while (left.isNotEmpty()) {
             val failed = left.filter { lib ->
-                try { System.load(lib.path); false } catch (e: UnsatisfiedLinkError) { true }
+                try { load(lib); false } catch (e: UnsatisfiedLinkError) {
+                    println("QtHost: ${lib.name} later (${e.message?.substringAfter("library ")?.take(80)})")
+                    true
+                }
             }
             if (failed.size == left.size) {
                 // Load one again to report why.
