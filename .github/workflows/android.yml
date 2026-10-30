@@ -83,3 +83,25 @@ jobs:
           else
             gh release create apk-latest "$name" --title "DeskDroid APK (latest debug build)" --notes "$notes" --latest
           fi
+      # Pull requests from this repo get their own pre-release (apk-pr-N), so a
+      # test build can be installed from a phone without GitHub's artifact zips.
+      - name: Publish as the apk-pr-N pre-release
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="apk-pr-${{ github.event.pull_request.number }}"
+          name="deskdroid-pr${{ github.event.pull_request.number }}-build-${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/debug/*.apk "$name"
+          notes="Test build ${{ github.run_number }} (debug) of pull request #${{ github.event.pull_request.number }} (${{ github.event.pull_request.head.sha }}). Not a release: install $name only to try this change; it installs over other builds."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes "$notes" --prerelease --latest=false
+            gh release upload "$tag" "$name" --clobber
+            gh release view "$tag" --json assets -q '.assets[].name' | grep '\.apk$' | grep -vx "$name" |
+              while read -r old; do gh release delete-asset "$tag" "$old" --yes; done
+          else
+            gh release create "$tag" "$name" --target "${{ github.event.pull_request.head.sha }}" \
+              --title "DeskDroid test build for PR #${{ github.event.pull_request.number }}" \
+              --notes "$notes" --prerelease --latest=false
+          fi
