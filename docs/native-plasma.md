@@ -44,6 +44,14 @@ stays as it is. Its last known-good state is the `gold-backup` branch.
   once (both test apps at 120 fps), the Qt raster window runs at 84-101 fps
   and the Qt OpenGL window (QPainter on the GPU) at 82-94 fps; the two Qt
   windows share one thread.
+- Stage 2b: a Qt Quick (QML) window runs next to them on Qt Quick's scene
+  graph over OpenGL ES, with clicks, hover, typing and scrolling all working.
+  QML modules resolve from the types Qt's libraries register, so no QML
+  plugins or qmldir files are installed. Lessons: the platform plugin must
+  report `RhiBasedRendering` (or Qt Quick falls back to software), use
+  `QUnixEventDispatcherQPA` (or input never reaches Qt), and bundle
+  `Qt6AndroidQuick.jar` (libQt6Quick registers natives on load). Qt's 16 ms
+  animation timer capped QML at 60 fps; the demo ticks it every 8 ms.
 - Pacing that got there: the compositor queues up to two commits per app and
   shows one per refresh, so each app has a frame of slack (protocol.h, FRAME).
 - Qt for Android calls into Java throughout QtCore (app version,
