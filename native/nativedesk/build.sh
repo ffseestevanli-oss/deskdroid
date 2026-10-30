@@ -5,7 +5,8 @@
 # AHardwareBuffer libraries.
 # With DESKDROID_QT_ANDROID (Qt for Android, arm64) and DESKDROID_QT_HOST (the
 # matching desktop Qt) set, also builds the Qt demo (qt/) as
-# libnativedesk_qt.so and copies the Qt libraries it needs next to it.
+# libnativedesk_qt.so and copies the Qt libraries it needs next to it. When
+# that Qt is DeskDroid's own build with KWin (native/plasma), bundles KWin too.
 #   native/nativedesk/build.sh <outdir> <ndk-dir> [api-level]
 set -euo pipefail
 
@@ -46,6 +47,49 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     done
   done
   install -m 644 "$NDK/toolchains/llvm/prebuilt/$host/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$OUT/"
+
+  # Stage 3: KWin, when the Qt is DeskDroid's own build (native/plasma), which
+  # has it. Everything libkwin_wayland.so needs from that prefix goes next to
+  # it. APKs only carry files named lib*.so, so versioned names (libfoo.so.6)
+  # lose the version, in the files and in what the libraries ask for.
+  if [ -e "$DESKDROID_QT_ANDROID/lib/libkwin_wayland.so" ]; then
+    echo "== native desktop test: KWin"
+    command -v patchelf >/dev/null || { echo "patchelf is needed to bundle KWin"; exit 1; }
+    sysroot="$NDK/toolchains/llvm/prebuilt/$host/sysroot/usr/lib/aarch64-linux-android"
+    unversioned() { local n="${1%%.so*}.so"; echo "$n"; }
+    todo=("$DESKDROID_QT_ANDROID/lib/libkwin_wayland.so")
+    install -m 755 "${todo[0]}" "$OUT/libkwin_wayland.so"
+    bundled=("$OUT/libkwin_wayland.so")
+    while [ ${#todo[@]} -gt 0 ]; do
+      f="${todo[0]}"; todo=("${todo[@]:1}")
+      for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
+        name="$(unversioned "$lib")"
+        [ -e "$OUT/$name" ] && continue
+        [ -e "$sysroot/$API/$name" ] || [ -e "$sysroot/$name" ] && continue # Android's own
+        if [ ! -e "$DESKDROID_QT_ANDROID/lib/$lib" ]; then echo "   ? $lib (not in the prefix)"; continue; fi
+        install -m 644 "$DESKDROID_QT_ANDROID/lib/$lib" "$OUT/$name"
+        echo "   + $name"
+        bundled+=("$OUT/$name")
+        todo+=("$DESKDROID_QT_ANDROID/lib/$lib")
+      done
+    done
+    for f in "${bundled[@]}"; do
+      args=()
+      for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\.so\.[^]]*\)\].*/\1/p'); do
+        args+=(--replace-needed "$lib" "$(unversioned "$lib")")
+      done
+      soname="$("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Library soname: \[\([^]]*\)\].*/\1/p')"
+      [ -n "$soname" ] && [ "$soname" != "$(basename "$f")" ] && args+=(--set-soname "$(basename "$f")")
+      [ ${#args[@]} -gt 0 ] && patchelf --page-size 16384 "${args[@]}" "$f"
+      "$BIN/llvm-strip" --strip-unneeded "$f"
+    done
+    echo "   ${#bundled[@]} libraries, $(du -ch "${bundled[@]}" | tail -1 | cut -f1)"
+    # Data KWin reads at run time (keyboard layouts, its own files), as a zip
+    # named like a library so it ships the same way; the app unpacks it.
+    rm -f "$OUT/libkwin_data.so"
+    (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" share/X11/xkb $(ls -d share/kwin* 2>/dev/null))
+    echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
+  fi
 else
   echo "== native desktop test: no DESKDROID_QT_ANDROID, skipping the Qt demo"
 fi

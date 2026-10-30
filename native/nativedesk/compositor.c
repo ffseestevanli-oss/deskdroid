@@ -69,6 +69,7 @@ struct client {
     int n_queue;
     unsigned commits, commits_last;
     float color[3];
+    bool desktop;           /* fills the screen, no title bar (HELLO 0x0) */
 };
 
 struct input {
@@ -319,10 +320,16 @@ static bool read_client(int i)
         if (m.hello.version != NDESK_VERSION) return false;
         cl->w = m.hello.width;
         cl->h = m.hello.height;
+        if (cl->w == 0 || cl->h == 0) {
+            cl->desktop = true;
+            cl->x = cl->y = 0;
+            cl->w = ANativeWindow_getWidth(C.window);
+            cl->h = ANativeWindow_getHeight(C.window);
+        }
         memcpy(cl->title, m.hello.title, NDESK_TITLE_MAX);
         cl->title[NDESK_TITLE_MAX - 1] = 0;
         LOGI("window %u: %s, %ux%u", cl->window, cl->title, cl->w, cl->h);
-        struct ndesk_msg r = { .op = NDESK_CONFIGURE, .configure = { cl->window } };
+        struct ndesk_msg r = { .op = NDESK_CONFIGURE, .configure = { cl->window, cl->w, cl->h } };
         send_msg(cl, &r);
         break;
     }
@@ -401,7 +408,8 @@ static int client_at(float x, float y, bool *title)
 {
     for (int j = C.n_order - 1; j >= 0; j--) {
         struct client *cl = C.clients[C.order[j]];
-        if (x >= cl->x && x < cl->x + cl->w && y >= cl->y - TITLE_H && y < cl->y + cl->h) {
+        const float top = cl->desktop ? cl->y : cl->y - TITLE_H;
+        if (x >= cl->x && x < cl->x + cl->w && y >= top && y < cl->y + cl->h) {
             *title = y < cl->y;
             return C.order[j];
         }
@@ -502,10 +510,12 @@ static void draw(void)
         struct client *cl = C.clients[C.order[j]];
         if (cl->current < 0) continue;
         float dim = C.order[j] == top ? 1.0f : 0.55f;
-        glUseProgram(C.prog_solid);
-        solid(cl->x + 8, cl->y - TITLE_H + 10, cl->w, cl->h + TITLE_H, 0, 0, 0, 0.35f, sw, sh); /* shadow */
-        solid(cl->x, cl->y - TITLE_H, cl->w, TITLE_H,
-              cl->color[0] * dim, cl->color[1] * dim, cl->color[2] * dim, 1, sw, sh);
+        if (!cl->desktop) {
+            glUseProgram(C.prog_solid);
+            solid(cl->x + 8, cl->y - TITLE_H + 10, cl->w, cl->h + TITLE_H, 0, 0, 0, 0.35f, sw, sh); /* shadow */
+            solid(cl->x, cl->y - TITLE_H, cl->w, TITLE_H,
+                  cl->color[0] * dim, cl->color[1] * dim, cl->color[2] * dim, 1, sw, sh);
+        }
         struct buffer *b = &cl->buf[cl->current];
         glUseProgram(C.prog_tex);
         glActiveTexture(GL_TEXTURE0);
@@ -517,9 +527,11 @@ static void draw(void)
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         glEnable(GL_BLEND);
     }
-    /* Pointer, so mouse and touch are visible. */
-    glUseProgram(C.prog_solid);
-    solid(C.px - 6, C.py - 6, 12, 12, 1, 1, 1, 0.9f, sw, sh);
+    /* Pointer, so mouse and touch are visible; a desktop on top draws its own. */
+    if (top < 0 || !C.clients[top]->desktop) {
+        glUseProgram(C.prog_solid);
+        solid(C.px - 6, C.py - 6, 12, 12, 1, 1, 1, 0.9f, sw, sh);
+    }
 }
 
 /*

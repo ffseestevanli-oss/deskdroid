@@ -99,9 +99,14 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             stats.text = "The native compositor couldn't start on this GPU."
             return
         }
-        startApp("Light app", "640x420", 16)
-        startApp("Heavy app", "900x600", 1024)
-        startQtApp()
+        if (File(applicationInfo.nativeLibraryDir, "libkwin_wayland.so").exists()) {
+            // Stage 3: KWin is the desktop, fullscreen on the compositor.
+            startKWin()
+        } else {
+            startApp("Light app", "640x420", 16)
+            startApp("Heavy app", "900x600", 1024)
+            startQtApp()
+        }
         main.post(tick)
     }
 
@@ -142,7 +147,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         try {
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
-                QtHost::class.java.name, libs, "-platform", "deskdroid"
+                QtHost::class.java.name, libs, exe.name, "-platform", "deskdroid"
             ).redirectErrorStream(true).also { pb ->
                 pb.environment().apply {
                     remove("LD_PRELOAD")
@@ -173,6 +178,84 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             qtStatus = "Qt demo: couldn't start: $e"
             AppLog.i("Native desktop test: couldn't start the Qt demo: $e")
         }
+    }
+
+    /**
+     * Stage 3: KWin (built by native/plasma) with DeskDroid's nativedesk
+     * backend, which shows its desktop fullscreen on the compositor. Runs in
+     * QtHost like the Qt demo; its data (keyboard layouts...) ships zipped as
+     * libkwin_data.so and is unpacked once per app version.
+     */
+    private fun startKWin() {
+        val libs = applicationInfo.nativeLibraryDir
+        val data = File(filesDir, "kwin")
+        qtStatus = "KWin: starting"
+        try {
+            unpackKWinData(File(libs, "libkwin_data.so"), data)
+            val runtime = File(cacheDir, "runtime").apply { mkdirs(); setReadable(true, true); setWritable(true, true); setExecutable(true, true) }
+            val fonts = File(data, "fonts.conf").apply {
+                writeText("<?xml version=\"1.0\"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n" +
+                    "  <cachedir>${File(cacheDir, "fontconfig").path}</cachedir>\n</fontconfig>\n")
+            }
+            // Plasma's usual size on a phone: about twice the panel's pixels.
+            val scale = (resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4.0
+            val p = ProcessBuilder(
+                "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
+                QtHost::class.java.name, libs, "libkwin_wayland.so",
+                "--nativedesk", "--scale", scale.toString(), "--socket", "wayland-0"
+            ).redirectErrorStream(true).also { pb ->
+                pb.environment().apply {
+                    remove("LD_PRELOAD")
+                    put("CLASSPATH", applicationInfo.sourceDir)
+                    put("LD_LIBRARY_PATH", libs)
+                    put("HOME", filesDir.path)
+                    put("TMPDIR", cacheDir.path)
+                    put("XDG_RUNTIME_DIR", runtime.path)
+                    put("XDG_DATA_DIRS", File(data, "share").path)
+                    put("XDG_CONFIG_HOME", File(filesDir, "config").path)
+                    put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
+                    put("FONTCONFIG_FILE", fonts.path)
+                    put("QT_QPA_FONTDIR", "/system/fonts")
+                    put("KWIN_COMPOSE", "Q") // QPainter: the backend draws on the CPU for now
+                }
+            }.start()
+            apps += p
+            qtStatus = "KWin: running"
+            Thread {
+                p.inputStream.bufferedReader().forEachLine {
+                    AppLog.i("[kwin] $it")
+                    synchronized(qtLines) {
+                        qtLines.addLast(it.take(160))
+                        while (qtLines.size > 14) qtLines.removeFirst()
+                    }
+                }
+                val code = p.waitFor()
+                qtStatus = "KWin: exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
+                AppLog.i("[kwin] exited ($code)")
+            }.apply { isDaemon = true }.start()
+        } catch (e: Exception) {
+            qtStatus = "KWin: couldn't start: $e"
+            AppLog.i("Native desktop test: couldn't start KWin: $e")
+        }
+    }
+
+    private fun unpackKWinData(zip: File, dest: File) {
+        val stamp = File(dest, ".version")
+        val version = packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString()
+        if (stamp.exists() && stamp.readText() == version) return
+        dest.deleteRecursively()
+        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { z ->
+            while (true) {
+                val e = z.nextEntry ?: break
+                val out = File(dest, e.name)
+                if (!out.canonicalPath.startsWith(dest.canonicalPath + File.separator)) continue
+                if (e.isDirectory) out.mkdirs() else {
+                    out.parentFile?.mkdirs()
+                    out.outputStream().use { z.copyTo(it) }
+                }
+            }
+        }
+        stamp.writeText(version)
     }
 
     private fun stopApps() {

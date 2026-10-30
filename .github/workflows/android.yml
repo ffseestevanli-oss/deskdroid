@@ -46,6 +46,25 @@ jobs:
           fi
           echo "DESKDROID_QT_ANDROID=$HOME/Qt/6.8.3/android_arm64_v8a" >> "$GITHUB_ENV"
           echo "DESKDROID_QT_HOST=$HOME/Qt/6.8.3/gcc_64" >> "$GITHUB_ENV"
+      # Stage 3: DeskDroid's own Qt with KWin, from the Native Plasma deps
+      # workflow's cache (plasma.yml; same paths, or the cache doesn't match).
+      # When it has KWin, the APK uses that Qt and bundles KWin.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/plasma-prefix
+            ~/.cache/deskdroid/plasma
+          key: plasma-deps-apk-${{ github.run_id }}
+          restore-keys: plasma-deps-
+      - name: Use DeskDroid's own Qt and KWin when built
+        run: |
+          if [ -e ~/plasma-prefix/lib/libkwin_wayland.so ]; then
+            sudo apt-get install -y -q patchelf zip
+            echo "DESKDROID_QT_ANDROID=$HOME/plasma-prefix" >> "$GITHUB_ENV"
+            echo "Bundling KWin with DeskDroid's own Qt"
+          else
+            echo "No KWin build in the cache yet: Qt's prebuilt libraries, no KWin"
+          fi
       - uses: actions/cache@v4
         with:
           path: |

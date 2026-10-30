@@ -7,7 +7,9 @@
  * abstract namespace (NDESK_SOCKET), one message per packet:
  *
  *   app -> compositor
- *     HELLO   window size and title; the compositor answers CONFIGURE
+ *     HELLO   window size and title; the compositor answers CONFIGURE.
+ *             A size of 0x0 asks for the whole screen with no title bar:
+ *             a desktop such as KWin, which draws its own windows
  *     BUFFER  announces buffer <id>; the next packet is the AHardwareBuffer
  *             itself (AHardwareBuffer_sendHandleToUnixSocket)
  *     COMMIT  show buffer <id>; if has_fence, the packet carries one fd, an
@@ -16,7 +18,7 @@
  *             OpenGL's default framebuffer orientation gives). The window
  *             takes the buffer's size, so resizing is committing a new size.
  *   compositor -> app
- *     CONFIGURE  the window's id
+ *     CONFIGURE  the window's id, and the screen size for a 0x0 HELLO
  *     RELEASE    the compositor no longer reads buffer <id>
  *     FRAME      draw the next frame now (pacing, like wl_surface.frame).
  *                The compositor queues up to two commits and shows one per
@@ -60,7 +62,7 @@ struct ndesk_msg {
         struct { uint32_t version, width, height; char title[NDESK_TITLE_MAX]; } hello;
         struct { uint32_t id; } buffer;
         struct { uint32_t id, has_fence, y_invert; } commit;
-        struct { uint32_t window; } configure;
+        struct { uint32_t window, width, height; } configure;
         struct { uint32_t id; } release;
         struct { uint64_t time_ns; } frame;
         struct { float x, y; uint32_t buttons, inside; } pointer;

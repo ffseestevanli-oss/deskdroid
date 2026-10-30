@@ -3,14 +3,15 @@ package io.deskdroid.app
 import java.io.File
 
 /**
- * Runs the native desktop test's Qt demo (native/nativedesk/qt) in its own
- * app_process, started by NativeDeskActivity. Qt for Android expects a Java VM
+ * Runs a Qt program of the native desktop test (the Qt demo in
+ * native/nativedesk/qt, or KWin) in its own app_process, started by
+ * NativeDeskActivity. The program is a library with a QtHost.run() entry point. Qt for Android expects a Java VM
  * with its Java side (Qt6Android.jar, bundled in builds made with Qt): QtCore's
  * JNI_OnLoad registers natives on those classes and asks QtNative for a class
  * loader. There is no Activity, so Qt sees no Android Context; its windows go
  * to the nativedesk compositor through DeskDroid's own platform plugin.
  *
- *   app_process / io.deskdroid.app.QtHost <nativeLibraryDir> [Qt arguments]
+ *   app_process / io.deskdroid.app.QtHost <nativeLibraryDir> <program.so> [arguments]
  */
 object QtHost {
     @JvmStatic external fun run(args: Array<String>): Int
@@ -23,9 +24,27 @@ object QtHost {
         load(File(libs, "libc++_shared.so"))
         load(File(libs, "libQt6Core_arm64-v8a.so"))
         loadInAnyOrder(File(libs).listFiles { f -> f.name.startsWith("libQt6") }.orEmpty().sortedBy { it.name })
-        load(File(libs, "libnativedesk_qt.so"))
-        println("QtHost: libraries loaded, starting Qt")
-        System.exit(run(args.copyOfRange(1, args.size)))
+        loadWithDependencies(File(libs, args[1]))
+        println("QtHost: libraries loaded, starting ${args[1]}")
+        System.exit(run(args.copyOfRange(2, args.size)))
+    }
+
+    /**
+     * Loads a library after whatever it needs from the same directory, found
+     * from the linker's own "library ... not found" errors.
+     */
+    private fun loadWithDependencies(lib: File, tried: MutableSet<String> = mutableSetOf()) {
+        while (true) {
+            try {
+                load(lib)
+                return
+            } catch (e: UnsatisfiedLinkError) {
+                val missing = Regex("library \"([^\"]+)\" not found").find(e.message.orEmpty())?.groupValues?.get(1)
+                val dep = missing?.let { File(lib.parentFile, it) }
+                if (dep == null || !dep.exists() || !tried.add(dep.name)) throw e
+                loadWithDependencies(dep, tried)
+            }
+        }
     }
 
     /** Loads one library, saying so first: a crash while loading prints nothing else. */

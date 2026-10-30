@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Adds the nativedesk backend to a KWin source tree: copies the backend in as
-src/backends/nativedesk and gives kwin_wayland a --nativedesk option."""
+src/backends/nativedesk, gives kwin_wayland a --nativedesk option, and builds
+kwin_wayland as a library that DeskDroid's QtHost starts (qthost_entry.cpp)."""
 import pathlib
 import shutil
 import sys
@@ -42,3 +43,12 @@ edit(m, "    case BackendType::Virtual: {\n",
      "        a.setOutputBackend(std::make_unique<KWin::NativeDeskBackend>(initialWindowSize, outputScale));\n"
      "        break;\n"
      "    case BackendType::Virtual: {\n")
+
+# kwin_wayland as a library with a JNI entry point, since Qt for Android needs
+# a Java VM: QtHost loads it into an app_process and calls QtHost.run().
+edit("src/CMakeLists.txt", "add_executable(kwin_wayland main_wayland.cpp)",
+     "add_library(kwin_wayland SHARED main_wayland.cpp)\n"
+     "set_target_properties(kwin_wayland PROPERTIES CXX_VISIBILITY_PRESET default)")
+edit(m, "int main(int argc, char *argv[])", "int kwinMain(int argc, char *argv[])")
+p = kwin / m
+p.write_text(p.read_text() + "\n" + (here / "qthost_entry.cpp").read_text())

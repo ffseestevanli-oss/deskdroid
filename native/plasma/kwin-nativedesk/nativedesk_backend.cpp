@@ -362,13 +362,21 @@ bool NativeDeskBackend::initialize()
         qWarning("nativedesk: can't reach the DeskDroid compositor");
         return false;
     }
+    // 0x0: the whole screen, no title bar. The answer says how big that is.
     ndesk_msg m = {};
     m.op = NDESK_HELLO;
     m.hello.version = NDESK_VERSION;
-    m.hello.width = m_size.width();
-    m.hello.height = m_size.height();
     snprintf(m.hello.title, NDESK_TITLE_MAX, "KWin");
     send(m);
+    pollfd p = {m_fd, POLLIN, 0};
+    if (poll(&p, 1, 5000) <= 0 || recv(m_fd, &m, sizeof m, 0) != sizeof m || m.op != NDESK_CONFIGURE) {
+        qWarning("nativedesk: the compositor didn't answer");
+        return false;
+    }
+    if (m.configure.width && m.configure.height) {
+        m_size = QSize(m.configure.width, m.configure.height);
+    }
+    qInfo("nativedesk: screen %dx%d at scale %.2f", m_size.width(), m_size.height(), m_scale);
     m_notifier = new QSocketNotifier(m_fd, QSocketNotifier::Read);
     connect(m_notifier, &QSocketNotifier::activated, this, &NativeDeskBackend::readMessages);
 

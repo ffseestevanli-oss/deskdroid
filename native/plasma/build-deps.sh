@@ -186,6 +186,14 @@ build_hwdata() {
   (cd "$s" && ./configure --prefix="$PREFIX" --datadir="$PREFIX/share" && make install)
 }
 
+# The keyboard layouts xkbcommon compiles keymaps from (data only). The app
+# ships them and points XKB_CONFIG_ROOT at its copy.
+build_xkeyboard_config() {
+  local s; s="$(unpack https://xorg.freedesktop.org/archive/individual/data/xkeyboard-config/xkeyboard-config-2.44.tar.xz xkeyboard-config-2.44.tar.xz)"
+  meson setup "$s/_build" "$s" --prefix="$PREFIX" -Dxorg-rules-symlinks=false -Dcompat-rules=true
+  ninja -C "$s/_build" install
+}
+
 # libxcb: KWin includes <xcb/xcb.h> for its types even without X11 support.
 XORG=https://xorg.freedesktop.org/archive/individual
 build_xorgproto() {
@@ -458,7 +466,7 @@ build_kwin() {
 }
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
-     libdisplay_info freetype fontconfig udev mtdev libevdev libinput xorgproto xcb_proto libxau libxcb gbm
+     libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
      qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
