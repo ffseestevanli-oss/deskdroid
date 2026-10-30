@@ -59,7 +59,7 @@ cpu = 'armv8-a'
 endian = 'little'
 EOF
 cat > "$WORK/native.ini" <<EOF
-[properties]
+[built-in options]
 pkg_config_path = '$HOSTPREFIX/lib/pkgconfig:$HOSTPREFIX/share/pkgconfig'
 EOF
 export PATH="$HOSTPREFIX/bin:$PATH"
@@ -211,6 +211,8 @@ build_mtdev() {
 
 build_libevdev() {
   local s; s="$(unpack https://www.freedesktop.org/software/libevdev/libevdev-1.13.4.tar.xz libevdev-1.13.4.tar.xz)"
+  # Android's kernel headers are Linux's: use libevdev's Linux copies.
+  sed -i "s/host_machine.system()/'linux'/g" "$s/meson.build"
   meson_cross "$s" -Dtests=disabled -Ddocumentation=disabled -Dtools=disabled
 }
 
