@@ -106,7 +106,7 @@ cmake_cross() { # <src> [options...]
     -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-$API -DANDROID_STL=c++_shared \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_FIND_ROOT_PATH="$PREFIX" -DCMAKE_PREFIX_PATH="$PREFIX" "$@"
-  cmake --build "$src/_android" -j "$JOBS" ${KEEP_GOING:+-- -k 0}
+  cmake --build "$src/_android" -j "$JOBS"
   cmake --install "$src/_android"
 }
 autotools_cross() { # <src> [configure options...]
@@ -184,6 +184,25 @@ build_libxcvt() {
 build_hwdata() {
   local s; s="$(unpack https://github.com/vcrhonek/hwdata/archive/refs/tags/v0.400.tar.gz hwdata-0.400.tar.gz)"
   (cd "$s" && ./configure --prefix="$PREFIX" --datadir="$PREFIX/share" && make install)
+}
+
+# libxcb: KWin includes <xcb/xcb.h> for its types even without X11 support.
+XORG=https://xorg.freedesktop.org/archive/individual
+build_xorgproto() {
+  local s; s="$(unpack $XORG/proto/xorgproto-2024.1.tar.xz xorgproto-2024.1.tar.xz)"
+  meson_cross "$s" -Dlegacy=false
+}
+build_xcb_proto() { # protocol XML and its Python generator, for the build machine
+  local s; s="$(unpack $XORG/proto/xcb-proto-1.17.0.tar.xz xcb-proto-1.17.0.tar.xz)"
+  (cd "$s" && ./configure --prefix="$PREFIX" && make install)
+}
+build_libxau() {
+  local s; s="$(unpack $XORG/lib/libXau-1.0.12.tar.xz libXau-1.0.12.tar.xz)"
+  autotools_cross "$s" --disable-static
+}
+build_libxcb() {
+  local s; s="$(unpack $XORG/lib/libxcb-1.17.0.tar.xz libxcb-1.17.0.tar.xz)"
+  autotools_cross "$s" --disable-static --disable-devel-docs --without-doxygen
 }
 
 build_libdisplay_info() {
@@ -323,7 +342,7 @@ kde_cmake() {
     -DKF6_HOST_TOOLING="$HOSTPREFIX/lib/cmake" -DKF_IGNORE_PLATFORM_CHECK=ON \
     -DWayland_DATADIR="$HOSTPREFIX/share/wayland" -DWaylandProtocols_DATADIR="$PREFIX/share/wayland-protocols" \
     -DSKIP_APPSTREAM=ON -DBUILD_TESTING=OFF -DBUILD_QCH=OFF -DBUILD_PYTHON_BINDINGS=OFF -DBUILD_DESIGNERPLUGIN=OFF "$@"
-  cmake --build "$src/_android" -j "$JOBS"
+  cmake --build "$src/_android" -j "$JOBS" ${KEEP_GOING:+-- -k 0}
   cmake --install "$src/_android"
 }
 # KDE's Android support is for Android apps (Java UI, Gradle, no D-Bus, no
@@ -435,7 +454,7 @@ build_kwin() {
 }
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
-     libdisplay_info freetype fontconfig udev mtdev libevdev libinput gbm
+     libdisplay_info freetype fontconfig udev mtdev libevdev libinput xorgproto xcb_proto libxau libxcb gbm
      qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
