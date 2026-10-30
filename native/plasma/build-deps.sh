@@ -253,11 +253,15 @@ qt_module() { # <module> [cmake options...]: one module on top of qtbase
 build_qtbase() {
   : "${QT_HOST_PATH:?set QT_HOST_PATH to a desktop Qt $QT_VERSION}"
   local s; s="$(qt_src qtbase)"
+  # Qt only looks for Wayland on Linux; KWin's Qt needs it (QtWaylandClient).
+  perl -0pi -e 's/if\(\(LINUX\) OR QT_FIND_ALL_PACKAGES_ALWAYS\)(\s*qt_find_package\(Wayland)/if((LINUX OR ANDROID) OR QT_FIND_ALL_PACKAGES_ALWAYS)$1/' \
+    "$s/src/gui/configure.cmake"
+  grep -q "LINUX OR ANDROID" "$s/src/gui/configure.cmake"
   mkdir -p "$s/_android"
   (cd "$s/_android" && PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" "$s/configure" \
     -platform android-clang -android-ndk "$NDK" -android-sdk "$ANDROID_HOME" -android-abis arm64-v8a \
     -android-ndk-platform android-$API -qt-host-path "$QT_HOST_PATH" -prefix "$PREFIX" \
-    -release -nomake tests -nomake examples -dbus-linked -feature-dbus -pkg-config -system-freetype -fontconfig \
+    -release -nomake tests -nomake examples -dbus-linked -feature-dbus -feature-wayland -pkg-config -system-freetype -fontconfig \
     -- $(qt_find_args) -DQT_FEATURE_vulkan=OFF)
   cmake --build "$s/_android" -j "$JOBS"
   cmake --install "$s/_android"
@@ -304,7 +308,15 @@ kde_cmake() {
   cmake --build "$src/_android" -j "$JOBS"
   cmake --install "$src/_android"
 }
-kf() { local s; s="$(kf_src "$1")"; shift; kde_cmake "$s" "$@"; }
+# KDE's Android support is for Android apps (Java UI, Gradle, no D-Bus, no
+# Wayland). Here KDE runs like on Linux, so drop those Android branches from
+# the build files; C++ code keeps its Q_OS_ANDROID parts.
+unandroid() {
+  find "$1" -name CMakeLists.txt -o -name '*.cmake' | xargs sed -i -E \
+    -e 's/(AND|OR) NOT ANDROID//g' -e 's/NOT ANDROID AND //g' \
+    -e 's/if ?\(ANDROID\)/if(FALSE)/g' -e 's/\(ANDROID OR /(/g' -e 's/ OR ANDROID//g'
+}
+kf() { local s; s="$(kf_src "$1")"; shift; unandroid "$s"; kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON "$@"; }
 
 build_ecm() {
   local s; s="$(kf_src extra-cmake-modules)"
@@ -326,20 +338,23 @@ build_libintl() {
   local s; s="$(unpack https://ftp.gnu.org/pub/gnu/gettext/gettext-0.22.5.tar.xz gettext-0.22.5.tar.xz)"
   autotools_cross "$s/gettext-runtime" --disable-static --disable-java --disable-csharp --disable-libasprintf \
     --with-included-gettext --disable-openmp --without-emacs
+  test -e "$PREFIX/lib/libintl.so" && test -e "$PREFIX/include/libintl.h"
 }
 
-build_karchive() { kf karchive -DWITH_BZIP2=OFF -DWITH_LIBLZMA=OFF -DWITH_LIBZSTD=OFF; }
+build_karchive() { kf karchive -DWITH_BZIP2=OFF -DWITH_LIBLZMA=OFF -DWITH_LIBZSTD=OFF -DWITH_OPENSSL=OFF; }
 build_kconfig() { kf kconfig; }
 build_kcoreaddons() { kf kcoreaddons -DUSE_DBUS=ON; }
-build_ki18n() { kf ki18n -DBUILD_WITH_QML=ON; }
+build_ki18n() {
+  kf ki18n -DBUILD_WITH_QML=ON -DLibIntl_INCLUDE_DIRS="$PREFIX/include" -DLibIntl_LIBRARIES="$PREFIX/lib/libintl.so"
+}
 build_kwidgetsaddons() { kf kwidgetsaddons; }
-build_kguiaddons() { kf kguiaddons -DWITH_WAYLAND=ON -DWITH_X11=OFF -DBUILD_GEO_SCHEME_HANDLER=OFF; }
-build_kwindowsystem() { kf kwindowsystem -DKWINDOWSYSTEM_WAYLAND=ON -DKWINDOWSYSTEM_X11=OFF; }
+build_kguiaddons() { kf kguiaddons -DWITH_WAYLAND=ON -DBUILD_GEO_SCHEME_HANDLER=OFF; }
+build_kwindowsystem() { kf kwindowsystem -DKWINDOWSYSTEM_WAYLAND=ON -DKWINDOWSYSTEM_X11=OFF; }  # after the Qt fixes
 build_kdbusaddons() { kf kdbusaddons; }
 build_kcolorscheme() { kf kcolorscheme; }
-build_kidletime() { kf kidletime -DWITH_X11=OFF; }
+build_kidletime() { kf kidletime; }
 build_kauth() { kf kauth -DKAUTH_BACKEND_NAME=FAKE; }
-build_kcrash() { kf kcrash -DWITH_X11=OFF; }
+build_kcrash() { kf kcrash; }
 build_kglobalaccel() { kf kglobalaccel; }
 build_kpackage() { kf kpackage; }
 build_kservice() { kf kservice; }

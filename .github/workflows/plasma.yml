@@ -24,7 +24,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q bison flex gperf autoconf automake libtool libexpat1-dev pkg-config
+          sudo apt-get install -y -q bison flex gperf autoconf automake libtool libexpat1-dev pkg-config libegl1 libgl1 libopengl0 libxkbcommon0 libfontconfig1
           pipx install meson==1.12.1 && pipx install ninja
       - name: Install the pinned NDK
         run: >
