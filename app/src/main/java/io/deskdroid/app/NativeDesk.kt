@@ -43,11 +43,15 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private val apps = mutableListOf<Process>()
     private val main = Handler(Looper.getMainLooper())
     private var started = false
+    // The Qt demo's last output lines, shown in the overlay so its errors are visible.
+    private val qtLines = ArrayDeque<String>()
+    @Volatile private var qtStatus = "Qt demo: not in this build"
 
     private val tick = object : Runnable {
         override fun run() {
             if (started) stats.text = NativeDesk.nativeStats().ifEmpty { "Starting…" } +
-                "\nDrag title bars to move windows. + and - on a keyboard change the load."
+                "\n$qtStatus\n" + synchronized(qtLines) { qtLines.joinToString("\n") } +
+                "\n\nDrag title bars to move windows. + and - on a keyboard change the load."
             main.postDelayed(this, 500)
         }
     }
@@ -129,6 +133,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         val libs = applicationInfo.nativeLibraryDir
         val exe = File(libs, "libnativedesk_qt.so")
         if (!exe.exists()) return
+        qtStatus = "Qt demo: starting"
         try {
             val p = ProcessBuilder(exe.path, "-platform", "deskdroid").redirectErrorStream(true).also { pb ->
                 pb.environment().apply {
@@ -141,11 +146,21 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 }
             }.start()
             apps += p
+            qtStatus = "Qt demo: running"
             Thread {
-                p.inputStream.bufferedReader().forEachLine { AppLog.i("[nativedesk-qt] $it") }
-                AppLog.i("[nativedesk-qt] exited (${p.waitFor()})")
+                p.inputStream.bufferedReader().forEachLine {
+                    AppLog.i("[nativedesk-qt] $it")
+                    synchronized(qtLines) {
+                        qtLines.addLast(it.take(160))
+                        while (qtLines.size > 8) qtLines.removeFirst()
+                    }
+                }
+                val code = p.waitFor()
+                qtStatus = "Qt demo: exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
+                AppLog.i("[nativedesk-qt] exited ($code)")
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
+            qtStatus = "Qt demo: couldn't start: $e"
             AppLog.i("Native desktop test: couldn't start the Qt demo: $e")
         }
     }

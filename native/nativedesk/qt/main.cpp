@@ -18,7 +18,9 @@
 #include <QtGui/QSurfaceFormat>
 #include <QtOpenGL/QOpenGLWindow>
 #include <cmath>
+#include <csignal>
 #include <cstdio>
+#include <unistd.h>
 
 Q_IMPORT_PLUGIN(DeskDroidIntegrationPlugin)
 
@@ -135,11 +137,31 @@ private:
     QPointF m_pointer { -100, -100 };
 };
 
+// Qt for Android logs to logcat; send it to stderr, which DeskDroid shows and logs.
+void logToStderr(QtMsgType type, const QMessageLogContext &, const QString &msg)
+{
+    static const char *const kinds[] = { "debug", "warning", "critical", "fatal", "info" };
+    fprintf(stderr, "qt %s: %s\n", type <= QtInfoMsg ? kinds[type] : "?", qPrintable(msg));
+}
+
+void onCrash(int sig)
+{
+    char line[64];
+    int n = snprintf(line, sizeof line, "crashed with signal %d\n", sig);
+    write(STDERR_FILENO, line, n);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
 } // namespace
 
 int main(int argc, char **argv)
 {
     setvbuf(stdout, nullptr, _IOLBF, 0);
+    setvbuf(stderr, nullptr, _IOLBF, 0);
+    for (int sig : { SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE }) signal(sig, onCrash);
+    qInstallMessageHandler(logToStderr);
+    printf("starting Qt %s\n", qVersion());
     QSurfaceFormat fmt;
     fmt.setRenderableType(QSurfaceFormat::OpenGLES);
     fmt.setVersion(3, 0);
