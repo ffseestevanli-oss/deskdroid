@@ -136,6 +136,8 @@ build_wayland() {
     -Dlibraries=false -Ddocumentation=false -Ddtd_validation=false -Dtests=false
   ninja -C "$s/_host" install
   meson_cross "$s" -Dscanner=false -Ddocumentation=false -Ddtd_validation=false -Dtests=false
+  # Builds against the Android prefix look up wayland.xml through wayland-scanner.pc.
+  cp "$(find "$HOSTPREFIX" -name wayland-scanner.pc | head -1)" "$PREFIX/lib/pkgconfig/"
 }
 
 build_wayland_protocols() {
@@ -347,7 +349,13 @@ build_karchive() { kf karchive -DWITH_BZIP2=OFF -DWITH_LIBLZMA=OFF -DWITH_LIBZST
 build_kconfig() { kf kconfig; }
 build_kcoreaddons() { kf kcoreaddons -DUSE_DBUS=ON; }
 build_ki18n() {
-  kf ki18n -DBUILD_WITH_QML=ON -DLibIntl_INCLUDE_DIRS="$PREFIX/include" -DLibIntl_LIBRARIES="$PREFIX/lib/libintl.so"
+  local s; s="$(kf_src ki18n)"
+  # Android apps' translations come from APK assets through a function KDE's
+  # Android gettext adds; ours come from files like on Linux.
+  sed -i 's/^\( *\)loadMessageCatalogFile(domain, moFile);/\1(void)domain;/' "$s/src/i18n/kcatalog.cpp"
+  grep -q "(void)domain;" "$s/src/i18n/kcatalog.cpp"
+  unandroid "$s"
+  kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DBUILD_WITH_QML=ON -DLibIntl_INCLUDE_DIRS="$PREFIX/include" -DLibIntl_LIBRARIES="$PREFIX/lib/libintl.so"
 }
 build_kwidgetsaddons() { kf kwidgetsaddons; }
 build_kguiaddons() { kf kguiaddons -DWITH_WAYLAND=ON -DBUILD_GEO_SCHEME_HANDLER=OFF; }
