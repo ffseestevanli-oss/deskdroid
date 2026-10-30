@@ -261,7 +261,6 @@ build_qtbase() {
   cmake --install "$s/_android"
 }
 
-build_qtshadertools() { qt_module qtshadertools; }
 build_qtdeclarative() { qt_module qtdeclarative; }
 build_qtsvg() { qt_module qtsvg; }
 build_qt5compat() { qt_module qt5compat; }
@@ -274,9 +273,82 @@ build_qttools() {
     -DFEATURE_distancefieldgenerator=OFF -DFEATURE_qtattributionsscanner=OFF -DFEATURE_qev=OFF
 }
 
+# ---- KDE Frameworks and Plasma libraries (stage 3c) ------------------------
+
+KF_VERSION=6.16.0
+PLASMA_VERSION=6.4.5
+kf_src() { # <name>: a framework's source
+  unpack "https://download.kde.org/stable/frameworks/${KF_VERSION%.*}/$1-$KF_VERSION.tar.xz" "$1-$KF_VERSION.tar.xz"
+}
+# kde_cmake <src> [options...]: a KDE project for Android, through Qt's
+# toolchain file, with build tools (kconfig_compiler...) from the host builds.
+kde_cmake() {
+  local src="$1"; shift
+  PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" \
+  cmake -S "$src" -B "$src/_android" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_TOOLCHAIN_FILE="$PREFIX/lib/cmake/Qt6/qt.toolchain.cmake" -DQT_HOST_PATH="$QT_HOST_PATH" \
+    -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib $(qt_find_args) \
+    -DKF6_HOST_TOOLING="$HOSTPREFIX/lib/cmake" -DKF_IGNORE_PLATFORM_CHECK=ON \
+    -DBUILD_TESTING=OFF -DBUILD_QCH=OFF -DBUILD_PYTHON_BINDINGS=OFF -DBUILD_DESIGNERPLUGIN=OFF "$@"
+  cmake --build "$src/_android" -j "$JOBS"
+  cmake --install "$src/_android"
+}
+kf() { local s; s="$(kf_src "$1")"; shift; kde_cmake "$s" "$@"; }
+
+build_ecm() {
+  local s; s="$(kf_src extra-cmake-modules)"
+  cmake -S "$s" -B "$s/_host" -DCMAKE_INSTALL_PREFIX="$PREFIX" -DBUILD_TESTING=OFF -DBUILD_DOC=OFF
+  cmake --install "$s/_host"
+}
+
+# kconfig's build tools (kconfig_compiler_kf6, kconf_update), for the host.
+build_kconfig_host() {
+  local s; s="$(kf_src kconfig)"
+  cmake -S "$s" -B "$s/_host" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_HOST_PATH;$PREFIX" \
+    -DCMAKE_INSTALL_PREFIX="$HOSTPREFIX" -DBUILD_TESTING=OFF -DBUILD_QCH=OFF -DKCONFIG_USE_GUI=OFF -DKCONFIG_USE_QML=OFF
+  cmake --build "$s/_host" -j "$JOBS"
+  cmake --install "$s/_host"
+}
+
+# libintl for ki18n: Android's libc has no gettext.
+build_libintl() {
+  local s; s="$(unpack https://ftp.gnu.org/pub/gnu/gettext/gettext-0.22.5.tar.xz gettext-0.22.5.tar.xz)"
+  autotools_cross "$s/gettext-runtime" --disable-static --disable-java --disable-csharp --disable-libasprintf \
+    --with-included-gettext --disable-openmp --without-emacs
+}
+
+build_karchive() { kf karchive -DWITH_BZIP2=OFF -DWITH_LIBLZMA=OFF -DWITH_LIBZSTD=OFF; }
+build_kconfig() { kf kconfig; }
+build_kcoreaddons() { kf kcoreaddons -DUSE_DBUS=ON; }
+build_ki18n() { kf ki18n -DBUILD_WITH_QML=ON; }
+build_kwidgetsaddons() { kf kwidgetsaddons; }
+build_kguiaddons() { kf kguiaddons -DWITH_WAYLAND=ON -DWITH_X11=OFF -DBUILD_GEO_SCHEME_HANDLER=OFF; }
+build_kwindowsystem() { kf kwindowsystem -DKWINDOWSYSTEM_WAYLAND=ON -DKWINDOWSYSTEM_X11=OFF; }
+build_kdbusaddons() { kf kdbusaddons; }
+build_kcolorscheme() { kf kcolorscheme; }
+build_kidletime() { kf kidletime -DWITH_X11=OFF; }
+build_kauth() { kf kauth -DKAUTH_BACKEND_NAME=FAKE; }
+build_kcrash() { kf kcrash -DWITH_X11=OFF; }
+build_kglobalaccel() { kf kglobalaccel; }
+build_kpackage() { kf kpackage; }
+build_kservice() { kf kservice; }
+build_ksvg() { kf ksvg; }
+
+build_plasma_wayland_protocols() {
+  local s; s="$(unpack https://download.kde.org/stable/plasma-wayland-protocols/plasma-wayland-protocols-1.18.0.tar.xz plasma-wayland-protocols-1.18.0.tar.xz)"
+  kde_cmake "$s"
+}
+build_kdecoration() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kdecoration-$PLASMA_VERSION.tar.xz" "kdecoration-$PLASMA_VERSION.tar.xz")"
+  kde_cmake "$s"
+}
+
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput
-     qtbase qtshadertools qtdeclarative qtsvg qt5compat qtsensors qtwayland qttools)
+     qtbase qtdeclarative qtsvg qt5compat qtsensors qtwayland qttools
+     ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
+     kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice ksvg
+     plasma_wayland_protocols kdecoration)
 
 failed=()
 for pkg in "${@:-${ALL[@]}}"; do

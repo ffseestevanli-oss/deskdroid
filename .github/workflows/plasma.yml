@@ -64,5 +64,5 @@ jobs:
         if: always()
         run: |
           ls ~/plasma-prefix/stamps
-          ls ~/plasma-prefix/lib | head -100
+          ls ~/plasma-prefix/lib | grep -E '^lib(Qt6(DBus|WaylandClient|Quick|UiTools)|KF6|kdecoration)' || true
           du -sh ~/plasma-prefix
