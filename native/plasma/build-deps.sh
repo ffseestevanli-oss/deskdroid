@@ -367,7 +367,7 @@ for pkg in "${@:-${ALL[@]}}"; do
   pkg="${pkg//-/_}"
   # The stamp holds the recipe's hash, so a changed recipe builds again.
   # Everything after qtbase is built against it, so a new qtbase rebuilds them.
-  recipe="$( { declare -f "build_$pkg"; [ "$after_qtbase" = 1 ] && cat "$STAMPS/qtbase" 2>/dev/null; } | sha256sum | cut -c1-16)"
+  recipe="$( { declare -f "build_$pkg"; if [ "$after_qtbase" = 1 ]; then cat "$STAMPS/qtbase" 2>/dev/null || true; fi; } | sha256sum | cut -c1-16)"
   [ "$pkg" = qtbase ] && after_qtbase=1
   if [ "$(cat "$STAMPS/$pkg" 2>/dev/null)" = "$recipe" ]; then echo "== $pkg: already built"; continue; fi
   echo "== $pkg"
