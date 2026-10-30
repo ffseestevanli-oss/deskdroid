@@ -36,6 +36,7 @@
 #include <qpa/qplatformbackingstore.h>
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformintegrationplugin.h>
+#include <qpa/qplatformnativeinterface.h>
 #include <qpa/qplatformopenglcontext.h>
 #include <qpa/qplatformscreen.h>
 #include <qpa/qplatformwindow.h>
@@ -497,11 +498,14 @@ public:
     QPlatformBackingStore *createPlatformBackingStore(QWindow *w) const override { return new BackingStore(w); }
     QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *ctx) const override { return new GLContext(ctx); }
     QAbstractEventDispatcher *createEventDispatcher() const override { return new QEventDispatcherUNIX; }
+    // Qt's OpenGL code on Android asks it for "AndroidDeviceName" without a null check.
+    QPlatformNativeInterface *nativeInterface() const override { return &m_native; }
     // Android's own fonts, found through QT_QPA_FONTDIR=/system/fonts.
     QPlatformFontDatabase *fontDatabase() const override { return &m_fonts; }
 
 private:
     mutable QFreeTypeFontDatabase m_fonts;
+    mutable QPlatformNativeInterface m_native;
 };
 
 } // namespace

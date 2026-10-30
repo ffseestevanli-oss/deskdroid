@@ -190,6 +190,12 @@ int main(int argc, char **argv)
     fmt.setStencilBufferSize(8);
     QSurfaceFormat::setDefaultFormat(fmt);
 
+    // Qt for Android reaches for the Java VM in a few places, and this process
+    // has none (any JNI call crashes). Startup asks Android for the app version
+    // unless one is set, and the shader disk cache asks for the cache folder.
+    QCoreApplication::setApplicationVersion(QStringLiteral("1"));
+    QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
+
     QGuiApplication app(argc, argv);
     printf("Qt %s started on platform %s\n", qVersion(), qPrintable(QGuiApplication::platformName()));
     QFont font(QStringLiteral("Roboto"));
