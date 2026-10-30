@@ -112,12 +112,14 @@ static PFNEGLWAITSYNCKHRPROC pWaitSync;
 static PFNEGLDESTROYSYNCKHRPROC pDestroySync;
 static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC pImageTargetTexture;
 
-static uint64_t now_ns(void)
+static uint64_t clock_ns(clockid_t id)
 {
     struct timespec t;
-    clock_gettime(CLOCK_MONOTONIC, &t);
+    clock_gettime(id, &t);
     return (uint64_t)t.tv_sec * 1000000000u + t.tv_nsec;
 }
+
+static uint64_t now_ns(void) { return clock_ns(CLOCK_MONOTONIC); }
 
 /* ---- GL ---- */
 
@@ -491,9 +493,27 @@ static void draw(void)
     solid(C.px - 6, C.py - 6, 12, 12, 1, 1, 1, 0.9f, sw, sh);
 }
 
-static void after_frame(void)
+/*
+ * Tells apps whose commit this frame latched to start their next one. Sent as
+ * soon as the frame is recorded, before the swap: the app then renders while
+ * the compositor waits for vsync, and its commit makes the next frame. Sending
+ * it after the swap left apps a frame behind, at half the refresh rate.
+ */
+static void send_frames(void)
 {
     uint64_t t = now_ns();
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        struct client *cl = C.clients[i];
+        if (!cl || !cl->wants_frame) continue;
+        struct ndesk_msg m = { .op = NDESK_FRAME, .frame = { t } };
+        send_msg(cl, &m);
+        cl->wants_frame = false;
+    }
+}
+
+/* Buffers replaced in a frame that is now queued for display go back to their apps. */
+static void send_releases(void)
+{
     for (int i = 0; i < MAX_CLIENTS; i++) {
         struct client *cl = C.clients[i];
         if (!cl) continue;
@@ -502,11 +522,6 @@ static void after_frame(void)
             send_msg(cl, &m);
         }
         cl->n_release = 0;
-        if (cl->wants_frame) {
-            struct ndesk_msg m = { .op = NDESK_FRAME, .frame = { t } };
-            send_msg(cl, &m);
-            cl->wants_frame = false;
-        }
     }
 }
 
@@ -570,13 +585,15 @@ static void *loop(void *unused)
         if (n_in) C.dirty = true;
 
         if (C.dirty) {
-            uint64_t t0 = now_ns();
+            /* Thread CPU time, so waiting for a free screen buffer or vsync doesn't count. */
+            uint64_t t0 = clock_ns(CLOCK_THREAD_CPUTIME_ID);
             draw();
-            draw_total += (now_ns() - t0) / 1e6;
+            send_frames();
             if (!eglSwapBuffers(C.dpy, C.surf)) LOGE("swap failed (0x%x)", eglGetError());
+            send_releases();
+            draw_total += (clock_ns(CLOCK_THREAD_CPUTIME_ID) - t0) / 1e6;
             C.dirty = false;
             frames++;
-            after_frame();
         }
         uint64_t t = now_ns();
         if (t - stat_start >= 1000000000u) {

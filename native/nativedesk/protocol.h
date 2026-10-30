@@ -15,8 +15,9 @@
  *   compositor -> app
  *     CONFIGURE  the window's id
  *     RELEASE    the compositor no longer reads buffer <id>
- *     FRAME      the frame with the app's last commit is on screen: draw the
- *                next one now (vsync pacing, like wl_surface.frame)
+ *     FRAME      the compositor has drawn the app's last commit into a frame
+ *                that is waiting for vsync: draw the next one now, it makes
+ *                the following vsync (pacing, like wl_surface.frame)
  *     POINTER    pointer position (window coordinates) and buttons
  *     KEY        Android key code, Unicode character, down/up
  *
