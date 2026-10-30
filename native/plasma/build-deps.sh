@@ -421,8 +421,9 @@ build_kwin() {
   python3 "$HERE/kwin-nativedesk/add-to-kwin.py" "$s"
   # Android is Linux underneath: /proc/self/exe, the same scheduler and so on.
   grep -rl --include=CMakeLists.txt 'CMAKE_SYSTEM_NAME MATCHES "Linux"' "$s" | xargs sed -i 's/CMAKE_SYSTEM_NAME MATCHES "Linux"/CMAKE_SYSTEM_NAME MATCHES "Linux|Android"/'
-  # The "kill this frozen window" helper is X11 only.
-  sed -i 's/^add_subdirectory(killer)/# add_subdirectory(killer)/' "$s/src/helpers/CMakeLists.txt"
+  # The "kill this frozen window" helper is X11 only, and the wrapper that
+  # restarts kwin_wayland after a crash is the Android app's job here.
+  sed -i 's/^add_subdirectory(/# add_subdirectory(/' "$s/src/helpers/CMakeLists.txt"
   # No sound theme to play the system bell with.
   sed -i 's/^find_package(Canberra REQUIRED)/find_package(Canberra)/' "$s/CMakeLists.txt"
   sed -i 's/^add_subdirectory(systembell)/# add_subdirectory(systembell)/' "$s/src/plugins/CMakeLists.txt"
