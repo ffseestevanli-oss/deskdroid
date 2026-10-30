@@ -127,7 +127,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     /**
      * Stage 2: an ordinary Qt app (native/nativedesk/qt) on the same compositor,
-     * through DeskDroid's own Qt platform plugin. Only in builds made with Qt.
+     * through DeskDroid's own Qt platform plugin, run by QtHost in its own
+     * app_process (Qt for Android needs a Java VM). Only in builds made with Qt.
      */
     private fun startQtApp() {
         val libs = applicationInfo.nativeLibraryDir
@@ -135,8 +136,13 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (!exe.exists()) return
         qtStatus = "Qt demo: starting"
         try {
-            val p = ProcessBuilder(exe.path, "-platform", "deskdroid").redirectErrorStream(true).also { pb ->
+            val p = ProcessBuilder(
+                "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
+                QtHost::class.java.name, libs, "-platform", "deskdroid"
+            ).redirectErrorStream(true).also { pb ->
                 pb.environment().apply {
+                    remove("LD_PRELOAD")
+                    put("CLASSPATH", applicationInfo.sourceDir)
                     put("LD_LIBRARY_PATH", libs)
                     put("QT_QPA_PLATFORM", "deskdroid")
                     put("QT_QPA_FONTDIR", "/system/fonts")

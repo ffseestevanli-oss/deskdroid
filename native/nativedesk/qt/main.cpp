@@ -1,6 +1,7 @@
 /*
- * Qt demo for the native desktop test, started by NativeDesk.kt as
- * libnativedesk_qt.so with -platform deskdroid. Two ordinary Qt windows:
+ * Qt demo for the native desktop test. NativeDesk.kt starts QtHost.kt in its
+ * own app_process, which loads this library (libnativedesk_qt.so) and calls
+ * QtHost.run(): Qt for Android needs a Java VM. Two ordinary Qt windows:
  *   - "Qt raster": QPainter in software (QRasterWindow), like Qt Widgets
  *   - "Qt OpenGL": QPainter on the GPU (QOpenGLWindow), the path Qt Quick
  *     and so Plasma use
@@ -22,6 +23,9 @@
 #include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
+#include <jni.h>
+#include <vector>
+#include <string>
 #include <unistd.h>
 #include <unwind.h>
 
@@ -176,7 +180,7 @@ void onCrash(int sig)
 
 } // namespace
 
-int main(int argc, char **argv)
+int demoMain(int argc, char **argv)
 {
     setvbuf(stdout, nullptr, _IOLBF, 0);
     setvbuf(stderr, nullptr, _IOLBF, 0);
@@ -190,9 +194,9 @@ int main(int argc, char **argv)
     fmt.setStencilBufferSize(8);
     QSurfaceFormat::setDefaultFormat(fmt);
 
-    // Qt for Android reaches for the Java VM in a few places, and this process
-    // has none (any JNI call crashes). Startup asks Android for the app version
-    // unless one is set, and the shader disk cache asks for the cache folder.
+    // Without an Android Context Qt can't look these up: startup asks Android
+    // for the app version unless one is set, and the shader disk cache asks
+    // for the cache folder.
     QCoreApplication::setApplicationVersion(QStringLiteral("1"));
     QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
 
@@ -208,4 +212,21 @@ int main(int argc, char **argv)
     gl.resize(760, 440);
     gl.show();
     return app.exec();
+}
+
+// QtHost.run(String[] args): runs the demo on the calling (Java main) thread.
+extern "C" JNIEXPORT jint JNICALL Java_io_deskdroid_app_QtHost_run(JNIEnv *env, jclass, jobjectArray jargs)
+{
+    static std::vector<std::string> args; // Qt keeps argv for the app's lifetime
+    static std::vector<char *> argv;
+    args.push_back("nativedesk_qt");
+    for (jsize i = 0, n = env->GetArrayLength(jargs); i < n; i++) {
+        auto js = static_cast<jstring>(env->GetObjectArrayElement(jargs, i));
+        const char *c = env->GetStringUTFChars(js, nullptr);
+        args.emplace_back(c);
+        env->ReleaseStringUTFChars(js, c);
+    }
+    for (auto &a : args) argv.push_back(a.data());
+    argv.push_back(nullptr);
+    return demoMain(int(args.size()), argv.data());
 }

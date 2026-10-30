@@ -12,7 +12,9 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui OpenGL)
 
-add_executable(nativedesk_qt main.cpp qpa.cpp)
+# A JNI library, not an executable: QtHost.kt loads it into an app_process,
+# because Qt for Android needs a Java VM.
+add_library(nativedesk_qt SHARED main.cpp qpa.cpp)
 # The plugin is compiled in, not loaded: main.cpp imports it with Q_IMPORT_PLUGIN.
 target_compile_definitions(nativedesk_qt PRIVATE QT_STATICPLUGIN)
 target_include_directories(nativedesk_qt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)

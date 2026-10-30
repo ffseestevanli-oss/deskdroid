@@ -32,7 +32,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     -DCMAKE_TOOLCHAIN_FILE="$DESKDROID_QT_ANDROID/lib/cmake/Qt6/qt.toolchain.cmake" \
     -DQT_HOST_PATH="$DESKDROID_QT_HOST" -DANDROID_NDK_ROOT="$NDK" -DANDROID_SDK_ROOT="${ANDROID_HOME:-}"
   cmake --build "$WORK"
-  install -m 755 "$WORK/nativedesk_qt" "$OUT/libnativedesk_qt.so"
+  install -m 755 "$WORK/libnativedesk_qt.so" "$OUT/libnativedesk_qt.so"
   "$BIN/llvm-strip" --strip-unneeded "$OUT/libnativedesk_qt.so"
   for lib in Core Gui OpenGL; do
     install -m 644 "$DESKDROID_QT_ANDROID/lib/libQt6${lib}_arm64-v8a.so" "$OUT/"

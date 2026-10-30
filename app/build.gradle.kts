@@ -57,6 +57,11 @@ dependencies {
     // has appcompat as an implementation dependency, so name it here too.
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("org.apache.commons:commons-compress:1.27.1")
+    // Native desktop test, stage 2: the Java side of Qt for Android, which
+    // QtHost.kt's Qt demo needs. Only in builds made with Qt (native/nativedesk/build.sh).
+    System.getenv("DESKDROID_QT_ANDROID")?.let { qt ->
+        implementation(files("$qt/jar/Qt6Android.jar"))
+    }
 }
 
 // proot, its loader, talloc, ddtool, the GPU report tool and the virgl server,
