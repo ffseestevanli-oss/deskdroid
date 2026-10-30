@@ -228,7 +228,7 @@ build_libinput() {
 
 QT_VERSION=6.8.3
 qt_src() { # <module>: unpacked source of one Qt module
-  unpack "https://download.qt.io/official_releases/qt/${QT_VERSION%.*}/$QT_VERSION/submodules/$1-everywhere-src-$QT_VERSION.tar.xz" \
+  unpack "https://download.qt.io/archive/qt/${QT_VERSION%.*}/$QT_VERSION/submodules/$1-everywhere-src-$QT_VERSION.tar.xz" \
     "$1-everywhere-src-$QT_VERSION.tar.xz"
 }
 qt_module() { # <module> [cmake options...]: one module on top of qtbase
