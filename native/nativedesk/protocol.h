@@ -23,6 +23,8 @@
  *                the following vsync (pacing, like wl_surface.frame)
  *     POINTER    pointer position (window coordinates) and buttons
  *     KEY        Android key code, Unicode character, down/up
+ *     SCROLL     scroll by dx, dy pixels (wheel or two-finger drag), at the
+ *                last POINTER position
  *
  * Buffers are GPU memory owned by the app (AHardwareBuffer), drawn by the app
  * with the phone's own GLES/Vulkan driver and sampled by the compositor with
@@ -47,6 +49,7 @@ enum ndesk_op {
     NDESK_FRAME,
     NDESK_POINTER,
     NDESK_KEY,
+    NDESK_SCROLL,
 };
 
 struct ndesk_msg {
@@ -60,6 +63,7 @@ struct ndesk_msg {
         struct { uint64_t time_ns; } frame;
         struct { float x, y; uint32_t buttons, inside; } pointer;
         struct { int32_t keycode, unicode; uint32_t down; } key;
+        struct { float dx, dy; } scroll;
     };
 };
 

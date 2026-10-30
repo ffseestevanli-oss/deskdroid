@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
@@ -16,6 +17,7 @@ import android.view.WindowInsetsController
 import android.widget.FrameLayout
 import android.widget.TextView
 import java.io.File
+import kotlin.math.abs
 
 /**
  * Native desktop test: the first step towards running Plasma as Android code
@@ -34,6 +36,7 @@ object NativeDesk {
     @JvmStatic external fun nativeStop()
     @JvmStatic external fun nativePointer(x: Float, y: Float, buttons: Int)
     @JvmStatic external fun nativeKey(keycode: Int, unicode: Int, down: Boolean)
+    @JvmStatic external fun nativeScroll(dx: Float, dy: Float)
     @JvmStatic external fun nativeStats(): String
 }
 
@@ -51,7 +54,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         override fun run() {
             if (started) stats.text = NativeDesk.nativeStats().ifEmpty { "Starting…" } +
                 "\n$qtStatus\n" + synchronized(qtLines) { qtLines.joinToString("\n") } +
-                "\n\nDrag title bars to move windows. + and - on a keyboard change the load."
+                "\n\nTouchpad: tap to click, two-finger tap to right-click, two fingers to scroll, tap then hold to drag " +
+                "(title bars move windows). Settings → Touch mode switches to direct touch. + and - on a keyboard change the load."
             main.postDelayed(this, 500)
         }
     }
@@ -176,19 +180,38 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         apps.clear()
     }
 
-    override fun onTouchEvent(e: MotionEvent) = pointer(e)
-    override fun onGenericMotionEvent(e: MotionEvent) = pointer(e)
+    private val touchpad = Touchpad()
 
-    private fun pointer(e: MotionEvent): Boolean {
+    override fun onTouchEvent(e: MotionEvent): Boolean {
         if (!started) return false
-        // Touch acts as the left button; a mouse reports its own buttons.
-        val buttons = when {
-            e.isFromSource(android.view.InputDevice.SOURCE_MOUSE) -> e.buttonState
-            e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL -> 0
-            else -> 1
+        when {
+            e.isFromSource(InputDevice.SOURCE_MOUSE) -> mouse(e)
+            // The same Touch mode setting as the desktop (Settings → Touch mode).
+            Prefs.touchMode(this) == "direct" -> {
+                val up = e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL
+                NativeDesk.nativePointer(e.x, e.y, if (up) 0 else 1)
+            }
+            else -> touchpad.onTouch(e, surfaceView.width.toFloat(), surfaceView.height.toFloat())
         }
-        NativeDesk.nativePointer(e.x, e.y, buttons)
         return true
+    }
+
+    override fun onGenericMotionEvent(e: MotionEvent): Boolean {
+        if (!started) return false
+        if (e.actionMasked == MotionEvent.ACTION_SCROLL) {
+            // One wheel notch scrolls about three lines.
+            NativeDesk.nativeScroll(-e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 60f,
+                -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 60f)
+            return true
+        }
+        mouse(e)
+        return true
+    }
+
+    /** A real mouse: absolute position, its own buttons (bit 1 left, 2 right, 4 middle). */
+    private fun mouse(e: MotionEvent) {
+        touchpad.moveTo(e.x, e.y)
+        NativeDesk.nativePointer(e.x, e.y, e.buttonState)
     }
 
     override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
@@ -201,6 +224,84 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (keyCode == KeyEvent.KEYCODE_BACK) return super.onKeyUp(keyCode, e)
         if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
         return true
+    }
+
+    /**
+     * The phone screen as a laptop touchpad, like the desktop's Touchpad mode:
+     * one finger moves the pointer, a tap clicks, a two-finger tap right-clicks,
+     * two fingers scroll, and tap then hold drags.
+     */
+    private class Touchpad {
+        private var px = -1f
+        private var py = -1f
+        private var lastX = 0f
+        private var lastY = 0f
+        private var downAt = 0L
+        private var lastTapAt = 0L
+        private var travel = 0f
+        private var maxFingers = 0
+        private var dragging = false
+
+        fun moveTo(x: Float, y: Float) { px = x; py = y }
+
+        fun onTouch(e: MotionEvent, w: Float, h: Float) {
+            if (px < 0) { px = w / 2; py = h / 2 }
+            val n = e.pointerCount
+            val cx = (0 until n).map { e.getX(it) }.average().toFloat()
+            val cy = (0 until n).map { e.getY(it) }.average().toFloat()
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downAt = e.eventTime
+                    travel = 0f
+                    maxFingers = 1
+                    // Tap, then touch again and hold: drag with the left button down.
+                    dragging = e.eventTime - lastTapAt < DOUBLE_TAP_MS
+                    if (dragging) NativeDesk.nativePointer(px, py, 1)
+                }
+                MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP -> maxFingers = maxOf(maxFingers, n)
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = cx - lastX
+                    val dy = cy - lastY
+                    travel += abs(dx) + abs(dy)
+                    if (n >= 2) {
+                        NativeDesk.nativeScroll(-dx * SCROLL_SPEED, -dy * SCROLL_SPEED) // natural scrolling
+                    } else {
+                        px = (px + dx * SPEED).coerceIn(0f, w - 1)
+                        py = (py + dy * SPEED).coerceIn(0f, h - 1)
+                        NativeDesk.nativePointer(px, py, if (dragging) 1 else 0)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val tap = travel < TAP_SLOP && e.eventTime - downAt < TAP_MS
+                    when {
+                        dragging -> NativeDesk.nativePointer(px, py, 0)
+                        tap && maxFingers >= 2 -> click(2)
+                        tap -> click(1)
+                    }
+                    lastTapAt = if (tap && maxFingers == 1 && !dragging) e.eventTime else 0L
+                    dragging = false
+                }
+            }
+            // Re-anchor after the finger count changes, so the pointer doesn't jump.
+            lastX = if (e.actionMasked == MotionEvent.ACTION_POINTER_UP) avgWithout(e, e.actionIndex) { e.getX(it) } else cx
+            lastY = if (e.actionMasked == MotionEvent.ACTION_POINTER_UP) avgWithout(e, e.actionIndex) { e.getY(it) } else cy
+        }
+
+        private fun click(button: Int) {
+            NativeDesk.nativePointer(px, py, button)
+            NativeDesk.nativePointer(px, py, 0)
+        }
+
+        private inline fun avgWithout(e: MotionEvent, skip: Int, v: (Int) -> Float) =
+            (0 until e.pointerCount).filter { it != skip }.map { v(it) }.average().toFloat()
+
+        companion object {
+            const val SPEED = 1.6f
+            const val SCROLL_SPEED = 1.5f
+            const val TAP_MS = 220L
+            const val DOUBLE_TAP_MS = 300L
+            const val TAP_SLOP = 24f
+        }
     }
 
     override fun onDestroy() {

@@ -232,6 +232,11 @@ private:
             case NDESK_KEY:
                 key(m);
                 break;
+            case NDESK_SCROLL:
+                QWindowSystemInterface::handleWheelEvent(window(), m_pointer, m_pointer,
+                    QPoint(qRound(m.scroll.dx), qRound(m.scroll.dy)),
+                    QPoint(qRound(m.scroll.dx * 2), qRound(m.scroll.dy * 2)));
+                break;
             }
         }
     }
@@ -239,6 +244,7 @@ private:
     void pointer(const ndesk_msg &m)
     {
         const QPointF pos(m.pointer.x, m.pointer.y);
+        m_pointer = pos;
         Qt::MouseButtons now;
         if (m.pointer.buttons & 1) now |= Qt::LeftButton;
         if (m.pointer.buttons & 2) now |= Qt::RightButton;
@@ -365,6 +371,7 @@ private:
     bool m_frameReady = true;
     bool m_updatePending = false;
     Qt::MouseButtons m_buttons;
+    QPointF m_pointer;
 };
 
 class BackingStore : public QPlatformBackingStore

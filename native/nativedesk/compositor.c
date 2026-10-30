@@ -69,8 +69,8 @@ struct client {
 };
 
 struct input {
-    enum { IN_POINTER, IN_KEY } type;
-    float x, y;
+    enum { IN_POINTER, IN_KEY, IN_SCROLL } type;
+    float x, y;     /* pointer position, or scroll amount */
     int buttons;
     int keycode, unicode, down;
 };
@@ -415,6 +415,15 @@ static void send_pointer(int i, bool inside)
 
 static void handle_input(const struct input *in)
 {
+    if (in->type == IN_SCROLL) {
+        bool title;
+        int i = client_at(C.px, C.py, &title);
+        if (i < 0 || title) return;
+        send_pointer(i, true); /* where the scroll happens */
+        struct ndesk_msg m = { .op = NDESK_SCROLL, .scroll = { in->x, in->y } };
+        send_msg(C.clients[i], &m);
+        return;
+    }
     if (in->type == IN_KEY) {
         int i = C.n_order ? C.order[C.n_order - 1] : -1; /* keyboard goes to the top window */
         if (i < 0) return;
@@ -701,6 +710,13 @@ Java_io_deskdroid_app_NativeDesk_nativeKey(JNIEnv *env, jclass cls, jint keycode
 {
     (void)env; (void)cls;
     queue((struct input){ .type = IN_KEY, .keycode = keycode, .unicode = unicode, .down = down });
+}
+
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeScroll(JNIEnv *env, jclass cls, jfloat dx, jfloat dy)
+{
+    (void)env; (void)cls;
+    queue((struct input){ .type = IN_SCROLL, .x = dx, .y = dy });
 }
 
 JNIEXPORT jstring JNICALL
