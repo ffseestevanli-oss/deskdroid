@@ -267,6 +267,7 @@ build_qtbase() {
   cmake --install "$s/_android"
 }
 
+build_qtshadertools() { qt_module qtshadertools; }
 build_qtdeclarative() { qt_module qtdeclarative; }
 build_qtsvg() { qt_module qtsvg; }
 build_qt5compat() { qt_module qt5compat; }
@@ -304,6 +305,7 @@ kde_cmake() {
     -DCMAKE_TOOLCHAIN_FILE="$PREFIX/lib/cmake/Qt6/qt.toolchain.cmake" -DQT_HOST_PATH="$QT_HOST_PATH" \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib $(qt_find_args) \
     -DKF6_HOST_TOOLING="$HOSTPREFIX/lib/cmake" -DKF_IGNORE_PLATFORM_CHECK=ON \
+    -DWayland_DATADIR="$HOSTPREFIX/share/wayland" -DWaylandProtocols_DATADIR="$PREFIX/share/wayland-protocols" \
     -DBUILD_TESTING=OFF -DBUILD_QCH=OFF -DBUILD_PYTHON_BINDINGS=OFF -DBUILD_DESIGNERPLUGIN=OFF "$@"
   cmake --build "$src/_android" -j "$JOBS"
   cmake --install "$src/_android"
@@ -328,7 +330,7 @@ build_ecm() {
 build_kconfig_host() {
   local s; s="$(kf_src kconfig)"
   cmake -S "$s" -B "$s/_host" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_HOST_PATH;$PREFIX" \
-    -DCMAKE_INSTALL_PREFIX="$HOSTPREFIX" -DBUILD_TESTING=OFF -DBUILD_QCH=OFF -DKCONFIG_USE_GUI=OFF -DKCONFIG_USE_QML=OFF
+    -DCMAKE_INSTALL_PREFIX="$HOSTPREFIX" -DKDE_INSTALL_LIBDIR=lib -DBUILD_TESTING=OFF -DBUILD_QCH=OFF -DKCONFIG_USE_GUI=OFF -DKCONFIG_USE_QML=OFF
   cmake --build "$s/_host" -j "$JOBS"
   cmake --install "$s/_host"
 }
@@ -371,7 +373,7 @@ build_kdecoration() {
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput
-     qtbase qtdeclarative qtsvg qt5compat qtsensors qtwayland qttools
+     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice ksvg
      plasma_wayland_protocols kdecoration)
@@ -394,7 +396,7 @@ for pkg in "${@:-${ALL[@]}}"; do
   rc=$?
   set -e
   if [ $rc -ne 0 ]; then
-    grep -E "CMake Error|ERROR:|error:|Error [0-9]|No such file|not found" "$log" | grep -v -E "meson-private|testfile|CMakeScratch|TryCompile" | head -40
+    grep -A3 -E "CMake Error|ERROR:|error:|Error [0-9]|No such file|not found" "$log" | grep -v -E "meson-private|testfile|CMakeScratch|TryCompile" | head -40
     echo "-- last lines:"
     tail -40 "$log"
   fi
