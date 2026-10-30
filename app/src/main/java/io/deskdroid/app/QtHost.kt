@@ -20,11 +20,29 @@ object QtHost {
         val libs = args[0]
         giveQtClassLoader()
         // Core first: only the library passed to System.load gets JNI_OnLoad.
-        for (lib in listOf("libc++_shared.so", "libQt6Core_arm64-v8a.so", "libQt6Gui_arm64-v8a.so",
-                "libQt6OpenGL_arm64-v8a.so", "libnativedesk_qt.so")) {
-            System.load(File(libs, lib).path)
-        }
+        System.load(File(libs, "libc++_shared.so").path)
+        System.load(File(libs, "libQt6Core_arm64-v8a.so").path)
+        loadInAnyOrder(File(libs).listFiles { f -> f.name.startsWith("libQt6") }.orEmpty().toList())
+        System.load(File(libs, "libnativedesk_qt.so").path)
         System.exit(run(args.copyOfRange(1, args.size)))
+    }
+
+    /**
+     * Loads the rest of Qt's libraries, each after the ones it needs: the
+     * linker may not find them on its own from this process's class loader.
+     */
+    private fun loadInAnyOrder(libs: List<File>) {
+        var left = libs.filter { !it.name.startsWith("libQt6Core_") }
+        while (left.isNotEmpty()) {
+            val failed = left.filter { lib ->
+                try { System.load(lib.path); false } catch (e: UnsatisfiedLinkError) { true }
+            }
+            if (failed.size == left.size) {
+                // Load one again to report why.
+                System.load(failed.first().path)
+            }
+            left = failed
+        }
     }
 
     /** QtNative.classLoader() normally comes from Qt's loader; point it at ours. */

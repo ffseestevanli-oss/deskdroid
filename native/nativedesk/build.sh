@@ -34,8 +34,16 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
   cmake --build "$WORK"
   install -m 755 "$WORK/libnativedesk_qt.so" "$OUT/libnativedesk_qt.so"
   "$BIN/llvm-strip" --strip-unneeded "$OUT/libnativedesk_qt.so"
-  for lib in Core Gui OpenGL; do
-    install -m 644 "$DESKDROID_QT_ANDROID/lib/libQt6${lib}_arm64-v8a.so" "$OUT/"
+  # Every Qt library it needs, directly or through another Qt library.
+  todo=("$OUT/libnativedesk_qt.so")
+  while [ ${#todo[@]} -gt 0 ]; do
+    f="${todo[0]}"; todo=("${todo[@]:1}")
+    for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\(libQt6[^]]*\)\].*/\1/p'); do
+      [ -e "$OUT/$lib" ] && continue
+      install -m 644 "$DESKDROID_QT_ANDROID/lib/$lib" "$OUT/"
+      echo "   + $lib"
+      todo+=("$OUT/$lib")
+    done
   done
   install -m 644 "$NDK/toolchains/llvm/prebuilt/$host/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$OUT/"
 else

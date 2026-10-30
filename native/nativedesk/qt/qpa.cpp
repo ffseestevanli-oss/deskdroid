@@ -30,6 +30,7 @@
 #include <QtCore/QSocketNotifier>
 #include <QtCore/private/qeventdispatcher_unix_p.h>
 #include <QtGui/QImage>
+#include <QtGui/QOffscreenSurface>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QWindow>
 #include <QtGui/private/qfreetypefontdatabase_p.h>
@@ -37,6 +38,7 @@
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformintegrationplugin.h>
 #include <qpa/qplatformnativeinterface.h>
+#include <qpa/qplatformoffscreensurface.h>
 #include <qpa/qplatformopenglcontext.h>
 #include <qpa/qplatformscreen.h>
 #include <qpa/qplatformwindow.h>
@@ -477,6 +479,17 @@ private:
     void *m_gles = nullptr;
 };
 
+// Qt Quick's renderer makes its GL context current on one of these when no
+// window is at hand. Contexts always have their own pbuffer, so there's
+// nothing to create: without it Qt would make a hidden window instead.
+class OffscreenSurface : public QPlatformOffscreenSurface
+{
+public:
+    using QPlatformOffscreenSurface::QPlatformOffscreenSurface;
+    QSurfaceFormat format() const override { return offscreenSurface()->requestedFormat(); }
+    bool isValid() const override { return true; }
+};
+
 // The compositor doesn't describe its display yet, so this is a fixed 1080p screen.
 class Screen : public QPlatformScreen
 {
@@ -509,6 +522,10 @@ public:
     QPlatformWindow *createPlatformWindow(QWindow *w) const override { return new Window(w); }
     QPlatformBackingStore *createPlatformBackingStore(QWindow *w) const override { return new BackingStore(w); }
     QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *ctx) const override { return new GLContext(ctx); }
+    QPlatformOffscreenSurface *createPlatformOffscreenSurface(QOffscreenSurface *s) const override
+    {
+        return new OffscreenSurface(s);
+    }
     QAbstractEventDispatcher *createEventDispatcher() const override { return new QEventDispatcherUNIX; }
     // Qt's OpenGL code on Android asks it for "AndroidDeviceName" without a null check.
     QPlatformNativeInterface *nativeInterface() const override { return &m_native; }

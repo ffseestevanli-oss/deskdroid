@@ -1,12 +1,13 @@
 /*
  * Qt demo for the native desktop test. NativeDesk.kt starts QtHost.kt in its
  * own app_process, which loads this library (libnativedesk_qt.so) and calls
- * QtHost.run(): Qt for Android needs a Java VM. Two ordinary Qt windows:
+ * QtHost.run(): Qt for Android needs a Java VM. Three ordinary Qt windows:
  *   - "Qt raster": QPainter in software (QRasterWindow), like Qt Widgets
- *   - "Qt OpenGL": QPainter on the GPU (QOpenGLWindow), the path Qt Quick
- *     and so Plasma use
- * Both animate every frame, show their frame rate and follow the pointer;
- * typing goes into the raster window's text line.
+ *   - "Qt OpenGL": QPainter on the GPU (QOpenGLWindow)
+ *   - "Qt Quick": a QML scene (demo.qml) on Qt Quick's scene graph over
+ *     OpenGL ES, which is what Plasma's shell and widgets are made of
+ * All animate every frame, show their frame rate and follow the pointer;
+ * typing goes into the raster window's text line and the Quick window's field.
  */
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QtPlugin>
@@ -18,6 +19,8 @@
 #include <QtGui/QRasterWindow>
 #include <QtGui/QSurfaceFormat>
 #include <QtOpenGL/QOpenGLWindow>
+#include <QtQml/QQmlApplicationEngine>
+#include <QtQuick/QQuickWindow>
 #include <cmath>
 #include <csignal>
 #include <cstdio>
@@ -131,7 +134,7 @@ protected:
         QPainter p(this);
         paintScene(p, size(), m_fps.clock.isValid() ? m_fps.clock.elapsed() / 1000.0 : 0, m_pointer,
                    QStringLiteral("Qt OpenGL window"), m_fps.fps,
-                   QStringLiteral("QPainter on the GPU, the path Qt Quick and Plasma use. GL: ") +
+                   QStringLiteral("QPainter on the GPU. GL: ") +
                        QString::fromLatin1(reinterpret_cast<const char *>(context()->functions()->glGetString(GL_RENDERER))));
         p.end();
         update();
@@ -199,6 +202,10 @@ int demoMain(int argc, char **argv)
     // for the cache folder.
     QCoreApplication::setApplicationVersion(QStringLiteral("1"));
     QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
+    // Qt Quick on OpenGL ES through the platform plugin's GL context; QSG_INFO
+    // logs which GPU and render loop it ended up with.
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    qputenv("QSG_INFO", "1");
 
     QGuiApplication app(argc, argv);
     printf("Qt %s started on platform %s\n", qVersion(), qPrintable(QGuiApplication::platformName()));
@@ -211,6 +218,13 @@ int demoMain(int argc, char **argv)
     GLDemo gl;
     gl.resize(760, 440);
     gl.show();
+
+    QQmlApplicationEngine quick;
+    QObject::connect(&quick, &QQmlApplicationEngine::warnings, [](const QList<QQmlError> &errors) {
+        for (const QQmlError &e : errors) fprintf(stderr, "qml: %s\n", qPrintable(e.toString()));
+    });
+    quick.load(QUrl(QStringLiteral("qrc:/nativedesk/demo.qml")));
+    if (quick.rootObjects().isEmpty()) fprintf(stderr, "qml: the Qt Quick window didn't load\n");
     return app.exec();
 }
 
