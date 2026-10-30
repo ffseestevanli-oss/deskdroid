@@ -510,6 +510,7 @@ public:
     {
         switch (cap) {
         case OpenGL:
+        case RhiBasedRendering: // without it Qt Quick picks its software renderer
         case ThreadedPixmaps:
         case MultipleWindows:
         case NonFullScreenWindows:
