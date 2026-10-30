@@ -106,7 +106,7 @@ cmake_cross() { # <src> [options...]
     -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-$API -DANDROID_STL=c++_shared \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_FIND_ROOT_PATH="$PREFIX" -DCMAKE_PREFIX_PATH="$PREFIX" "$@"
-  cmake --build "$src/_android" -j "$JOBS"
+  cmake --build "$src/_android" -j "$JOBS" ${KEEP_GOING:+-- -k 0}
   cmake --install "$src/_android"
 }
 autotools_cross() { # <src> [configure options...]
@@ -421,11 +421,14 @@ build_kwin() {
   python3 "$HERE/kwin-nativedesk/add-to-kwin.py" "$s"
   # Android is Linux underneath: /proc/self/exe, the same scheduler and so on.
   grep -rl --include=CMakeLists.txt 'CMAKE_SYSTEM_NAME MATCHES "Linux"' "$s" | xargs sed -i 's/CMAKE_SYSTEM_NAME MATCHES "Linux"/CMAKE_SYSTEM_NAME MATCHES "Linux|Android"/'
+  # The "kill this frozen window" helper is X11 only.
+  sed -i 's/^add_subdirectory(killer)/# add_subdirectory(killer)/' "$s/src/helpers/CMakeLists.txt"
   # No sound theme to play the system bell with.
   sed -i 's/^find_package(Canberra REQUIRED)/find_package(Canberra)/' "$s/CMakeLists.txt"
   sed -i 's/^add_subdirectory(systembell)/# add_subdirectory(systembell)/' "$s/src/plugins/CMakeLists.txt"
   # memfd_create and friends are API 30+; the Pixel has them, so link them weakly.
-  kde_cmake "$s" -DCMAKE_CXX_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DCMAKE_C_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
+  # Big build, many fixes to come: keep going past errors so a run shows them all.
+  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DCMAKE_C_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
     -DKWIN_BUILD_X11=OFF -DKWIN_BUILD_GLOBALSHORTCUTS=OFF -DKWIN_BUILD_RUNNERS=OFF -DKWIN_BUILD_TABBOX=OFF \
     -DKWIN_BUILD_ACTIVITIES=OFF -DKWIN_BUILD_EIS=OFF -DBUILD_DOC=OFF -DNATIVE_PREFIX="$QT_HOST_PATH"
 }
@@ -458,7 +461,9 @@ for pkg in "${@:-${ALL[@]}}"; do
   rc=$?
   set -e
   if [ $rc -ne 0 ]; then
-    grep -A3 -E "CMake Error|ERROR:|error:|Error [0-9]|No such file|not found" "$log" | grep -v -E "meson-private|testfile|CMakeScratch|TryCompile" | head -40
+    grep -A3 -E "CMake Error|ERROR:|error:|Error [0-9]|No such file|not found" "$log" | grep -v -E "meson-private|testfile|CMakeScratch|TryCompile|QMLModule|qmldir|ECMFindQmlModule|Call Stack|^--$" | head -40
+    echo "-- distinct compile errors:"
+    grep -E "^/.*: (fatal )?error: " "$log" | sed 's|^.*/src/[^/]*-[0-9.]*/||' | sort -u | head -60
     echo "-- last lines:"
     tail -40 "$log"
   fi
