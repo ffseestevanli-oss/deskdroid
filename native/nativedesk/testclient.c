@@ -243,7 +243,7 @@ int main(int argc, char **argv)
                 }
             }
             if (fence < 0) glFinish();
-            struct ndesk_msg c = { .op = NDESK_COMMIT, .commit = { (uint32_t)next, fence >= 0 } };
+            struct ndesk_msg c = { .op = NDESK_COMMIT, .commit = { (uint32_t)next, fence >= 0, 0 } };
             send_msg(fd, &c, fence);
             if (fence >= 0) close(fence);
             t[next].busy = true;

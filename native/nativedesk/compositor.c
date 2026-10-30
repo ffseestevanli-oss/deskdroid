@@ -60,6 +60,7 @@ struct client {
     uint32_t w, h;
     struct buffer buf[NDESK_MAX_BUFFERS];
     int current;            /* buffer on screen, -1 before the first commit */
+    bool y_invert;
     int to_release[NDESK_MAX_BUFFERS];
     int n_release;
     bool wants_frame;       /* committed since the last frame went out */
@@ -84,7 +85,7 @@ static struct {
     EGLSurface surf;
     EGLContext ctx;
     GLuint prog_tex, prog_solid, vbo;
-    GLint tex_rect, tex_screen, solid_rect, solid_screen, solid_color;
+    GLint tex_rect, tex_screen, tex_flip, solid_rect, solid_screen, solid_color;
 
     struct client *clients[MAX_CLIENTS];
     int order[MAX_CLIENTS];   /* indexes into clients, bottom to top */
@@ -127,11 +128,12 @@ static const char *VS =
     "attribute vec2 corner;\n"
     "uniform vec4 rect;\n"      /* x, y, w, h in pixels, y down */
     "uniform vec2 screen;\n"
+    "uniform float flip;\n"    /* 1 for y_invert buffers */
     "varying vec2 uv;\n"
     "void main() {\n"
     "  vec2 p = (rect.xy + corner * rect.zw) / screen;\n"
     "  gl_Position = vec4(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0);\n"
-    "  uv = corner;\n"          /* buffer row 0 is the window's top row */
+    "  uv = vec2(corner.x, mix(corner.y, 1.0 - corner.y, flip));\n"
     "}\n";
 static const char *FS_TEX =
     "#extension GL_OES_EGL_image_external : require\n"
@@ -204,6 +206,7 @@ static bool egl_init(void)
     C.prog_tex = program(FS_TEX);
     C.tex_rect = glGetUniformLocation(C.prog_tex, "rect");
     C.tex_screen = glGetUniformLocation(C.prog_tex, "screen");
+    C.tex_flip = glGetUniformLocation(C.prog_tex, "flip");
     C.prog_solid = program(FS_SOLID);
     C.solid_rect = glGetUniformLocation(C.prog_solid, "rect");
     C.solid_screen = glGetUniformLocation(C.prog_solid, "screen");
@@ -364,6 +367,9 @@ static bool read_client(int i)
         if (cl->current >= 0 && cl->current != (int)id && cl->n_release < NDESK_MAX_BUFFERS)
             cl->to_release[cl->n_release++] = cl->current;
         cl->current = id;
+        cl->y_invert = m.commit.y_invert;
+        cl->w = cl->buf[id].width;
+        cl->h = cl->buf[id].height;
         cl->wants_frame = true;
         cl->commits++;
         C.dirty = true;
@@ -484,6 +490,7 @@ static void draw(void)
         glBindTexture(GL_TEXTURE_EXTERNAL_OES, b->tex);
         glUniform4f(C.tex_rect, cl->x, cl->y, cl->w, cl->h);
         glUniform2f(C.tex_screen, sw, sh);
+        glUniform1f(C.tex_flip, cl->y_invert ? 1.0f : 0.0f);
         glDisable(GL_BLEND);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         glEnable(GL_BLEND);

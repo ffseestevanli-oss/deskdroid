@@ -31,6 +31,21 @@ jobs:
       # The Venus server (native/virgl) builds with meson.
       - name: Install meson and ninja
         run: pipx install meson==1.12.1 && pipx install ninja
+      # Native desktop test, stage 2 (docs/native-plasma.md): Qt's prebuilt
+      # Android libraries for the Qt demo. Test-only; nothing else uses Qt.
+      - uses: actions/cache@v4
+        with:
+          path: ~/Qt
+          key: qt-6.8.3-android-arm64
+      - name: Install Qt for Android
+        run: |
+          if [ ! -d ~/Qt/6.8.3/android_arm64_v8a ]; then
+            pipx install aqtinstall
+            aqt install-qt linux desktop 6.8.3 linux_gcc_64 -O ~/Qt
+            aqt install-qt linux android 6.8.3 android_arm64_v8a -O ~/Qt
+          fi
+          echo "DESKDROID_QT_ANDROID=$HOME/Qt/6.8.3/android_arm64_v8a" >> "$GITHUB_ENV"
+          echo "DESKDROID_QT_HOST=$HOME/Qt/6.8.3/gcc_64" >> "$GITHUB_ENV"
       - uses: actions/cache@v4
         with:
           path: |
@@ -56,7 +71,7 @@ jobs:
           for f in libvirgl_test_server libvirgl_render_server libvirgl_test_server_ahb libvirgl_render_server_ahb libgpureport; do
             unzip -l "$apk" | grep -q "lib/arm64-v8a/$f.so" || { echo "missing $f.so (Venus)"; exit 1; }
           done
-          for f in libnativedesk libnativedesk_client; do
+          for f in libnativedesk libnativedesk_client libnativedesk_qt libQt6Core_arm64-v8a; do
             unzip -l "$apk" | grep -q "lib/arm64-v8a/$f.so" || { echo "missing $f.so (native desktop test)"; exit 1; }
           done
       - uses: actions/upload-artifact@v4

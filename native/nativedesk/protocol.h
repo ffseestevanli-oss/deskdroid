@@ -11,7 +11,10 @@
  *     BUFFER  announces buffer <id>; the next packet is the AHardwareBuffer
  *             itself (AHardwareBuffer_sendHandleToUnixSocket)
  *     COMMIT  show buffer <id>; if has_fence, the packet carries one fd, an
- *             Android native fence the compositor's GPU waits on
+ *             Android native fence the compositor's GPU waits on. Row 0 of a
+ *             buffer is the window's top row, unless y_invert is set (what
+ *             OpenGL's default framebuffer orientation gives). The window
+ *             takes the buffer's size, so resizing is committing a new size.
  *   compositor -> app
  *     CONFIGURE  the window's id
  *     RELEASE    the compositor no longer reads buffer <id>
@@ -51,7 +54,7 @@ struct ndesk_msg {
     union {
         struct { uint32_t version, width, height; char title[NDESK_TITLE_MAX]; } hello;
         struct { uint32_t id; } buffer;
-        struct { uint32_t id, has_fence; } commit;
+        struct { uint32_t id, has_fence, y_invert; } commit;
         struct { uint32_t window; } configure;
         struct { uint32_t id; } release;
         struct { uint64_t time_ns; } frame;

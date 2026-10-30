@@ -93,6 +93,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         startApp("Light app", "640x420", 16)
         startApp("Heavy app", "900x600", 1024)
+        startQtApp()
         main.post(tick)
     }
 
@@ -117,6 +118,35 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
             AppLog.i("Native desktop test: couldn't start $title: $e")
+        }
+    }
+
+    /**
+     * Stage 2: an ordinary Qt app (native/nativedesk/qt) on the same compositor,
+     * through DeskDroid's own Qt platform plugin. Only in builds made with Qt.
+     */
+    private fun startQtApp() {
+        val libs = applicationInfo.nativeLibraryDir
+        val exe = File(libs, "libnativedesk_qt.so")
+        if (!exe.exists()) return
+        try {
+            val p = ProcessBuilder(exe.path, "-platform", "deskdroid").redirectErrorStream(true).also { pb ->
+                pb.environment().apply {
+                    put("LD_LIBRARY_PATH", libs)
+                    put("QT_QPA_PLATFORM", "deskdroid")
+                    put("QT_QPA_FONTDIR", "/system/fonts")
+                    put("HOME", filesDir.path)
+                    put("TMPDIR", cacheDir.path)
+                    put("XDG_RUNTIME_DIR", cacheDir.path)
+                }
+            }.start()
+            apps += p
+            Thread {
+                p.inputStream.bufferedReader().forEachLine { AppLog.i("[nativedesk-qt] $it") }
+                AppLog.i("[nativedesk-qt] exited (${p.waitFor()})")
+            }.apply { isDaemon = true }.start()
+        } catch (e: Exception) {
+            AppLog.i("Native desktop test: couldn't start the Qt demo: $e")
         }
     }
 
