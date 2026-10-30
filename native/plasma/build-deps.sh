@@ -63,6 +63,8 @@ cat > "$WORK/native.ini" <<EOF
 pkg_config_path = '$HOSTPREFIX/lib/pkgconfig:$HOSTPREFIX/share/pkgconfig'
 EOF
 export PATH="$HOSTPREFIX/bin:$PATH"
+# Qt's toolchain file otherwise takes the runner's default NDK from these.
+export ANDROID_NDK_ROOT="$NDK" ANDROID_NDK_HOME="$NDK" ANDROID_NDK="$NDK"
 # Bionic has librt's and libpthread's functions in libc; some builds still
 # ask for the libraries by name.
 for lib in rt pthread; do
@@ -255,7 +257,7 @@ build_qtbase() {
   (cd "$s/_android" && PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" "$s/configure" \
     -platform android-clang -android-ndk "$NDK" -android-sdk "$ANDROID_HOME" -android-abis arm64-v8a \
     -android-ndk-platform android-$API -qt-host-path "$QT_HOST_PATH" -prefix "$PREFIX" \
-    -release -nomake tests -nomake examples -dbus-linked -pkg-config -system-freetype -fontconfig \
+    -release -nomake tests -nomake examples -dbus-linked -feature-dbus -pkg-config -system-freetype -fontconfig \
     -- $(qt_find_args) -DQT_FEATURE_vulkan=OFF)
   cmake --build "$s/_android" -j "$JOBS"
   cmake --install "$s/_android"
@@ -265,7 +267,16 @@ build_qtdeclarative() { qt_module qtdeclarative; }
 build_qtsvg() { qt_module qtsvg; }
 build_qt5compat() { qt_module qt5compat; }
 build_qtsensors() { qt_module qtsensors; }
-build_qtwayland() { qt_module qtwayland -DFEATURE_wayland_server=OFF -DFEATURE_wayland_client=ON; }
+build_qtwayland() {
+  local s; s="$(qt_src qtwayland)"
+  # qtwayland skips Android outright; the client side is plain Linux code.
+  sed -i 's/(ANDROID OR NOT LINUX)/(NOT LINUX AND NOT ANDROID)/' "$s/CMakeLists.txt"
+  mkdir -p "$s/_android"
+  (cd "$s/_android" && PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" \
+    "$PREFIX/bin/qt-configure-module" "$s" -- $(qt_find_args) -DFEATURE_wayland_server=OFF -DFEATURE_wayland_client=ON)
+  cmake --build "$s/_android" -j "$JOBS"
+  cmake --install "$s/_android"
+}
 # Only for QUiLoader, which KWin's scripting configuration uses.
 build_qttools() {
   qt_module qttools -DFEATURE_assistant=OFF -DFEATURE_designer=ON -DFEATURE_linguist=OFF \
@@ -351,16 +362,27 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      plasma_wayland_protocols kdecoration)
 
 failed=()
+after_qtbase=0
 for pkg in "${@:-${ALL[@]}}"; do
   pkg="${pkg//-/_}"
   # The stamp holds the recipe's hash, so a changed recipe builds again.
-  recipe="$(declare -f "build_$pkg" | sha256sum | cut -c1-16)"
+  # Everything after qtbase is built against it, so a new qtbase rebuilds them.
+  recipe="$( { declare -f "build_$pkg"; [ "$after_qtbase" = 1 ] && cat "$STAMPS/qtbase" 2>/dev/null; } | sha256sum | cut -c1-16)"
+  [ "$pkg" = qtbase ] && after_qtbase=1
   if [ "$(cat "$STAMPS/$pkg" 2>/dev/null)" = "$recipe" ]; then echo "== $pkg: already built"; continue; fi
   echo "== $pkg"
+  # Full output goes to <prefix>/logs; a failure prints its errors and tail.
+  log="$PREFIX/logs/$pkg.log"
+  mkdir -p "$PREFIX/logs"
   set +e
-  ( set -euo pipefail; "build_$pkg" )
+  ( set -euo pipefail; "build_$pkg" ) > "$log" 2>&1
   rc=$?
   set -e
+  if [ $rc -ne 0 ]; then
+    grep -E "CMake Error|ERROR:|error:|Error [0-9]|No such file|not found" "$log" | grep -v -E "meson-private|testfile|CMakeScratch|TryCompile" | head -40
+    echo "-- last lines:"
+    tail -40 "$log"
+  fi
   if [ $rc -eq 0 ]; then
     echo "$recipe" > "$STAMPS/$pkg"
   else
