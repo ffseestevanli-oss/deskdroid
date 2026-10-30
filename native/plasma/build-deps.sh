@@ -422,7 +422,8 @@ build_kwin() {
   # No sound theme to play the system bell with.
   sed -i 's/^find_package(Canberra REQUIRED)/find_package(Canberra)/' "$s/CMakeLists.txt"
   sed -i 's/^add_subdirectory(systembell)/# add_subdirectory(systembell)/' "$s/src/plugins/CMakeLists.txt"
-  kde_cmake "$s" -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
+  # memfd_create and friends are API 30+; the Pixel has them, so link them weakly.
+  kde_cmake "$s" -DCMAKE_CXX_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DCMAKE_C_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
     -DKWIN_BUILD_X11=OFF -DKWIN_BUILD_GLOBALSHORTCUTS=OFF -DKWIN_BUILD_RUNNERS=OFF -DKWIN_BUILD_TABBOX=OFF \
     -DKWIN_BUILD_ACTIVITIES=OFF -DKWIN_BUILD_EIS=OFF -DBUILD_DOC=OFF
 }
