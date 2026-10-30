@@ -47,13 +47,15 @@ mmdebstrap \
   --customize-hook='mkdir -p "$1/home/deskdroid/.config" && printf "[Basic Settings]\nIndexing-Enabled=false\n" > "$1/home/deskdroid/.config/baloofilerc"' \
   --customize-hook='printf "[General]\nsystemdBoot=false\n" > "$1/home/deskdroid/.config/startkderc"' \
   --customize-hook='chroot "$1" chown -R deskdroid:deskdroid /home/deskdroid' \
-  --customize-hook='rm -rf "$1"/var/cache/apt/archives/*.deb "$1"/var/lib/apt/lists/* "$1"/usr/share/doc/* "$1"/usr/share/man/*' \
+  --customize-hook='rm -rf "$1"/var/cache/apt/archives/*.deb "$1"/var/cache/apt/*.bin "$1"/var/lib/apt/lists/* "$1"/usr/share/doc/* "$1"/usr/share/man/* "$1"/usr/share/info/* "$1"/usr/share/lintian/* "$1"/var/cache/debconf/*-old "$1"/var/lib/dpkg/*-old "$1"/var/log/*.log' \
   "$SUITE" "$OUT/$NAME.tar"
 
 # zstd unpacks several times faster than xz on a phone. --long=27 (128 MB
-# window) shrinks the image noticeably; the app's decoder allows it.
+# window) shrinks the image noticeably; the app's decoder allows it. Level 19
+# makes a smaller download than 17 at the same unpacking speed, at the cost of
+# build time only.
 UNPACKED=$(stat -c %s "$OUT/$NAME.tar")
-zstd -T0 -17 --long=27 -q -f --rm "$OUT/$NAME.tar" -o "$OUT/$NAME.tar.zst"
+zstd -T0 -19 --long=27 -q -f --rm "$OUT/$NAME.tar" -o "$OUT/$NAME.tar.zst"
 ( cd "$OUT" && sha256sum "$NAME.tar.zst" > "$NAME.tar.zst.sha256" )
 SIZE=$(stat -c %s "$OUT/$NAME.tar.zst")
 SHA=$(cut -d' ' -f1 "$OUT/$NAME.tar.zst.sha256")

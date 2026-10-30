@@ -22,19 +22,20 @@ object Browsers {
 
     /** Runs as root before deskdroid-boot (Proot.sessionCommand). */
     const val FLAGS_SCRIPT = "/usr/local/bin/deskdroid-browser-flags"
+    const val BOOT_ARGS = "--if-changed"
 
     /**
      * Chromium has no environment switch, so the flags script (assets/linux/)
      * adds --no-sandbox to every Chromium-based browser and Electron app it
      * finds. It runs before each session and, through an apt hook, after every
-     * install, so browsers installed later (apt, Discover) work too.
+     * install, so browsers installed later (apt, Discover) work too. At session
+     * start ([BOOT_ARGS]) it skips the scan when nothing changed since its last run.
      */
     fun install(c: Context, paths: Paths) {
         val script = File(paths.rootfs, FLAGS_SCRIPT.removePrefix("/"))
         script.parentFile!!.mkdirs()
-        c.assets.open("linux/deskdroid-browser-flags").use { input ->
-            script.outputStream().use { input.copyTo(it) }
-        }
+        // Only rewritten when it changes: the script skips its scan when nothing is newer than its last run.
+        Tuning.writeIfChanged(script, c.assets.open("linux/deskdroid-browser-flags").use { it.readBytes() })
         script.setExecutable(true, false)
         File(paths.rootfs, "etc/apt/apt.conf.d/99deskdroid-browser-flags").apply {
             parentFile!!.mkdirs()

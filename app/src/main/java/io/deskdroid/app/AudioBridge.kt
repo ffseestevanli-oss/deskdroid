@@ -5,14 +5,15 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.system.Os
 import android.system.OsConstants
+import android.system.StructPollfd
 import java.io.File
 import java.io.FileInputStream
 
 /**
  * Plays the desktop's sound. PulseAudio inside Debian writes 48 kHz stereo
  * s16le into a FIFO (module-pipe-sink, rootfs/overlay/etc/deskdroid/pulse.pa);
- * this thread reads it and feeds an AudioTrack. Nothing native to build, so it
- * stays F-Droid friendly.
+ * this thread reads it and feeds an AudioTrack, which pauses while the desktop
+ * is quiet. Nothing native to build, so it stays F-Droid friendly.
  */
 class AudioBridge(private val pipe: File) {
     @Volatile private var running = false
@@ -69,13 +70,26 @@ class AudioBridge(private val pipe: File) {
             .setBufferSizeInBytes(minBuf * 2)
             .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             .build()
-        track.play()
+        // PulseAudio only writes while something plays. A playing AudioTrack
+        // keeps Android's audio output powered even when starved, so the track
+        // pauses after a quiet spell and starts again with the next sound.
+        var playing = false
+        val poll = arrayOf(StructPollfd().apply { fd = input.fd; events = OsConstants.POLLIN.toShort() })
         try {
             val buf = ByteArray(FRAME_BYTES * 256)
             while (running) {
+                if (Os.poll(poll, if (playing) IDLE_MS else -1) == 0) {
+                    track.pause()
+                    track.flush()
+                    playing = false
+                    continue
+                }
                 val n = input.read(buf)
                 if (n < 0) break // writer closed; reopen
-                if (n > 0) track.write(buf, 0, n - n % FRAME_BYTES)
+                if (n > 0) {
+                    if (!playing) { track.play(); playing = true }
+                    track.write(buf, 0, n - n % FRAME_BYTES)
+                }
             }
         } finally {
             track.stop()
@@ -92,5 +106,7 @@ class AudioBridge(private val pipe: File) {
         const val RATE = 48_000
         private const val FRAME_BYTES = 4
         private const val F_SETPIPE_SZ = 1031
+        /** Silence after which the track pauses. */
+        private const val IDLE_MS = 3000
     }
 }
