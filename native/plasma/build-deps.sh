@@ -417,6 +417,8 @@ build_kwayland() {
 build_kwin() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kwin-$PLASMA_VERSION.tar.xz" "kwin-$PLASMA_VERSION.tar.xz")"
   unandroid "$s"
+  # Our backend: KWin's desktop as a window of DeskDroid's Android compositor.
+  python3 "$HERE/kwin-nativedesk/add-to-kwin.py" "$s"
   # Android is Linux underneath: /proc/self/exe, the same scheduler and so on.
   grep -rl --include=CMakeLists.txt 'CMAKE_SYSTEM_NAME MATCHES "Linux"' "$s" | xargs sed -i 's/CMAKE_SYSTEM_NAME MATCHES "Linux"/CMAKE_SYSTEM_NAME MATCHES "Linux|Android"/'
   # No sound theme to play the system bell with.
@@ -435,13 +437,16 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kwin)
 
+# Files outside a recipe that it builds from, so changing them builds it again.
+inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
+
 failed=()
 after_qtbase=0
 for pkg in "${@:-${ALL[@]}}"; do
   pkg="${pkg//-/_}"
   # The stamp holds the recipe's hash, so a changed recipe builds again.
   # Everything after qtbase is built against it, so a new qtbase rebuilds them.
-  recipe="$( { declare -f "build_$pkg"; if [ "$after_qtbase" = 1 ]; then cat "$STAMPS/qtbase" 2>/dev/null || true; fi; } | sha256sum | cut -c1-16)"
+  recipe="$( { declare -f "build_$pkg"; if declare -F "inputs_$pkg" >/dev/null; then "inputs_$pkg"; fi; if [ "$after_qtbase" = 1 ]; then cat "$STAMPS/qtbase" 2>/dev/null || true; fi; } | sha256sum | cut -c1-16)"
   [ "$pkg" = qtbase ] && after_qtbase=1
   if [ "$(cat "$STAMPS/$pkg" 2>/dev/null)" = "$recipe" ]; then echo "== $pkg: already built"; continue; fi
   echo "== $pkg"
