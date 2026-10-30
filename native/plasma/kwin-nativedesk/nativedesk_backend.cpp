@@ -400,7 +400,11 @@ QList<CompositingType> NativeDeskBackend::supportedCompositors() const
 
 Outputs NativeDeskBackend::outputs() const
 {
-    return m_output ? Outputs{m_output} : Outputs{};
+    Outputs outputs;
+    if (m_output) {
+        outputs.append(m_output);
+    }
+    return outputs;
 }
 
 NativeDeskOutput *NativeDeskBackend::output() const

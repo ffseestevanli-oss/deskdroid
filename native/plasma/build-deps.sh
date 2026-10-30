@@ -292,11 +292,15 @@ build_qtbase() {
   perl -0pi -e 's/if\(\(LINUX\) OR QT_FIND_ALL_PACKAGES_ALWAYS\)(\s*qt_find_package\(Wayland)/if((LINUX OR ANDROID) OR QT_FIND_ALL_PACKAGES_ALWAYS)$1/' \
     "$s/src/gui/configure.cmake"
   grep -q "LINUX OR ANDROID" "$s/src/gui/configure.cmake"
+  # Likewise xkbcommon (only looked for with X11); KWin uses Qt's xkbcommon helpers.
+  perl -0pi -e 's/if\(\(X11_SUPPORTED\) OR QT_FIND_ALL_PACKAGES_ALWAYS\)(\s*qt_find_package\(XKB 0)/if((X11_SUPPORTED OR ANDROID) OR QT_FIND_ALL_PACKAGES_ALWAYS)$1/' \
+    "$s/src/gui/configure.cmake"
+  grep -q "X11_SUPPORTED OR ANDROID" "$s/src/gui/configure.cmake"
   mkdir -p "$s/_android"
   (cd "$s/_android" && PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" "$s/configure" \
     -platform android-clang -android-ndk "$NDK" -android-sdk "$ANDROID_HOME" -android-abis arm64-v8a \
     -android-ndk-platform android-$API -qt-host-path "$QT_HOST_PATH" -prefix "$PREFIX" \
-    -release -nomake tests -nomake examples -dbus-linked -feature-dbus -feature-wayland -pkg-config -system-freetype -fontconfig \
+    -release -nomake tests -nomake examples -dbus-linked -feature-dbus -feature-wayland -feature-xkbcommon -pkg-config -system-freetype -fontconfig \
     -- $(qt_find_args) -DQT_FEATURE_vulkan=OFF)
   cmake --build "$s/_android" -j "$JOBS"
   cmake --install "$s/_android"
