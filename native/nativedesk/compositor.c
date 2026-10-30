@@ -63,7 +63,10 @@ struct client {
     bool y_invert;
     int to_release[NDESK_MAX_BUFFERS];
     int n_release;
-    bool wants_frame;       /* committed since the last frame went out */
+    bool wants_frame;       /* owed a FRAME once its queue has room */
+    /* Commits not on screen yet, oldest first: one is latched per frame. */
+    struct { int id; bool y_invert; } queue[2];
+    int n_queue;
     unsigned commits, commits_last;
     float color[3];
 };
@@ -103,6 +106,7 @@ static struct {
     int focus;                /* client index under a held button, -1 if none */
     float grab_dx, grab_dy;
     bool dirty;
+    bool dirty_next;          /* draw again next loop */
 } C = { .listen_fd = -1, .wake = -1, .grab = -1, .focus = -1, .lock = PTHREAD_MUTEX_INITIALIZER };
 
 static PFNEGLGETNATIVECLIENTBUFFERANDROIDPROC pGetNativeClientBuffer;
@@ -364,13 +368,22 @@ static bool read_client(int i)
                 glFinish();
             }
         }
-        if (cl->current >= 0 && cl->current != (int)id && cl->n_release < NDESK_MAX_BUFFERS)
-            cl->to_release[cl->n_release++] = cl->current;
-        cl->current = id;
-        cl->y_invert = m.commit.y_invert;
-        cl->w = cl->buf[id].width;
-        cl->h = cl->buf[id].height;
-        cl->wants_frame = true;
+        if (cl->n_queue == 2) { /* the app didn't wait for FRAME: drop its oldest */
+            if (cl->n_release < NDESK_MAX_BUFFERS) cl->to_release[cl->n_release++] = cl->queue[0].id;
+            cl->queue[0] = cl->queue[1];
+            cl->n_queue = 1;
+        }
+        cl->queue[cl->n_queue].id = id;
+        cl->queue[cl->n_queue].y_invert = m.commit.y_invert;
+        cl->n_queue++;
+        /* With room for one more, the app renders its next frame while this
+         * one waits for the compositor: a frame of slack, like triple buffering. */
+        if (cl->n_queue < 2) {
+            struct ndesk_msg f = { .op = NDESK_FRAME, .frame = { now_ns() } };
+            send_msg(cl, &f);
+        } else {
+            cl->wants_frame = true;
+        }
         cl->commits++;
         C.dirty = true;
         break;
@@ -510,20 +523,37 @@ static void draw(void)
 }
 
 /*
- * Tells apps whose commit this frame latched to start their next one. Sent as
- * soon as the frame is recorded, before the swap: the app then renders while
- * the compositor waits for vsync, and its commit makes the next frame. Sending
- * it after the swap left apps a frame behind, at half the refresh rate.
+ * Tells apps whose queue was full that this frame took a commit from it, so
+ * they can start another. Sent as soon as the frame is recorded, before the
+ * swap, so the app renders while the compositor waits for vsync.
  */
 static void send_frames(void)
 {
     uint64_t t = now_ns();
     for (int i = 0; i < MAX_CLIENTS; i++) {
         struct client *cl = C.clients[i];
-        if (!cl || !cl->wants_frame) continue;
+        if (!cl || !cl->wants_frame || cl->n_queue >= 2) continue;
         struct ndesk_msg m = { .op = NDESK_FRAME, .frame = { t } };
         send_msg(cl, &m);
         cl->wants_frame = false;
+    }
+}
+
+/* Puts each app's oldest queued commit on screen for this frame. */
+static void latch_commits(void)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        struct client *cl = C.clients[i];
+        if (!cl || !cl->n_queue) continue;
+        int id = cl->queue[0].id;
+        if (cl->current >= 0 && cl->current != id && cl->n_release < NDESK_MAX_BUFFERS)
+            cl->to_release[cl->n_release++] = cl->current;
+        cl->current = id;
+        cl->y_invert = cl->queue[0].y_invert;
+        cl->w = cl->buf[id].width;
+        cl->h = cl->buf[id].height;
+        cl->queue[0] = cl->queue[1];
+        if (--cl->n_queue) C.dirty_next = true; /* another commit waits for the next frame */
     }
 }
 
@@ -603,12 +633,14 @@ static void *loop(void *unused)
         if (C.dirty) {
             /* Thread CPU time, so waiting for a free screen buffer or vsync doesn't count. */
             uint64_t t0 = clock_ns(CLOCK_THREAD_CPUTIME_ID);
+            latch_commits();
             draw();
             send_frames();
             if (!eglSwapBuffers(C.dpy, C.surf)) LOGE("swap failed (0x%x)", eglGetError());
             send_releases();
             draw_total += (clock_ns(CLOCK_THREAD_CPUTIME_ID) - t0) / 1e6;
-            C.dirty = false;
+            C.dirty = C.dirty_next;
+            C.dirty_next = false;
             frames++;
         }
         uint64_t t = now_ns();

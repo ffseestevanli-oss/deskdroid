@@ -18,9 +18,11 @@
  *   compositor -> app
  *     CONFIGURE  the window's id
  *     RELEASE    the compositor no longer reads buffer <id>
- *     FRAME      the compositor has drawn the app's last commit into a frame
- *                that is waiting for vsync: draw the next one now, it makes
- *                the following vsync (pacing, like wl_surface.frame)
+ *     FRAME      draw the next frame now (pacing, like wl_surface.frame).
+ *                The compositor queues up to two commits and shows one per
+ *                refresh; FRAME comes right after a commit while the queue
+ *                has room, otherwise once a refresh takes one from it. So an
+ *                app has a frame of slack, and three buffers are enough.
  *     POINTER    pointer position (window coordinates) and buttons
  *     KEY        Android key code, Unicode character, down/up
  *     SCROLL     scroll by dx, dy pixels (wheel or two-finger drag), at the
