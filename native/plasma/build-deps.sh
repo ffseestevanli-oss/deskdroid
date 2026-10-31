@@ -589,9 +589,9 @@ for pkg in "${@:-${ALL[@]}}"; do
   rc=$?
   set -e
   if [ $rc -ne 0 ]; then
-    grep -A3 -E "CMake Error|ERROR:|error:|Error [0-9]|No such file|not found" "$log" | grep -v -E "meson-private|testfile|CMakeScratch|TryCompile|QMLModule|qmldir|ECMFindQmlModule|Call Stack|^--$" | head -40
+    grep -A3 -E "CMake Error|ERROR:|error:|Error [0-9]|No such file|not found" "$log" | grep -v -E "meson-private|testfile|CMakeScratch|TryCompile|QMLModule|qmldir|ECMFindQmlModule|Call Stack|^--$" | head -40 || true
     echo "-- distinct compile errors:"
-    grep -E "^/.*: (fatal )?error: " "$log" | sed 's|^.*/src/[^/]*-[0-9.]*/||' | sort -u | head -60
+    grep -E "^/.*: (fatal )?error: " "$log" | sed 's|^.*/src/[^/]*-[0-9.]*/||' | sort -u | head -60 || true
     echo "-- last lines:"
     tail -40 "$log"
   fi
