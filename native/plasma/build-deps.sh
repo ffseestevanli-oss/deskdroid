@@ -511,12 +511,51 @@ build_kwin() {
     -DKWIN_BUILD_ACTIVITIES=OFF -DKWIN_BUILD_EIS=OFF -DBUILD_DOC=OFF -DNATIVE_PREFIX="$QT_HOST_PATH"
 }
 
+# ---- plasmashell's libraries (stage 4a) --------------------------------------
+
+build_kcodecs() { kf kcodecs; }
+build_kitemviews() { kf kitemviews; }
+build_kcompletion() { kf kcompletion; }
+build_kbookmarks() { kf kbookmarks; }
+build_kconfigwidgets() { kf kconfigwidgets; }
+# No sound theme player (libcanberra) here: notifications are silent for now.
+build_knotifications() {
+  local s; s="$(kf_src knotifications)"
+  sed -i 's/find_package(Canberra REQUIRED)/find_package(Canberra)/' "$s/CMakeLists.txt"
+  unandroid "$s"
+  kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON
+}
+build_kjobwidgets() { kf kjobwidgets; }
+# Devices: UPower over D-Bus (the battery) and mounts from fstab.
+build_solid() { kf solid; }
+build_kio() { kf kio -DWITH_WAYLAND=ON; }
+build_kxmlgui() { kf kxmlgui; }
+build_kstatusnotifieritem() { kf kstatusnotifieritem; }
+# The library only: its QML imports need Boost, which isn't here yet.
+build_plasma_activities() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-activities-$PLASMA_VERSION.tar.xz" "plasma-activities-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  kde_cmake "$s" -DPLASMA_ACTIVITIES_LIBRARY_ONLY=ON
+}
+build_libplasma() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/libplasma-$PLASMA_VERSION.tar.xz" "libplasma-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DWITHOUT_X11=ON
+}
+build_layer_shell_qt() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/layer-shell-qt-$PLASMA_VERSION.tar.xz" "layer-shell-qt-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  kde_cmake "$s"
+}
+
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
      qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
-     plasma_wayland_protocols kdecoration kwayland kwin kiconthemes breeze)
+     plasma_wayland_protocols kdecoration kwayland kwin kiconthemes breeze
+     kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid kio
+     kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
