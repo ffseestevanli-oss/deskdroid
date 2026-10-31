@@ -1,7 +1,7 @@
 // DeskDroid: KWindowSystem's X11-only KWindowInfo, as a do-nothing stand-in
 // (see KX11Extras here): it describes no window.
 #pragma once
-#include <KWindowSystem/netwm_def.h>
+#include <netwm_def.h>
 #include <QByteArray>
 #include <QRect>
 #include <QString>

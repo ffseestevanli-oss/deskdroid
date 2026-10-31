@@ -2,7 +2,7 @@
 // KDE code calls these only when KWindowSystem::isPlatformX11(), which is
 // never true here (Wayland only), but still has to compile and link.
 #pragma once
-#include <KWindowSystem/netwm_def.h>
+#include <netwm_def.h>
 #include <QList>
 #include <QPixmap>
 #include <QRect>
