@@ -417,7 +417,7 @@ build_kcoreaddons() {
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON
   # kcoreaddons_add_plugin: plugins in their namespace folders, as on Linux
   # (unandroid takes out its Android branch, which installs them flat).
-  ! grep -q 'PROPERTY PREFIX "libplugins_"' "$PREFIX/lib/cmake/KF6CoreAddons/KF6CoreAddonsMacros.cmake"
+  ! grep -q 'if(NOT ANDROID)' "$PREFIX/lib/cmake/KF6CoreAddons/KF6CoreAddonsMacros.cmake"
 }
 build_ki18n() {
   local s; s="$(kf_src ki18n)"
