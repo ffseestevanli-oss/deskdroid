@@ -372,7 +372,7 @@ kde_cmake() {
 # Wayland). Here KDE runs like on Linux, so drop those Android branches from
 # the build files; C++ code keeps its Q_OS_ANDROID parts.
 unandroid() {
-  find "$1" -name CMakeLists.txt -o -name '*.cmake' | xargs sed -i -E \
+  find "$1" -type f \( -name CMakeLists.txt -o -name '*.cmake' \) | xargs sed -i -E \
     -e 's/(AND|OR) NOT ANDROID//g' -e 's/NOT ANDROID AND //g' \
     -e 's/if ?\(ANDROID\)/if(FALSE)/g' -e 's/\(ANDROID OR /(/g' -e 's/ OR ANDROID//g'
 }
@@ -519,15 +519,21 @@ build_kcompletion() { kf kcompletion; }
 build_kbookmarks() { kf kbookmarks; }
 build_kconfigwidgets() { kf kconfigwidgets; }
 # No sound theme player (libcanberra) here: notifications are silent for now.
+# They go out over D-Bus as on Linux, not through Android's notification API.
 build_knotifications() {
-  local s; s="$(kf_src knotifications)"
+  local s f; s="$(kf_src knotifications)"
   sed -i 's/find_package(Canberra REQUIRED)/find_package(Canberra)/' "$s/CMakeLists.txt"
+  for f in knotificationpermission.cpp knotificationmanager.cpp knotification.cpp; do
+    sed -i '0,/^#include.*/s//&\n#undef Q_OS_ANDROID/' "$s/src/$f"
+    grep -q "^#undef Q_OS_ANDROID" "$s/src/$f"
+  done
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON
 }
 build_kjobwidgets() { kf kjobwidgets; }
-# Devices: UPower over D-Bus (the battery) and mounts from fstab.
-build_solid() { kf solid; }
+# Solid's Android build has no device backends besides the fake one; its
+# Linux ones need libmount and udisks. UPower (the battery) comes later.
+build_solid() { local s; s="$(kf_src solid)"; kde_cmake "$s" -DUSE_DBUS=ON; }
 build_kio() { kf kio -DWITH_WAYLAND=ON; }
 build_kxmlgui() { kf kxmlgui; }
 build_kstatusnotifieritem() { kf kstatusnotifieritem; }
