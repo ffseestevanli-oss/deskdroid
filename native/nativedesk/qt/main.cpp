@@ -205,7 +205,10 @@ int demoMain(int argc, char **argv)
     QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
     // Qt Quick on OpenGL ES through the platform plugin's GL context; QSG_INFO
     // logs which GPU and render loop it ended up with.
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    // As a Wayland client of KWin there is no GL yet (Android's EGL doesn't
+    // speak Wayland), so Qt Quick draws in software and the GL window stays out.
+    const bool wayland = qgetenv("QT_QPA_PLATFORM").startsWith("wayland");
+    QQuickWindow::setGraphicsApi(wayland ? QSGRendererInterface::Software : QSGRendererInterface::OpenGL);
     qputenv("QSG_INFO", "1");
 
     QGuiApplication app(argc, argv);
@@ -221,7 +224,7 @@ int demoMain(int argc, char **argv)
     raster.show();
     GLDemo gl;
     gl.resize(760, 440);
-    gl.show();
+    if (!wayland) gl.show();
 
     QQmlApplicationEngine quick;
     QObject::connect(&quick, &QQmlApplicationEngine::warnings, [](const QList<QQmlError> &errors) {

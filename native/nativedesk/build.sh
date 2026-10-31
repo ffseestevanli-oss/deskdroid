@@ -68,6 +68,24 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # The Qt libraries already copied count too: some need non-Qt libraries
     # (QtDBus needs libdbus-1).
     bundled=("$OUT/libkwin_wayland.so" "$OUT/libnativedesk_qt.so" "$OUT"/libQt6*.so)
+    # Plugins (Qt's Wayland client, KDE's and KWin's), also flat in the
+    # library folder: Qt and KDE on Android look there for files named
+    # libplugins_<plugin folder, / as _>_<name>.so. Qt's Android build names
+    # its plugins that way already. Android's own platform plugin stays out.
+    plugins=0
+    if [ -d "$DESKDROID_QT_ANDROID/plugins" ]; then
+      while IFS= read -r rel; do
+        dir="$(dirname "$rel")"; base="$(basename "$rel")"
+        case "$base" in
+          libplugins_*) name="$base" ;;
+          *) name="libplugins_${dir//\//_}_${base#lib}" ;;
+        esac
+        case "$rel" in platforms/*) case "$base" in *wayland*) ;; *) continue ;; esac ;; esac
+        install -m 644 "$DESKDROID_QT_ANDROID/plugins/$rel" "$OUT/$name"
+        bundled+=("$OUT/$name"); plugins=$((plugins + 1))
+      done < <(cd "$DESKDROID_QT_ANDROID/plugins" && find . -name '*.so' | sed 's|^\./||' | sort)
+      echo "   $plugins plugins"
+    fi
     todo=("${bundled[@]}")
     while [ ${#todo[@]} -gt 0 ]; do
       f="${todo[0]}"; todo=("${todo[@]:1}")

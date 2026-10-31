@@ -139,39 +139,52 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * through DeskDroid's own Qt platform plugin, run by QtHost in its own
      * app_process (Qt for Android needs a Java VM). Only in builds made with Qt.
      */
-    private fun startQtApp() {
+    /**
+     * With [kwinRuntime] (KWin's XDG_RUNTIME_DIR), the demo is instead an
+     * ordinary Wayland client of KWin, through Qt's own Wayland plugin, and
+     * its output shares the overlay with KWin's.
+     */
+    private fun startQtApp(kwinRuntime: File? = null) {
         val libs = applicationInfo.nativeLibraryDir
         val exe = File(libs, "libnativedesk_qt.so")
         if (!exe.exists()) return
-        qtStatus = "Qt demo: starting"
+        val platform = if (kwinRuntime != null) "wayland" else "deskdroid"
+        if (kwinRuntime == null) qtStatus = "Qt demo: starting"
         try {
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
-                QtHost::class.java.name, libs, exe.name, "-platform", "deskdroid"
+                QtHost::class.java.name, libs, exe.name, "-platform", platform
             ).redirectErrorStream(true).also { pb ->
                 pb.environment().apply {
                     remove("LD_PRELOAD")
                     put("CLASSPATH", applicationInfo.sourceDir)
                     put("LD_LIBRARY_PATH", libs)
-                    put("QT_QPA_PLATFORM", "deskdroid")
+                    put("QT_QPA_PLATFORM", platform)
                     put("QT_QPA_FONTDIR", "/system/fonts")
                     put("HOME", filesDir.path)
                     put("TMPDIR", cacheDir.path)
-                    put("XDG_RUNTIME_DIR", cacheDir.path)
+                    put("XDG_RUNTIME_DIR", (kwinRuntime ?: cacheDir).path)
+                    if (kwinRuntime != null) {
+                        put("WAYLAND_DISPLAY", "wayland-0")
+                        put("QT_PLUGIN_PATH", libs) // Qt's Wayland plugins, flat in the library folder
+                        put("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1") // KWin draws the borders (Breeze, soon)
+                    }
                 }
             }.start()
             apps += p
-            qtStatus = "Qt demo: running"
+            if (kwinRuntime == null) qtStatus = "Qt demo: running"
             Thread {
                 p.inputStream.bufferedReader().forEachLine {
                     AppLog.i("[nativedesk-qt] $it")
                     synchronized(qtLines) {
-                        qtLines.addLast(it.take(160))
-                        while (qtLines.size > 14) qtLines.removeFirst()
+                        qtLines.addLast(if (kwinRuntime != null) "demo: ${it.take(150)}" else it.take(160))
+                        while (qtLines.size > (if (kwinRuntime != null) 40 else 14)) qtLines.removeFirst()
                     }
                 }
                 val code = p.waitFor()
-                qtStatus = "Qt demo: exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
+                val exit = "exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
+                if (kwinRuntime != null) synchronized(qtLines) { qtLines.addLast("demo: $exit") }
+                else qtStatus = "Qt demo: $exit"
                 AppLog.i("[nativedesk-qt] exited ($code)")
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
@@ -224,8 +237,14 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             apps += p
             qtStatus = "KWin: running"
             Thread {
+                var demoStarted = false
                 p.inputStream.bufferedReader().forEachLine {
                     AppLog.i("[kwin] $it")
+                    // KWin is ready for clients: a first window inside it.
+                    if (!demoStarted && it.contains("Accepting client connections")) {
+                        demoStarted = true
+                        main.postDelayed({ if (started) startQtApp(runtime) }, 1500)
+                    }
                     synchronized(qtLines) {
                         qtLines.addLast(it.take(160))
                         while (qtLines.size > 40) qtLines.removeFirst()
