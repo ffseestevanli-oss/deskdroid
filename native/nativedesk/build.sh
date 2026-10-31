@@ -51,12 +51,19 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
   # Stage 3: KWin, when the Qt is DeskDroid's own build (native/plasma), which
   # has it. Everything libkwin_wayland.so needs from that prefix goes next to
   # it. APKs only carry files named lib*.so, so versioned names (libfoo.so.6)
-  # lose the version, in the files and in what the libraries ask for.
+  # lose the version. And Android has its own libinput, libdrm, libexpat...,
+  # which ours would shadow (app_process itself then fails to link), so
+  # libraries other than Qt's, KDE's and KWin's get a libdd_ prefix. Both
+  # renames apply to the files, their sonames and what the libraries ask for.
   if [ -e "$DESKDROID_QT_ANDROID/lib/libkwin_wayland.so" ]; then
     echo "== native desktop test: KWin"
     command -v patchelf >/dev/null || { echo "patchelf is needed to bundle KWin"; exit 1; }
     sysroot="$NDK/toolchains/llvm/prebuilt/$host/sysroot/usr/lib/aarch64-linux-android"
-    unversioned() { local n="${1%%.so*}.so"; echo "$n"; }
+    unversioned() { echo "${1%%.so*}.so"; }
+    bundlename() {
+      local n; n="$(unversioned "$1")"
+      case "$n" in libQt6*|libKF6*|libkwin*|libkdecorations*|libKWayland*) echo "$n" ;; *) echo "libdd_${n#lib}" ;; esac
+    }
     install -m 755 "$DESKDROID_QT_ANDROID/lib/libkwin_wayland.so" "$OUT/libkwin_wayland.so"
     # The Qt libraries already copied count too: some need non-Qt libraries
     # (QtDBus needs libdbus-1).
@@ -65,9 +72,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     while [ ${#todo[@]} -gt 0 ]; do
       f="${todo[0]}"; todo=("${todo[@]:1}")
       for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
-        name="$(unversioned "$lib")"
+        [ -e "$sysroot/$API/$(unversioned "$lib")" ] || [ -e "$sysroot/$(unversioned "$lib")" ] && continue # Android's own
+        name="$(bundlename "$lib")"
         [ -e "$OUT/$name" ] && continue
-        [ -e "$sysroot/$API/$name" ] || [ -e "$sysroot/$name" ] && continue # Android's own
         if [ ! -e "$DESKDROID_QT_ANDROID/lib/$lib" ]; then echo "   ? $lib (not in the prefix)"; continue; fi
         install -m 644 "$DESKDROID_QT_ANDROID/lib/$lib" "$OUT/$name"
         echo "   + $name"
@@ -77,8 +84,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     done
     for f in "${bundled[@]}"; do
       args=()
-      for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\.so\.[^]]*\)\].*/\1/p'); do
-        args+=(--replace-needed "$lib" "$(unversioned "$lib")")
+      for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
+        name="$(bundlename "$lib")"
+        [ "$name" != "$lib" ] && [ -e "$OUT/$name" ] && args+=(--replace-needed "$lib" "$name")
       done
       soname="$("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Library soname: \[\([^]]*\)\].*/\1/p')"
       [ -n "$soname" ] && [ "$soname" != "$(basename "$f")" ] && args+=(--set-soname "$(basename "$f")")
