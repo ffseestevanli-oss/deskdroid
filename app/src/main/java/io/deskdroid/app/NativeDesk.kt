@@ -325,11 +325,6 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 }
             }.start()
             apps += p
-            val structure = File(data, "plugins/kf6/packagestructure/plasma_shell.so")
-            synchronized(qtLines) {
-                qtLines.addLast("shell: link ${structure.path}: exists=${structure.exists()} -> " +
-                    (try { android.system.Os.readlink(structure.path) } catch (e: Exception) { "$e" }))
-            }
             Thread {
                 p.inputStream.bufferedReader().forEachLine {
                     AppLog.i("[plasmashell] $it")
@@ -340,7 +335,18 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 }
                 val code = p.waitFor()
                 val exit = "exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
-                synchronized(qtLines) { qtLines.addLast("shell: $exit") }
+                synchronized(qtLines) {
+                    qtLines.addLast("shell: $exit")
+                    // Why KDE didn't find its package structures (while that's the problem).
+                    val dir = File(data, "plugins/kf6/packagestructure")
+                    val structure = File(dir, "plasma_shell.so")
+                    qtLines.addLast("check: ${dir.path} has ${dir.list()?.size ?: -1} entries: ${dir.list()?.take(4)}")
+                    qtLines.addLast("check: plasma_shell.so exists=${structure.exists()} readable=${structure.canRead()} -> " +
+                        (try { android.system.Os.readlink(structure.path) } catch (e: Exception) { "$e" }))
+                    qtLines.addLast("check: plugins.txt lines: ${File(data, "plugins.txt").takeIf { it.exists() }?.readLines()?.size ?: -1}, " +
+                        "packagestructure: ${File(data, "plugins.txt").takeIf { it.exists() }?.readLines()?.count { it.contains("packagestructure") } ?: -1}")
+                    linkErrors.take(3).forEach { qtLines.addLast("check: $it") }
+                }
                 AppLog.i("[plasmashell] exited ($code)")
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
@@ -360,6 +366,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * library folder (libplugins_<namespace>_<name>.so). So the plugins
      * folder gets links with the real layout, from the list the build ships.
      */
+    private val linkErrors = mutableListOf<String>()
+
     private fun linkPlugins(libs: String, data: File) {
         linkFlatLibraries(libs, File(data, "plugins.txt"), File(data, "plugins"), clear = true)
         // QML plugins, next to their qmldir files (unpacked from the data).
@@ -376,6 +384,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             link.parentFile?.mkdirs()
             link.delete()
             try { android.system.Os.symlink(File(libs, flat).path, link.path) } catch (e: Exception) {
+                linkErrors += "couldn't link $rel: $e"
                 AppLog.i("Native desktop test: couldn't link plugin $rel: $e")
             }
         }
