@@ -215,6 +215,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         try {
             unpackKWinData(File(libs, "libkwin_data.so"), data)
             linkPlugins(libs, data)
+            // KWin remembers each screen's scale; the app sets it at every start.
+            File(filesDir, "config/kwinoutputconfig.json").delete()
             val runtime = File(cacheDir, "runtime").apply { mkdirs(); setReadable(true, true); setWritable(true, true); setExecutable(true, true) }
             val fonts = File(data, "fonts.conf").apply {
                 writeText("<?xml version=\"1.0\"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n" +
@@ -455,9 +457,14 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     downAt = e.eventTime
                     travel = 0f
                     maxFingers = 1
-                    // Tap, then touch again and hold: drag with the left button down.
+                    // Tap, then touch again and hold: drag with the left button down. The
+                    // tap's own click waits for this (pendingTap), so a drag is one press,
+                    // not a click and then a press (a double click: title bars maximize).
                     dragging = e.eventTime - lastTapAt < DOUBLE_TAP_MS
-                    if (dragging) NativeDesk.nativePointer(px, py, 1)
+                    if (dragging) {
+                        handler.removeCallbacks(pendingTap)
+                        NativeDesk.nativePointer(px, py, 1)
+                    }
                 }
                 MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP -> maxFingers = maxOf(maxFingers, n)
                 MotionEvent.ACTION_MOVE -> {
@@ -477,7 +484,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     when {
                         dragging -> NativeDesk.nativePointer(px, py, 0)
                         tap && maxFingers >= 2 -> click(2)
-                        tap -> click(1)
+                        tap -> handler.postDelayed(pendingTap, DOUBLE_TAP_MS)
                     }
                     lastTapAt = if (tap && maxFingers == 1 && !dragging) e.eventTime else 0L
                     dragging = false
@@ -487,6 +494,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             lastX = if (e.actionMasked == MotionEvent.ACTION_POINTER_UP) avgWithout(e, e.actionIndex) { e.getX(it) } else cx
             lastY = if (e.actionMasked == MotionEvent.ACTION_POINTER_UP) avgWithout(e, e.actionIndex) { e.getY(it) } else cy
         }
+
+        private val handler = Handler(Looper.getMainLooper())
+        private val pendingTap = Runnable { click(1) }
 
         private fun click(button: Int) {
             NativeDesk.nativePointer(px, py, button)

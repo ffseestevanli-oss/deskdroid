@@ -164,6 +164,7 @@ private:
     int acquire();
     bool ensureBuffers(const QSize &size);
     void freeBuffers();
+    qreal outputScale() const { return m_output ? m_output->scale() : m_scale; }
 
     QSize m_size;
     qreal m_scale;

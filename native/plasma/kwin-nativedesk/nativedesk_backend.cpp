@@ -46,6 +46,10 @@ NativeDeskOutput::NativeDeskOutput(NativeDeskBackend *backend, const QSize &pixe
         .name = QStringLiteral("NativeDesk-1"),
         .manufacturer = QStringLiteral("DeskDroid"),
         .model = QStringLiteral("Android screen"),
+        // KWin picks each screen's scale from its size in millimetres (phone
+        // screens aim at 150 dpi of logical pixels); a size that comes out at
+        // the requested scale keeps it, where no size would mean scale 1.
+        .physicalSize = (QSizeF(pixelSize) / (scale * 150.0) * 25.4).toSize(),
         .internal = true,
     });
     setState(State{
@@ -467,10 +471,12 @@ void NativeDeskBackend::readMessages()
             }
             break;
         case NDESK_POINTER:
-            m_pointer->pointer(QPointF(m.pointer.x, m.pointer.y) / m_scale, m.pointer.buttons);
+            // The compositor speaks screen pixels, KWin logical ones, at
+            // whatever scale KWin's output configuration settled on.
+            m_pointer->pointer(QPointF(m.pointer.x, m.pointer.y) / outputScale(), m.pointer.buttons);
             break;
         case NDESK_SCROLL:
-            m_pointer->scroll(m.scroll.dx / m_scale, m.scroll.dy / m_scale);
+            m_pointer->scroll(m.scroll.dx / outputScale(), m.scroll.dy / outputScale());
             break;
         case NDESK_KEY:
             m_keyboard->key(m.key.keycode, m.key.unicode, m.key.down);
