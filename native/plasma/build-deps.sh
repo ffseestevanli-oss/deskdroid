@@ -597,6 +597,15 @@ build_kglobalacceld() {
 # kdeclarative's drag and drop, controls addons and calendar events.
 build_kitemmodels() { kf kitemmodels; }
 build_kdeclarative() { kf kdeclarative; }
+# Settings pages' QML (org.kde.kcmutils): Plasma's widgets import it.
+build_kcmutils() { kf kcmutils; }
+# Plasma 5's data engines, which the digital clock still reads the time from.
+build_plasma5support() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma5support-$PLASMA_VERSION.tar.xz" "plasma5support-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DWITH_X11=OFF
+  test -e "$PREFIX/lib/cmake/Plasma5Support/Plasma5SupportConfig.cmake"
+}
 
 # ---- plasmashell (stage 4b) ---------------------------------------------------
 
@@ -625,7 +634,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
-     kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative plasmashell plasma_desktop_packages)
+     kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support plasmashell plasma_desktop_packages)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
