@@ -174,6 +174,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
                         put("FONTCONFIG_FILE", File(data, "fonts.conf").path)
                         put("XDG_DATA_DIRS", File(data, "share").path)
+                        put("XDG_CONFIG_HOME", File(filesDir, "config").path)
+                        put("XCURSOR_PATH", File(data, "share/icons").path)
+                        sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
                     }
                 }
             }.start()
@@ -216,6 +219,11 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 writeText("<?xml version=\"1.0\"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n" +
                     "  <cachedir>${File(cacheDir, "fontconfig").path}</cachedir>\n</fontconfig>\n")
             }
+            val config = File(filesDir, "config").apply { mkdirs() }
+            // Breeze cursors (shipped in KWin's data) unless the user picked others.
+            File(config, "kcminputrc").takeUnless { it.exists() }
+                ?.writeText("[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24\n")
+            val bus = startSessionBus(libs, data, runtime)
             // Plasma's usual size on a phone: about twice the panel's pixels.
             val scale = (resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4.0
             val p = ProcessBuilder(
@@ -231,8 +239,11 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", runtime.path)
                     put("XDG_DATA_DIRS", File(data, "share").path)
-                    put("XDG_CONFIG_HOME", File(filesDir, "config").path)
+                    put("XDG_CONFIG_HOME", config.path)
                     put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
+                    put("QT_PLUGIN_PATH", libs) // KWin's, KDE's and Breeze's plugins, flat in the library folder
+                    put("XCURSOR_PATH", File(data, "share/icons").path)
+                    if (bus != null) put("DBUS_SESSION_BUS_ADDRESS", bus)
                     put("FONTCONFIG_FILE", fonts.path)
                     put("QT_QPA_FONTDIR", "/system/fonts")
                     put("KWIN_COMPOSE", "Q") // QPainter: the backend draws on the CPU for now
@@ -263,6 +274,61 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         } catch (e: Exception) {
             qtStatus = "KWin: couldn't start: $e"
             AppLog.i("Native desktop test: couldn't start KWin: $e")
+        }
+    }
+
+    private var sessionBus: String? = null
+
+    /**
+     * The D-Bus session bus KDE software talks over: DeskDroid's own
+     * dbus-daemon, listening in KWin's runtime folder. Returns its address,
+     * or null (KWin runs without one) if it didn't start.
+     */
+    private fun startSessionBus(libs: String, data: File, runtime: File): String? {
+        val exe = File(libs, "libdd_dbus-daemon.so")
+        if (!exe.exists()) return null
+        val socket = File(runtime, "bus").apply { delete() }
+        val machineId = File(data, "machine-id").apply {
+            if (!exists()) writeText(java.util.UUID.randomUUID().toString().replace("-", "") + "\n")
+        }
+        val conf = File(data, "session.conf").apply {
+            writeText("""
+                <busconfig>
+                  <type>session</type>
+                  <listen>unix:path=${socket.path}</listen>
+                  <auth>EXTERNAL</auth>
+                  <policy context="default">
+                    <allow send_destination="*" eavesdrop="true"/>
+                    <allow eavesdrop="true"/>
+                    <allow own="*"/>
+                  </policy>
+                </busconfig>
+            """.trimIndent() + "\n")
+        }
+        return try {
+            val p = ProcessBuilder(exe.path, "--config-file=${conf.path}", "--nofork", "--nopidfile")
+                .redirectErrorStream(true).also { pb ->
+                    pb.environment().apply {
+                        remove("LD_PRELOAD")
+                        put("LD_LIBRARY_PATH", libs)
+                        put("DBUS_MACHINE_ID_FILE", machineId.path)
+                    }
+                }.start()
+            apps += p
+            Thread {
+                p.inputStream.bufferedReader().forEachLine {
+                    AppLog.i("[dbus] $it")
+                    synchronized(qtLines) { qtLines.addLast("dbus: ${it.take(150)}") }
+                }
+                val code = p.waitFor()
+                synchronized(qtLines) { qtLines.addLast("dbus: exited with code $code") }
+            }.apply { isDaemon = true }.start()
+            // KWin connects at startup: wait for the socket, briefly.
+            for (i in 0 until 40) { if (socket.exists() || !p.isAlive) break; Thread.sleep(50) }
+            if (socket.exists()) "unix:path=${socket.path}".also { sessionBus = it } else null
+        } catch (e: Exception) {
+            AppLog.i("Native desktop test: couldn't start the session bus: $e")
+            null
         }
     }
 

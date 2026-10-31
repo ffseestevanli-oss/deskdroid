@@ -72,6 +72,11 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # library folder: Qt and KDE on Android look there for files named
     # libplugins_<plugin folder, / as _>_<name>.so. Qt's Android build names
     # its plugins that way already. Android's own platform plugin stays out.
+    # The D-Bus session bus, a program shipped under a library's name.
+    if [ -e "$DESKDROID_QT_ANDROID/bin/dbus-daemon" ]; then
+      install -m 755 "$DESKDROID_QT_ANDROID/bin/dbus-daemon" "$OUT/libdd_dbus-daemon.so"
+      bundled+=("$OUT/libdd_dbus-daemon.so")
+    fi
     plugins=0
     if [ -d "$DESKDROID_QT_ANDROID/plugins" ]; then
       while IFS= read -r rel; do
@@ -115,7 +120,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Data KWin reads at run time (keyboard layouts, its own files), as a zip
     # named like a library so it ships the same way; the app unpacks it.
     rm -f "$OUT/libkwin_data.so"
-    (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" share/X11/xkb $(ls -d share/kwin* 2>/dev/null))
+    (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" share/X11/xkb \
+      $(ls -d share/kwin* share/icons/breeze_cursors share/color-schemes 2>/dev/null))
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
   fi
 else

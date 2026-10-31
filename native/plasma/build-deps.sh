@@ -154,6 +154,11 @@ build_xkbcommon() {
 
 build_dbus() {
   local s; s="$(unpack https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz dbus-1.16.2.tar.xz)"
+  # The machine ID file's path is built in (under the CI's prefix), and
+  # Android has no /etc/machine-id: the app names one in DBUS_MACHINE_ID_FILE.
+  sed -i 's|_dbus_string_init_const (&filename, DBUS_MACHINE_UUID_FILE);|_dbus_string_init_const (\&filename, getenv ("DBUS_MACHINE_ID_FILE") ? getenv ("DBUS_MACHINE_ID_FILE") : DBUS_MACHINE_UUID_FILE);|g' \
+    "$s/dbus/dbus-sysdeps-unix.c"
+  grep -q 'getenv ("DBUS_MACHINE_ID_FILE")' "$s/dbus/dbus-sysdeps-unix.c"
   meson_cross "$s" -Dmodular_tests=disabled -Ddoxygen_docs=disabled -Dxml_docs=disabled -Dducktype_docs=disabled \
     -Dqt_help=disabled -Dsystemd=disabled -Dselinux=disabled -Dapparmor=disabled -Dlibaudit=disabled \
     -Dx11_autolaunch=disabled -Dinotify=enabled -Dmessage_bus=true -Dtools=true -Duser_session=false
@@ -443,6 +448,20 @@ build_plasma_wayland_protocols() {
   local s; s="$(unpack https://download.kde.org/stable/plasma-wayland-protocols/plasma-wayland-protocols-1.18.0.tar.xz plasma-wayland-protocols-1.18.0.tar.xz)"
   kde_cmake "$s"
 }
+build_kiconthemes() { kf kiconthemes -DUSE_BreezeIcons=OFF -DKICONTHEMES_USE_QTQUICK=OFF; }
+# Breeze: KWin's window borders (and the Qt style, colors and cursors). The
+# border and style settings pages need KCMUtils, which nothing else here
+# does, so they stay out; KDE's Android switch would leave out the borders.
+build_breeze() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/breeze-$PLASMA_VERSION.tar.xz" "breeze-$PLASMA_VERSION.tar.xz")"
+  perl -0pi -e 's/find_package\(KF6KCMUtils[^)]*\)\s*set_package_properties\(KF6KCMUtils.*?\)\n//s' "$s/CMakeLists.txt"
+  ! grep -q "KF6KCMUtils" "$s/CMakeLists.txt"
+  sed -i 's/^add_subdirectory(config)/# add_subdirectory(config)/' "$s/kdecoration/CMakeLists.txt"
+  grep -q "^# add_subdirectory(config)" "$s/kdecoration/CMakeLists.txt"
+  unandroid "$s"
+  kde_cmake "$s" -DBUILD_QT5=OFF -DBUILD_QT6=ON -DWITH_DECORATIONS=ON -DWITH_WALLPAPERS=OFF
+  test -e "$PREFIX/plugins/org.kde.kdecoration3/org.kde.breeze.so"
+}
 build_kdecoration() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kdecoration-$PLASMA_VERSION.tar.xz" "kdecoration-$PLASMA_VERSION.tar.xz")"
   kde_cmake "$s"
@@ -481,7 +500,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
-     plasma_wayland_protocols kdecoration kwayland kwin)
+     plasma_wayland_protocols kdecoration kwayland kwin kiconthemes breeze)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
