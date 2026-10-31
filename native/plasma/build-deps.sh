@@ -500,6 +500,10 @@ build_kwin() {
   # No sound theme to play the system bell with.
   sed -i 's/^find_package(Canberra REQUIRED)/find_package(Canberra)/' "$s/CMakeLists.txt"
   sed -i 's/^add_subdirectory(systembell)/# add_subdirectory(systembell)/' "$s/src/plugins/CMakeLists.txt"
+  # The software cursor is painted in screen pixels at its position in logical
+  # ones, so at scale 1.5 it showed at two thirds of where the pointer was
+  # (the scene's painter maps logical to screen pixels; the cursor's didn't).
+  perl -0pi -e 's/(    QPainter painter\(buffer\);\n)/$1    painter.setWindow(m_output->geometry());\n/ or die "cursor patch"' "$s/src/scene/cursordelegate_qpainter.cpp"
   # memfd_create and friends are API 30+; the Pixel has them, so link them weakly.
   # Big build, many fixes to come: keep going past errors so a run shows them all.
   KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DCMAKE_C_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
