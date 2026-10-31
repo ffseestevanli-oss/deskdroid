@@ -26,6 +26,13 @@ edit("shell/CMakeLists.txt", "add_executable(plasmashell)",
 # The systemd unit and the autostart entry are for a Linux session.
 edit("shell/CMakeLists.txt", "ecm_install_configured_files(INPUT plasma-plasmashell.service.in",
      "# ecm_install_configured_files(INPUT plasma-plasmashell.service.in")
+# Qt here has no X11 platform plugin, so no QX11Application to ask for.
+dv = ws / "shell/desktopview.cpp"
+t = dv.read_text()
+x11app = "qGuiApp->nativeInterface<QNativeInterface::QX11Application>()"
+if x11app not in t:
+    sys.exit("add-to-workspace: no QX11Application use in desktopview.cpp")
+dv.write_text(t.replace(x11app, "false"))
 edit("shell/main.cpp", "int main(int argc, char *argv[])", "int plasmashellMain(int argc, char *argv[])")
 
 entry = (here.parent / "kwin-nativedesk" / "qthost_entry.cpp").read_text()
