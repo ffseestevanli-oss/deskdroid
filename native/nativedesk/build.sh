@@ -126,11 +126,14 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         [ -e "$sysroot/$API/$(unversioned "$lib")" ] || [ -e "$sysroot/$(unversioned "$lib")" ] && continue # Android's own
         name="$(bundlename "$lib")"
         [ -e "$OUT/$name" ] && continue
-        if [ ! -e "$DESKDROID_QT_ANDROID/lib/$lib" ]; then echo "   ? $lib (not in the prefix)"; continue; fi
-        install -m 644 "$DESKDROID_QT_ANDROID/lib/$lib" "$OUT/$name"
+        src="$DESKDROID_QT_ANDROID/lib/$lib"
+        # The NDK's own runtime libraries (libomp, for code built with OpenMP).
+        [ -e "$src" ] || src="$(find "$NDK/toolchains/llvm/prebuilt/$host/lib" -path '*aarch64*' -name "$lib" 2>/dev/null | head -1)"
+        if [ ! -e "$src" ]; then echo "   ? $lib (not in the prefix)"; continue; fi
+        install -m 644 "$src" "$OUT/$name"
         echo "   + $name"
         bundled+=("$OUT/$name")
-        todo+=("$DESKDROID_QT_ANDROID/lib/$lib")
+        todo+=("$src")
       done
     done
     for f in "${bundled[@]}"; do
