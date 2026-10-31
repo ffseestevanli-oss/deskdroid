@@ -18,6 +18,7 @@ def edit(rel, old, new):
 
 
 (ws / "CMakeLists.txt").write_text((here / "CMakeLists.top.txt").read_text())
+(ws / "org.freedesktop.ScreenSaver.xml").write_text((here / "org.freedesktop.ScreenSaver.xml").read_text())
 
 edit("shell/CMakeLists.txt", "add_executable(plasmashell)",
      "add_library(plasmashell SHARED)\n"

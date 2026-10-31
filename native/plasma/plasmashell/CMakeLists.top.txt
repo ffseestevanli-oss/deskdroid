@@ -54,6 +54,8 @@ find_package(Wayland REQUIRED COMPONENTS Client)
 
 set(HAVE_X11 0)
 set(HAVE_KTEXTEDITOR 0)
+# kscreenlocker (not built) installs this interface; plasmashell only calls it.
+set(SCREENSAVER_DBUS_INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/org.freedesktop.ScreenSaver.xml")
 set(PLASMA_RELATIVE_DATA_INSTALL_DIR "plasma")
 
 include(ConfigureChecks.cmake)
