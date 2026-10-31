@@ -117,7 +117,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     qmlroots=()
     for d in "$DESKDROID_QT_ANDROID" "$DESKDROID_QT_ANDROID/lib"; do [ -d "$d/qml" ] && qmlroots+=("$d"); done
     if [ -e "$OUT/libplasmashell.so" ] && [ ${#qmlroots[@]} -gt 0 ]; then
-      qmlskip='^(QtTest|QtWayland|Qt3D|QtQuick3D|QtMultimedia|QtQuick/VirtualKeyboard|QtQuick/Scene[23]D|QtQuick/Controls/(Material|Universal|Imagine|FluentWinUI3|iOS|macOS|Windows))(/|$)'
+      qmlskip='^(QtTest|QtWayland|Qt3D|QtQuick3D|QtMultimedia|QtQuick/VirtualKeyboard|QtQuick/Scene[23]D|QtQuick/Controls/(Imagine|FluentWinUI3|iOS|macOS|Windows))(/|$)'
       qmlplugins=0
       for root in "${qmlroots[@]}"; do
         while IFS= read -r rel; do
