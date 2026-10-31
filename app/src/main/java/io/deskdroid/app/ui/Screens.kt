@@ -617,6 +617,11 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             "GPUs. If apps crash or draw garbage there, try the other GPU memory mode.", 12f, Party.MUTED))
         addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
+        addView(ui.outlineButton("Native desktop test", Party.PURPLE, Party.PURPLE) {
+            activity.startActivity(Intent(activity, io.deskdroid.app.NativeDeskActivity::class.java))
+        }, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.text("Experimental: windows drawn by Android itself, without the Linux system, to measure how " +
+            "smooth a native desktop would be. It doesn't touch your desktop.", 12f, Party.MUTED))
 
         addView(ui.switchRow(null, "Start on phone boot", "Desktop starts in the background after you unlock.", Prefs.autoStart(c)) {
             Prefs.setAutoStart(c, it)
