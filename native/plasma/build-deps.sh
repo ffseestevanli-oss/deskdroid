@@ -374,7 +374,7 @@ kde_cmake() {
 unandroid() {
   find "$1" -type f \( -name CMakeLists.txt -o -name '*.cmake' \) | xargs sed -i -E \
     -e 's/(AND|OR) NOT ANDROID//g' -e 's/NOT ANDROID AND //g' \
-    -e 's/if ?\(ANDROID\)/if(FALSE)/g' -e 's/\(ANDROID OR /(/g' -e 's/ OR ANDROID//g'
+    -e 's/if ?\(ANDROID\)/if(FALSE)/g' -e 's/if ?\(NOT ANDROID\)/if(TRUE)/g' -e 's/\(ANDROID OR /(/g' -e 's/ OR ANDROID//g'
 }
 kf() { local s; s="$(kf_src "$1")"; shift; unandroid "$s"; kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON "$@"; }
 
