@@ -593,6 +593,11 @@ build_kglobalacceld() {
   test -e "$PREFIX/lib/cmake/KGlobalAccelD/KGlobalAccelDConfig.cmake"
 }
 
+# QML pieces Plasma's own panel and widgets use: item models, and
+# kdeclarative's drag and drop, controls addons and calendar events.
+build_kitemmodels() { kf kitemmodels; }
+build_kdeclarative() { kf kdeclarative; }
+
 # ---- plasmashell (stage 4b) ---------------------------------------------------
 
 build_plasmashell() {
@@ -601,6 +606,15 @@ build_plasmashell() {
   unandroid "$s"
   KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -I$HERE/x11-stubs"
   test -e "$PREFIX/lib/libplasmashell.so"
+}
+# plasma-desktop's QML-only packages, as they are: the panel containment.
+build_plasma_desktop_packages() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-desktop-$PLASMA_VERSION.tar.xz" "plasma-desktop-$PLASMA_VERSION.tar.xz")"
+  rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.panel"
+  mkdir -p "$PREFIX/share/plasma/plasmoids"
+  cp -r "$s/containments/panel" "$PREFIX/share/plasma/plasmoids/org.kde.panel"
+  rm -f "$PREFIX/share/plasma/plasmoids/org.kde.panel/Messages.sh"
+  test -e "$PREFIX/share/plasma/plasmoids/org.kde.panel/contents/ui/main.qml"
 }
 inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
 
@@ -611,7 +625,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
-     kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt plasmashell)
+     kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative plasmashell plasma_desktop_packages)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }

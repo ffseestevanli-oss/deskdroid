@@ -578,6 +578,14 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
 
+        addView(ui.text("PHONE FILES", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+        files = ui.outlineButton("", Party.PURPLE, Party.PURPLE) { Storage.request(activity) }
+        addView(files, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.text("With All files access, the desktop's Documents, Downloads, Pictures, Music and Videos " +
+            "are your phone's own folders, so files show up in Android apps too. The rest of the desktop's " +
+            "home folder (settings and app data) stays private to DeskDroid. Applies the next time the " +
+            "desktop starts.", 13f, Party.MUTED))
+
         // The Debian desktop's settings (proot, X11/Wayland, Venus, llvmpipe), out of
         // the way while the native desktop replaces it.
         val native = io.deskdroid.app.NativeSession.available(c)
@@ -651,13 +659,6 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
                 Prefs.setAutoStart(c, it)
                 if (it && !Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c)
             }, LinearLayout.LayoutParams(-1, -2))
-            addView(ui.text("PHONE FILES", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-            files = ui.outlineButton("", Party.PURPLE, Party.PURPLE) { Storage.request(activity) }
-            addView(files, LinearLayout.LayoutParams(-1, -2))
-            addView(ui.text("With All files access, your phone's storage shows up on the desktop like a USB drive: " +
-                "Phone and Camera in Dolphin's sidebar, at ${Storage.MOUNT} (also /sdcard). The Linux home folder " +
-                "stays separate. Android's own folder is hidden; Show hidden files in Dolphin reveals it. Applies " +
-                "the next time the desktop starts.", 13f, Party.MUTED))
             addView(ui.outlineButton("Reinstall the system", Party.RED, Party.RED) { confirmReinstall() },
                 LinearLayout.LayoutParams(-1, -2))
         }

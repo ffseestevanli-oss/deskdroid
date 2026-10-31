@@ -1,5 +1,6 @@
 # DeskDroid: plasma-workspace's top-level CMakeLists.txt, cut down to
-# plasmashell and libkworkspace. The rest of plasma-workspace (KRunner,
+# plasmashell, libkworkspace, and the digital clock with what it needs.
+# The rest of plasma-workspace (KRunner,
 # ksmserver, settings pages, applets...) comes later, piece by piece.
 cmake_minimum_required(VERSION 3.16)
 
@@ -44,6 +45,7 @@ find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS
     Config CoreAddons Crash DBusAddons GlobalAccel GuiAddons I18n IconThemes KIO
     Notifications Package Service Solid StatusNotifierItem Svg WidgetsAddons
     WindowSystem XmlGui ColorScheme)
+find_package(KF6CalendarEvents ${KF6_MIN_VERSION} REQUIRED)
 find_package(Plasma ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(PlasmaQuick ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(KWayland ${PROJECT_DEP_VERSION} REQUIRED)
@@ -73,6 +75,12 @@ add_definitions(-DQT_NO_URL_CAST_FROM_STRING)
 
 add_subdirectory(libkworkspace)
 add_subdirectory(shell)
+# Plasma's digital clock and the QML modules it imports.
+add_subdirectory(components/workspace)
+add_subdirectory(components/calendar)
+add_subdirectory(components/timezoneselector)
+add_subdirectory(applets/digital-clock)
+add_subdirectory(applets/panelspacer)
 
 ecm_qt_install_logging_categories(
     EXPORT PLASMAWORKSPACE

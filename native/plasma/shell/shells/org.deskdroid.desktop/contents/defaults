@@ -6,7 +6,7 @@ RuntimePlatform=Desktop
 [Desktop][ContainmentActions]
 
 [Panel]
-Containment=org.deskdroid.panel
+Containment=org.kde.panel
 ToolBox=
 
 [Panel][ContainmentActions]

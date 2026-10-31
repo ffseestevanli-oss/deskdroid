@@ -39,6 +39,23 @@ edit("shell/main.cpp", "    QApplication app(argc, argv);\n",
      "    app.setProperty(\"org.kde.KActivities.core.disableAutostart\", true);\n")
 edit("shell/main.cpp", "int main(int argc, char *argv[])", "int plasmashellMain(int argc, char *argv[])")
 
+# The digital clock's city names come from ICU's C++ API, which Android
+# doesn't offer to apps: the last part of the zone id stands in for now.
+dc = "applets/digital-clock/plugin/"
+edit(dc + "CMakeLists.txt", "        ICU::i18n\n        ICU::uc\n", "")
+edit(dc + "timezonesi18n.h", "#include <unicode/tznames.h>\n", "")
+edit(dc + "timezonesi18n.h", "    QScopedPointer<icu::TimeZoneNames> m_tzNames;\n", "")
+edit(dc + "timezonesi18n.cpp", "#include <unicode/localebuilder.h>\n", "")
+t = (ws / dc / "timezonesi18n.cpp").read_text()
+a = t.index("    if (!m_tzNames) {")
+b = t.index("toString();\n", a) + len("toString();\n")
+t = t[:a] + "    return timezoneId.section(u'/', -1).replace(u'_', u' ');\n" + t[b:]
+a = t.index("    const auto locale = icu::Locale(")
+b = t.index("    m_isInitialized = true;", a)
+t = t[:a] + t[b:]
+assert "icu" not in t and "m_tzNames" not in t
+(ws / dc / "timezonesi18n.cpp").write_text(t)
+
 entry = (here.parent / "kwin-nativedesk" / "qthost_entry.cpp").read_text()
 entry = entry.replace("KWin's main_wayland.cpp: on Android kwin_wayland", "plasmashell's main.cpp: on Android plasmashell")
 entry = entry.replace('args.push_back("kwin_wayland")', 'args.push_back("plasmashell")')

@@ -302,6 +302,16 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // No GPU path for Qt Quick yet: Qt's software renderer, through Wayland shm.
         File(config, "kdeglobals").takeUnless { it.exists() }
             ?.writeText("[QtQuickRendererSettings]\nSceneGraphBackend=software\n")
+        writeUserDirs(config)
+        // While DeskDroid's default layout changes from build to build, start from it
+        // again when it's newer than the saved one (layout.js runs only without one).
+        val layoutVersion = "2"
+        val stamp = File(config, "deskdroid-layout-version")
+        if (stamp.takeIf { it.exists() }?.readText() != layoutVersion) {
+            File(config, "plasma-org.deskdroid.desktop-appletsrc").delete()
+            File(config, "plasmashellrc").delete()
+            stamp.writeText(layoutVersion)
+        }
         try {
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
@@ -364,6 +374,31 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * library folder (libplugins_<namespace>_<name>.so). So the plugins
      * folder gets links with the real layout, from the list the build ships.
      */
+    /**
+     * The home folder stays in app storage (KDE's config, caches and sockets need a real
+     * Linux filesystem); Documents, Downloads, Pictures, Music and Videos are the phone's
+     * own folders when All files access is granted, through KDE's standard user-dirs file.
+     * Written at every start, so it follows the permission.
+     */
+    private fun writeUserDirs(config: File) {
+        val home = filesDir.path
+        fun phone(type: String) = if (Storage.granted(this))
+            android.os.Environment.getExternalStoragePublicDirectory(type).path else "$home/${type}"
+        val dirs = linkedMapOf(
+            "DESKTOP" to "$home/Desktop",
+            "DOCUMENTS" to phone(android.os.Environment.DIRECTORY_DOCUMENTS),
+            "DOWNLOAD" to phone(android.os.Environment.DIRECTORY_DOWNLOADS),
+            "MUSIC" to phone(android.os.Environment.DIRECTORY_MUSIC),
+            "PICTURES" to phone(android.os.Environment.DIRECTORY_PICTURES),
+            "VIDEOS" to phone(android.os.Environment.DIRECTORY_MOVIES),
+            "TEMPLATES" to "$home/Templates",
+            "PUBLICSHARE" to "$home/Public",
+        )
+        dirs.values.forEach { File(it).mkdirs() }
+        File(config, "user-dirs.dirs").writeText(dirs.entries.joinToString("") { (k, v) -> "XDG_${k}_DIR=\"$v\"\n" })
+        AppLog.i("Native desktop test: user folders ${if (Storage.granted(this)) "on the phone's storage" else "in app storage (no All files access)"}")
+    }
+
     private fun linkPlugins(libs: String, data: File) {
         linkFlatLibraries(libs, File(data, "plugins.txt"), File(data, "plugins"), clear = true)
         // QML plugins, next to their qmldir files (unpacked from the data).
