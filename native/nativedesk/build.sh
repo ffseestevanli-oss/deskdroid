@@ -57,9 +57,11 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     command -v patchelf >/dev/null || { echo "patchelf is needed to bundle KWin"; exit 1; }
     sysroot="$NDK/toolchains/llvm/prebuilt/$host/sysroot/usr/lib/aarch64-linux-android"
     unversioned() { local n="${1%%.so*}.so"; echo "$n"; }
-    todo=("$DESKDROID_QT_ANDROID/lib/libkwin_wayland.so")
-    install -m 755 "${todo[0]}" "$OUT/libkwin_wayland.so"
-    bundled=("$OUT/libkwin_wayland.so")
+    install -m 755 "$DESKDROID_QT_ANDROID/lib/libkwin_wayland.so" "$OUT/libkwin_wayland.so"
+    # The Qt libraries already copied count too: some need non-Qt libraries
+    # (QtDBus needs libdbus-1).
+    bundled=("$OUT/libkwin_wayland.so" "$OUT"/libQt6*.so)
+    todo=("${bundled[@]}")
     while [ ${#todo[@]} -gt 0 ]; do
       f="${todo[0]}"; todo=("${todo[@]:1}")
       for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
