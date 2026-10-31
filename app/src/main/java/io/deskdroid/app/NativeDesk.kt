@@ -217,6 +217,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("FONTCONFIG_FILE", fonts.path)
                     put("QT_QPA_FONTDIR", "/system/fonts")
                     put("KWIN_COMPOSE", "Q") // QPainter: the backend draws on the CPU for now
+                    put("KDE_DEBUG", "1") // no KCrash handler: our own prints where a crash happened
                 }
             }.start()
             apps += p
@@ -226,7 +227,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     AppLog.i("[kwin] $it")
                     synchronized(qtLines) {
                         qtLines.addLast(it.take(160))
-                        while (qtLines.size > 14) qtLines.removeFirst()
+                        while (qtLines.size > 40) qtLines.removeFirst()
                     }
                 }
                 val code = p.waitFor()
