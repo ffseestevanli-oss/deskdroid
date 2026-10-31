@@ -443,7 +443,7 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private lateinit var monitorInfo: LinearLayout
     private lateinit var status: TextView
     private lateinit var startButton: TextView
-    private lateinit var filesValue: TextView
+    private var filesValue: TextView? = null
     private val statusListener: (String) -> Unit = { refreshStatus() }
 
     override fun build() = page(listOf(Triple(0.15f, 0.25f, Party.PURPLE)), top = 48) {
@@ -490,17 +490,20 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
             addView(settingRow("Touch mode", if (Prefs.touchMode(c) == "direct") "Direct touch" else "Touchpad") {
                 nav.go(SettingsScreen(activity, nav))
             })
-            addView(settingRow("Graphics", GpuProfile.describe(GpuProfile.resolve(Prefs.gpuMode(c), Paths(c)))
-                .let { if (Prefs.gpuMode(c) == "auto") "Automatic · $it" else it }
-                .let { if (Prefs.sessionType(c) == "wayland") "Wayland · $it" else it }) {
-                nav.go(SettingsScreen(activity, nav))
-            })
-            addView(settingRow("System", "${Paths(c).installedEdition ?: "?"} edition") {
-                nav.go(SettingsScreen(activity, nav))
-            })
-            addView(settingRow("Phone files", "") {
-                if (Storage.granted(c)) nav.go(SettingsScreen(activity, nav)) else Storage.request(activity)
-            }.also { filesValue = it.getChildAt(it.childCount - 1) as TextView })
+            // Graphics, system edition and phone files are the Debian desktop's.
+            if (!io.deskdroid.app.NativeSession.available(c)) {
+                addView(settingRow("Graphics", GpuProfile.describe(GpuProfile.resolve(Prefs.gpuMode(c), Paths(c)))
+                    .let { if (Prefs.gpuMode(c) == "auto") "Automatic · $it" else it }
+                    .let { if (Prefs.sessionType(c) == "wayland") "Wayland · $it" else it }) {
+                    nav.go(SettingsScreen(activity, nav))
+                })
+                addView(settingRow("System", "${Paths(c).installedEdition ?: "?"} edition") {
+                    nav.go(SettingsScreen(activity, nav))
+                })
+                addView(settingRow("Phone files", "") {
+                    if (Storage.granted(c)) nav.go(SettingsScreen(activity, nav)) else Storage.request(activity)
+                }.also { filesValue = it.getChildAt(it.childCount - 1) as TextView })
+            }
         }, LinearLayout.LayoutParams(-1, -2))
         renderMonitor()
     }
@@ -539,7 +542,7 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
         AppLog.statusListener = statusListener
         refreshStatus()
         renderMonitor()
-        filesValue.text = if (Storage.granted(c)) "Shared ›" else "Not shared · tap to allow ›"
+        filesValue?.text = if (Storage.granted(c)) "Shared ›" else "Not shared · tap to allow ›"
     }
 
     override fun onHide() {
@@ -567,92 +570,108 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             DesktopDefaults.applyTouchMode(c)
         }.view, LinearLayout.LayoutParams(-1, -2))
 
-        addView(ui.text("DESKTOP SCALE", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val scales = listOf(1f, 1.25f, 1.5f, 0f)
-        addView(Segmented(ui, listOf("100%", "125%", "150%", "Auto"), scales.indexOf(Prefs.scale(c)).coerceAtLeast(0)) { i ->
-            Prefs.setScale(c, scales[i])
-        }.view, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("Applies the next time the desktop starts. Zoom in the desktop's side drawer enlarges " +
-            "everything on top of this. Auto picks from your screen's density.", 13f, Party.MUTED))
-
-        addView(ui.text("DESKTOP SESSION", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val sessions = listOf("x11", "wayland")
-        addView(Segmented(ui, listOf("Plasma X11", "Wayland (experimental)"),
-            sessions.indexOf(Prefs.sessionType(c)).coerceAtLeast(0)) { i ->
-            Prefs.setSessionType(c, sessions[i])
-        }.view, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("Applies the next time the desktop starts. Wayland runs Plasma's Wayland session inside the " +
-            "display server. KWin draws the desktop in software there; apps use the graphics setting below. It needs a system image " +
-            "that includes it; older images start X11 instead. Light and Full editions only.", 13f, Party.MUTED))
-
-        addView(ui.text("GRAPHICS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val modes = listOf("auto", "venus", "llvmpipe", "nocomp", "turnip")
-        val labels = listOf("Automatic", "GPU via Venus (experimental)", "Software (llvmpipe)", "Software, effects off",
-            "Adreno (Turnip + Zink)")
-        val gpuGroup = ui.column(6)
-        fun renderGpu() {
-            gpuGroup.removeAllViews()
-            modes.forEachIndexed { i, m ->
-                val on = Prefs.gpuMode(c) == m
-                gpuGroup.addView(ui.text(labels[i], 14f, if (on) Party.TEXT else Party.MUTED, if (on) 700 else 400).apply {
-                    setPadding(c.dp(14), c.dp(10), c.dp(14), c.dp(10))
-                    background = ChamferDrawable(0f, fill = if (on) Party.CARD_ON else Party.SURFACE,
-                        stroke = if (on) Party.PINK else null, strokeWidth = c.dp(1f), cutTopLeft = false, cutBottomRight = false)
-                    setOnClickListener { Prefs.setGpuMode(c, m); renderGpu() }
-                }, LinearLayout.LayoutParams(-1, -2))
-            }
-        }
-        renderGpu()
-        addView(gpuGroup, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("VENUS GPU MEMORY", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val memModes = listOf("auto", "dmabuf", "ahb")
-        addView(Segmented(ui, listOf("Automatic", "dma-buf", "AHardwareBuffer"),
-            memModes.indexOf(Prefs.venusMemory(c)).coerceAtLeast(0)) { i ->
-            Prefs.setVenusMemory(c, memModes[i])
-        }.view, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.switchRow(null, "Desktop effects on the GPU", "Venus mode only. Off keeps KWin on software " +
-            "rendering, which is the stable choice; apps use the GPU either way.", Prefs.gpuDesktop(c)) {
-            Prefs.setGpuDesktop(c, it)
-        }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("Changes apply the next time the desktop starts. Automatic uses Turnip on Adreno and software " +
-            "rendering on other GPUs. Venus gives Linux apps Vulkan and OpenGL (through Zink) on Mali and PowerVR " +
-            "GPUs. If apps crash or draw garbage there, try the other GPU memory mode.", 12f, Party.MUTED))
-        addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
-            LinearLayout.LayoutParams(-1, -2))
-        addView(ui.outlineButton("Native desktop test", Party.PURPLE, Party.PURPLE) {
-            activity.startActivity(Intent(activity, io.deskdroid.app.NativeDeskActivity::class.java))
-        }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("Experimental: windows drawn by Android itself, without the Linux system, to measure how " +
-            "smooth a native desktop would be. It doesn't touch your desktop.", 12f, Party.MUTED))
-        if (io.deskdroid.app.NativeSession.available(c)) {
-            // Start desktop runs the native session; the Debian one stays reachable here until
-            // native apps replace it.
-            addView(ui.outlineButton("Debian desktop (legacy)", Party.ORANGE, Party.ORANGE) {
-                if (io.deskdroid.app.Paths(c).isInstalled) io.deskdroid.app.SessionService.start(c, Display.DEFAULT_DISPLAY)
-                else nav.go(WelcomeScreen(activity, nav))
-            }, LinearLayout.LayoutParams(-1, -2))
-            addView(ui.text("The previous desktop: Plasma on a Debian system (proot), with Firefox, Steam and " +
-                "Flatpak apps. It downloads the system the first time.", 12f, Party.MUTED))
-        }
-
-        addView(ui.switchRow(null, "Start on phone boot", "Desktop starts in the background after you unlock.", Prefs.autoStart(c)) {
-            Prefs.setAutoStart(c, it)
-            if (it && !Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c)
-        }, LinearLayout.LayoutParams(-1, -2))
         addView(ui.switchRow(null, "Lock my desktop", "Fingerprint or PIN to open DeskDroid.", Prefs.lockDesktop(c)) {
             Prefs.setLockDesktop(c, it)
         }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("PHONE FILES", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        files = ui.outlineButton("", Party.PURPLE, Party.PURPLE) { Storage.request(activity) }
-        addView(files, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("With All files access, your phone's storage shows up on the desktop like a USB drive: " +
-            "Phone and Camera in Dolphin's sidebar, at ${Storage.MOUNT} (also /sdcard). The Linux home folder " +
-            "stays separate. Android's own folder is hidden; Show hidden files in Dolphin reveals it. Applies " +
-            "the next time the desktop starts.", 13f, Party.MUTED))
         addView(ui.outlineButton("Background limits", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
-        addView(ui.outlineButton("Reinstall the system", Party.RED, Party.RED) { confirmReinstall() },
+        addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
+
+        // The Debian desktop's settings (proot, X11/Wayland, Venus, llvmpipe), out of
+        // the way while the native desktop replaces it.
+        val native = io.deskdroid.app.NativeSession.available(c)
+        val legacy = ui.column(12) {
+            addView(ui.text("DESKTOP SCALE", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+            val scales = listOf(1f, 1.25f, 1.5f, 0f)
+            addView(Segmented(ui, listOf("100%", "125%", "150%", "Auto"), scales.indexOf(Prefs.scale(c)).coerceAtLeast(0)) { i ->
+                Prefs.setScale(c, scales[i])
+            }.view, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.text("Applies the next time the desktop starts. Zoom in the desktop's side drawer enlarges " +
+                "everything on top of this. Auto picks from your screen's density.", 13f, Party.MUTED))
+
+            addView(ui.text("DESKTOP SESSION", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+            val sessions = listOf("x11", "wayland")
+            addView(Segmented(ui, listOf("Plasma X11", "Wayland (experimental)"),
+                sessions.indexOf(Prefs.sessionType(c)).coerceAtLeast(0)) { i ->
+                Prefs.setSessionType(c, sessions[i])
+            }.view, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.text("Applies the next time the desktop starts. Wayland runs Plasma's Wayland session inside the " +
+                "display server. KWin draws the desktop in software there; apps use the graphics setting below. It needs a system image " +
+                "that includes it; older images start X11 instead. Light and Full editions only.", 13f, Party.MUTED))
+
+            addView(ui.text("GRAPHICS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+            val modes = listOf("auto", "venus", "llvmpipe", "nocomp", "turnip")
+            val labels = listOf("Automatic", "GPU via Venus (experimental)", "Software (llvmpipe)", "Software, effects off",
+                "Adreno (Turnip + Zink)")
+            val gpuGroup = ui.column(6)
+            fun renderGpu() {
+                gpuGroup.removeAllViews()
+                modes.forEachIndexed { i, m ->
+                    val on = Prefs.gpuMode(c) == m
+                    gpuGroup.addView(ui.text(labels[i], 14f, if (on) Party.TEXT else Party.MUTED, if (on) 700 else 400).apply {
+                        setPadding(c.dp(14), c.dp(10), c.dp(14), c.dp(10))
+                        background = ChamferDrawable(0f, fill = if (on) Party.CARD_ON else Party.SURFACE,
+                            stroke = if (on) Party.PINK else null, strokeWidth = c.dp(1f), cutTopLeft = false, cutBottomRight = false)
+                        setOnClickListener { Prefs.setGpuMode(c, m); renderGpu() }
+                    }, LinearLayout.LayoutParams(-1, -2))
+                }
+            }
+            renderGpu()
+            addView(gpuGroup, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.text("VENUS GPU MEMORY", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+            val memModes = listOf("auto", "dmabuf", "ahb")
+            addView(Segmented(ui, listOf("Automatic", "dma-buf", "AHardwareBuffer"),
+                memModes.indexOf(Prefs.venusMemory(c)).coerceAtLeast(0)) { i ->
+                Prefs.setVenusMemory(c, memModes[i])
+            }.view, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.switchRow(null, "Desktop effects on the GPU", "Venus mode only. Off keeps KWin on software " +
+                "rendering, which is the stable choice; apps use the GPU either way.", Prefs.gpuDesktop(c)) {
+                Prefs.setGpuDesktop(c, it)
+            }, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.text("Changes apply the next time the desktop starts. Automatic uses Turnip on Adreno and software " +
+                "rendering on other GPUs. Venus gives Linux apps Vulkan and OpenGL (through Zink) on Mali and PowerVR " +
+                "GPUs. If apps crash or draw garbage there, try the other GPU memory mode.", 12f, Party.MUTED))
+            addView(ui.outlineButton("Native desktop test", Party.PURPLE, Party.PURPLE) {
+                activity.startActivity(Intent(activity, io.deskdroid.app.NativeDeskActivity::class.java))
+            }, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.text("Experimental: windows drawn by Android itself, without the Linux system, to measure how " +
+                "smooth a native desktop would be. It doesn't touch your desktop.", 12f, Party.MUTED))
+            if (native) {
+                // Start desktop runs the native session; the Debian one stays reachable here.
+                addView(ui.outlineButton("Debian desktop (legacy)", Party.ORANGE, Party.ORANGE) {
+                    if (io.deskdroid.app.Paths(c).isInstalled) io.deskdroid.app.SessionService.start(c, Display.DEFAULT_DISPLAY)
+                    else nav.go(WelcomeScreen(activity, nav))
+                }, LinearLayout.LayoutParams(-1, -2))
+                addView(ui.text("The previous desktop: Plasma on a Debian system (proot), with Firefox, Steam and " +
+                    "Flatpak apps. It downloads the system the first time.", 12f, Party.MUTED))
+            }
+
+            addView(ui.switchRow(null, "Start on phone boot", "Desktop starts in the background after you unlock.", Prefs.autoStart(c)) {
+                Prefs.setAutoStart(c, it)
+                if (it && !Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c)
+            }, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.text("PHONE FILES", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+            files = ui.outlineButton("", Party.PURPLE, Party.PURPLE) { Storage.request(activity) }
+            addView(files, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.text("With All files access, your phone's storage shows up on the desktop like a USB drive: " +
+                "Phone and Camera in Dolphin's sidebar, at ${Storage.MOUNT} (also /sdcard). The Linux home folder " +
+                "stays separate. Android's own folder is hidden; Show hidden files in Dolphin reveals it. Applies " +
+                "the next time the desktop starts.", 13f, Party.MUTED))
+            addView(ui.outlineButton("Reinstall the system", Party.RED, Party.RED) { confirmReinstall() },
+                LinearLayout.LayoutParams(-1, -2))
+        }
+        if (native) {
+            legacy.visibility = View.GONE
+            val toggle = ui.outlineButton("Legacy: Debian desktop settings ▸", Party.MUTED, Party.BORDER) {}
+            toggle.setOnClickListener {
+                val show = legacy.visibility != View.VISIBLE
+                legacy.visibility = if (show) View.VISIBLE else View.GONE
+                toggle.text = "Legacy: Debian desktop settings " + if (show) "▾" else "▸"
+            }
+            addView(toggle, LinearLayout.LayoutParams(-1, -2))
+        }
+        addView(legacy, LinearLayout.LayoutParams(-1, -2))
 
         addView(ui.text("LOG", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
         addView(ui.outlineButton("Save log to Downloads", Party.CYAN, Party.CYAN) { saveLog() },
