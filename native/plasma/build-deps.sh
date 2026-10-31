@@ -534,6 +534,21 @@ build_kjobwidgets() { kf kjobwidgets; }
 # Solid's Android build has no device backends besides the fake one; its
 # Linux ones need libmount and udisks. UPower (the battery) comes later.
 build_solid() { local s; s="$(kf_src solid)"; kde_cmake "$s" -DUSE_DBUS=ON; }
+# TLS for Qt (KIO needs QSslSocket; so will anything online). OpenSSL, and
+# qtbase built again with it as a recipe of its own, so the packages built on
+# the first qtbase don't all build again: TLS only adds to Qt's API.
+build_openssl() {
+  local s; s="$(unpack https://github.com/openssl/openssl/releases/download/openssl-3.5.4/openssl-3.5.4.tar.gz openssl-3.5.4.tar.gz)"
+  (cd "$s" && ANDROID_NDK_ROOT="$NDK" PATH="$BIN:$PATH" ./Configure android-arm64 -D__ANDROID_API__=$API \
+    --prefix="$PREFIX" --libdir=lib shared no-tests no-docs no-apps \
+    && make -j"$JOBS" && make install_sw)
+  test -e "$PREFIX/lib/libssl.so"
+}
+build_qtbase_ssl() {
+  eval "$(declare -f build_qtbase | sed '1s/build_qtbase/qtbase_with_ssl/; s/ -feature-dbus / -feature-dbus -openssl-linked /')"
+  qtbase_with_ssl
+  grep -q "define QT_FEATURE_ssl 1" "$PREFIX/include/QtNetwork/qtnetwork-config.h"
+}
 build_kio() { kf kio -DWITH_WAYLAND=ON; }
 build_kxmlgui() { kf kxmlgui; }
 build_kstatusnotifieritem() { kf kstatusnotifieritem; }
@@ -571,7 +586,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kwin kiconthemes breeze
-     kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid kio
+     kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt plasmashell)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
