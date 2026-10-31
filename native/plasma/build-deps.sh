@@ -586,7 +586,7 @@ build_plasmashell() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-workspace-$PLASMA_VERSION.tar.xz" "plasma-workspace-$PLASMA_VERSION.tar.xz")"
   python3 "$HERE/plasmashell/add-to-workspace.py" "$s"
   unandroid "$s"
-  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__
+  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -I$HERE/x11-stubs"
   test -e "$PREFIX/lib/libplasmashell.so"
 }
 inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
