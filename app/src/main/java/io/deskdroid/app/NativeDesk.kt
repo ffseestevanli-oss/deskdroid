@@ -218,6 +218,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("QT_QPA_FONTDIR", "/system/fonts")
                     put("KWIN_COMPOSE", "Q") // QPainter: the backend draws on the CPU for now
                     put("KDE_DEBUG", "1") // no KCrash handler: our own prints where a crash happened
+                    put("KWIN_FORCE_OWN_QPA", "1") // KWin only takes its own Qt platform plugin when the program is named kwin_wayland; ours is app_process
                 }
             }.start()
             apps += p
