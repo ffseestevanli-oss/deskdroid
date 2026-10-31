@@ -1,0 +1,13 @@
+// DeskDroid: KWindowSystem's X11-only KStartupInfo, as do-nothing stand-ins.
+#pragma once
+#include <QByteArray>
+#include <QWindow>
+
+class KStartupInfo
+{
+public:
+    static void setNewStartupId(QWindow *, const QByteArray &) { }
+    static void appStarted() { }
+    static void appStarted(const QByteArray &) { }
+    static QByteArray createNewStartupId() { return {}; }
+};

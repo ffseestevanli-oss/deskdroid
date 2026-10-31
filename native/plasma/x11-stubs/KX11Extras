@@ -13,6 +13,7 @@
 class KX11Extras
 {
 public:
+    static KX11Extras *self() { static KX11Extras s; return &s; }
     static QList<WId> windows() { return {}; }
     static bool hasWId(WId) { return false; }
     static QList<WId> stackingOrder() { return {}; }
