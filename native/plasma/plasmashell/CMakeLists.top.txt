@@ -82,7 +82,9 @@ add_subdirectory(components/calendar)
 add_subdirectory(components/timezoneselector)
 add_subdirectory(applets/digital-clock)
 add_subdirectory(applets/panelspacer)
-# The time data engine the clock reads from.
+# The time data engine the clock reads from (with plasma-workspace's
+# dataengines/CMakeLists.txt's settings: data engines aren't ported to them).
+remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_TO_ASCII -DQT_NO_CAST_FROM_BYTEARRAY)
 add_subdirectory(dataengines/time)
 
 ecm_qt_install_logging_categories(
