@@ -13,7 +13,7 @@ import java.io.Writer
  */
 object AppLog {
     // Enough to hold a session's start-up plus a crash (KWin, the Venus server).
-    private const val MAX_LINES = 2000
+    private const val MAX_LINES = 6000
     private val lines = ArrayDeque<String>()
     private val main = Handler(Looper.getMainLooper())
     var listener: ((String) -> Unit)? = null

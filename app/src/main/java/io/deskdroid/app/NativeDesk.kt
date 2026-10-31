@@ -48,6 +48,20 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private var started = false
     // The Qt demo's last output lines, shown in the overlay so its errors are visible.
     private val qtLines = ArrayDeque<String>()
+
+    /**
+     * The overlay keeps only what matters at a glance (errors, crashes, exits);
+     * every line of output goes to DeskDroid's log (Settings, Save log).
+     */
+    private fun overlay(line: String, always: Boolean = false) {
+        val l = line.lowercase()
+        if (!always && !(l.contains("critical:") || l.contains("fatal:") || l.contains("crash") ||
+                l.contains("exited") || l.contains("couldn't") || l.contains("error"))) return
+        synchronized(qtLines) {
+            qtLines.addLast(line.take(160))
+            while (qtLines.size > 12) qtLines.removeFirst()
+        }
+    }
     @Volatile private var qtStatus = "Qt demo: not in this build"
 
     private val tick = object : Runnable {
@@ -185,10 +199,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             Thread {
                 p.inputStream.bufferedReader().forEachLine {
                     AppLog.i("[nativedesk-qt] $it")
-                    synchronized(qtLines) {
-                        qtLines.addLast(if (kwinRuntime != null) "demo: ${it.take(150)}" else it.take(160))
-                        while (qtLines.size > (if (kwinRuntime != null) 40 else 14)) qtLines.removeFirst()
-                    }
+                    overlay(if (kwinRuntime != null) "demo: $it" else it)
                 }
                 val code = p.waitFor()
                 val exit = "exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
@@ -267,10 +278,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         val shell = File(libs, "libplasmashell.so").exists()
                         main.postDelayed({ if (started) { if (shell) startPlasmaShell(runtime) else startQtApp(runtime) } }, 1500)
                     }
-                    synchronized(qtLines) {
-                        qtLines.addLast(it.take(160))
-                        while (qtLines.size > 40) qtLines.removeFirst()
-                    }
+                    overlay("kwin: $it")
                 }
                 val code = p.waitFor()
                 qtStatus = "KWin: exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
@@ -328,25 +336,14 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             Thread {
                 p.inputStream.bufferedReader().forEachLine {
                     AppLog.i("[plasmashell] $it")
-                    synchronized(qtLines) {
-                        qtLines.addLast("shell: ${it.take(150)}")
-                        while (qtLines.size > 40) qtLines.removeFirst()
-                    }
+                    overlay("shell: $it")
                 }
                 val code = p.waitFor()
                 val exit = "exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
-                synchronized(qtLines) {
-                    qtLines.addLast("shell: $exit")
-                    // Why KDE didn't find its package structures (while that's the problem).
-                    val dir = File(data, "plugins/kf6/packagestructure")
-                    val structure = File(dir, "plasma_shell.so")
-                    qtLines.addLast("check: ${dir.path} has ${dir.list()?.size ?: -1} entries: ${dir.list()?.take(4)}")
-                    qtLines.addLast("check: plasma_shell.so exists=${structure.exists()} readable=${structure.canRead()} -> " +
-                        (try { android.system.Os.readlink(structure.path) } catch (e: Exception) { "$e" }))
-                    qtLines.addLast("check: plugins.txt lines: ${File(data, "plugins.txt").takeIf { it.exists() }?.readLines()?.size ?: -1}, " +
-                        "packagestructure: ${File(data, "plugins.txt").takeIf { it.exists() }?.readLines()?.count { it.contains("packagestructure") } ?: -1}")
-                    linkErrors.take(3).forEach { qtLines.addLast("check: $it") }
-                }
+                overlay("shell: $exit", always = true)
+                overlay("Full log: Settings, Save log to Downloads", always = true)
+                val dir = File(data, "plugins/kf6/packagestructure")
+                AppLog.i("[plasmashell] ${dir.path}: ${dir.list()?.joinToString() ?: "missing"}")
                 AppLog.i("[plasmashell] exited ($code)")
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
@@ -366,8 +363,6 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * library folder (libplugins_<namespace>_<name>.so). So the plugins
      * folder gets links with the real layout, from the list the build ships.
      */
-    private val linkErrors = mutableListOf<String>()
-
     private fun linkPlugins(libs: String, data: File) {
         linkFlatLibraries(libs, File(data, "plugins.txt"), File(data, "plugins"), clear = true)
         // QML plugins, next to their qmldir files (unpacked from the data).
@@ -377,17 +372,25 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private fun linkFlatLibraries(libs: String, listFile: File, root: File, clear: Boolean) {
         val list = listFile.takeIf { it.exists() } ?: return
         if (clear) root.deleteRecursively()
+        var linked = 0
+        var failed = 0
         list.forEachLine { line ->
             val (flat, rel) = line.split('\t').takeIf { it.size == 2 } ?: return@forEachLine
+            // Names from the build's own list; still, nothing outside the folder.
+            if (rel.startsWith("/") || rel.split('/').any { it == ".." }) return@forEachLine
             val link = File(root, rel)
-            if (!link.canonicalPath.startsWith(root.canonicalPath + File.separator)) return@forEachLine
             link.parentFile?.mkdirs()
             link.delete()
-            try { android.system.Os.symlink(File(libs, flat).path, link.path) } catch (e: Exception) {
-                linkErrors += "couldn't link $rel: $e"
-                AppLog.i("Native desktop test: couldn't link plugin $rel: $e")
+            try {
+                android.system.Os.symlink(File(libs, flat).path, link.path)
+                linked++
+            } catch (e: Exception) {
+                failed++
+                AppLog.i("Native desktop test: couldn't link $rel: $e")
             }
         }
+        AppLog.i("Native desktop test: ${listFile.name}: $linked linked, $failed failed, into ${root.path}")
+        if (failed > 0) overlay("couldn't link $failed of ${linked + failed} from ${listFile.name} (see the log)", always = true)
     }
 
     /**
@@ -429,7 +432,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             Thread {
                 p.inputStream.bufferedReader().forEachLine {
                     AppLog.i("[dbus] $it")
-                    synchronized(qtLines) { qtLines.addLast("dbus: ${it.take(150)}") }
+                    overlay("dbus: $it")
                 }
                 val code = p.waitFor()
                 synchronized(qtLines) { qtLines.addLast("dbus: exited with code $code") }
