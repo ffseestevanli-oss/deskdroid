@@ -1,0 +1,81 @@
+# DeskDroid: plasma-workspace's top-level CMakeLists.txt, cut down to
+# plasmashell and libkworkspace. The rest of plasma-workspace (KRunner,
+# ksmserver, settings pages, applets...) comes later, piece by piece.
+cmake_minimum_required(VERSION 3.16)
+
+project(plasma-workspace)
+set(PROJECT_VERSION "6.4.5")
+string(REPLACE "." ";" VERSION_LIST ${PROJECT_VERSION})
+list(GET VERSION_LIST 0 PROJECT_VERSION_MAJOR)
+list(GET VERSION_LIST 1 PROJECT_VERSION_MINOR)
+list(GET VERSION_LIST 2 PROJECT_VERSION_PATCH)
+
+set(PROJECT_DEP_VERSION "6.4.5")
+set(QT_MIN_VERSION "6.8.0")
+set(KF6_MIN_VERSION "6.14.0")
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(ECM ${KF6_MIN_VERSION} REQUIRED NO_MODULE)
+set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+include(KDEInstallDirs)
+include(KDECMakeSettings)
+include(KDECompilerSettings NO_POLICY_SCOPE)
+include(CMakePackageConfigHelpers)
+include(WriteBasicConfigVersionFile)
+include(CheckIncludeFiles)
+include(FeatureSummary)
+include(ECMOptionalAddSubdirectory)
+include(ECMQtDeclareLoggingCategory)
+include(ECMQueryQt)
+include(ECMConfiguredInstall)
+include(ECMGenerateDBusServiceFile)
+include(ECMFindQmlModule)
+include(ECMGenerateExportHeader)
+include(ECMGenerateQmlTypes)
+include(ECMDeprecationSettings)
+include(ECMQmlModule)
+
+find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Core DBus Gui Quick Qml Widgets WaylandClient)
+
+find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS
+    Config CoreAddons Crash DBusAddons GlobalAccel GuiAddons I18n IconThemes KIO
+    Notifications Package Service Solid StatusNotifierItem Svg WidgetsAddons
+    WindowSystem XmlGui ColorScheme)
+find_package(Plasma ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(PlasmaQuick ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(KWayland ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(PlasmaActivities ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(LayerShellQt ${PROJECT_DEP_VERSION} CONFIG REQUIRED)
+find_package(PlasmaWaylandProtocols 1.6 REQUIRED)
+find_package(Wayland REQUIRED COMPONENTS Client)
+
+set(HAVE_X11 0)
+set(HAVE_KTEXTEDITOR 0)
+set(PLASMA_RELATIVE_DATA_INSTALL_DIR "plasma")
+
+include(ConfigureChecks.cmake)
+include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+
+ecm_set_disabled_deprecation_versions(
+    QT 5.15.2
+    KF 5.98.0
+)
+
+configure_file(config-workspace.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-workspace.h)
+configure_file(config-X11.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-X11.h)
+
+add_definitions(-DQT_NO_URL_CAST_FROM_STRING)
+
+add_subdirectory(libkworkspace)
+add_subdirectory(shell)
+
+ecm_qt_install_logging_categories(
+    EXPORT PLASMAWORKSPACE
+    FILE plasma-workspace.categories
+    DESTINATION ${KDE_INSTALL_LOGGINGCATEGORIESDIR}
+)
+
+feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
