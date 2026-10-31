@@ -280,18 +280,20 @@ NativeDeskQPainterLayer::NativeDeskQPainterLayer(NativeDeskOutput *output, Nativ
 
 std::optional<OutputLayerBeginFrameInfo> NativeDeskQPainterLayer::doBeginFrame()
 {
-    // One image kept across frames, so only what changed is painted again.
-    QRegion repaint;
+    // The whole frame is painted every time, as KWin's virtual backend does:
+    // repainting only what changed left trails behind the cursor at
+    // fractional scales (the damage, in logical pixels, didn't cover what
+    // had been drawn in screen pixels). The region is the screen's pixel
+    // size, which covers the screen in either kind of pixel.
     const QSize size = m_output->modeSize();
     if (m_image.size() != size) {
         m_image = QImage(size, QImage::Format_RGBA8888_Premultiplied);
         m_image.fill(Qt::black);
-        repaint = QRegion(QRect(QPoint(0, 0), size));
     }
     m_renderTime = std::make_unique<CpuRenderTimeQuery>();
     return OutputLayerBeginFrameInfo{
         .renderTarget = RenderTarget(&m_image),
-        .repaint = repaint,
+        .repaint = QRegion(QRect(QPoint(0, 0), size)),
     };
 }
 
