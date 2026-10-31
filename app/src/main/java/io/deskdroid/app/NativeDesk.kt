@@ -168,6 +168,12 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         put("WAYLAND_DISPLAY", "wayland-0")
                         put("QT_PLUGIN_PATH", libs) // Qt's Wayland plugins, flat in the library folder
                         put("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1") // KWin draws the borders (Breeze, soon)
+                        // KWin's keymaps and fonts setup: a Wayland client compiles the keymap
+                        // KWin sends, and Qt crashes when xkbcommon finds no layouts.
+                        val data = File(filesDir, "kwin")
+                        put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
+                        put("FONTCONFIG_FILE", File(data, "fonts.conf").path)
+                        put("XDG_DATA_DIRS", File(data, "share").path)
                     }
                 }
             }.start()
