@@ -530,7 +530,9 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
 
     private fun startOrOpen() {
         val display = if (onMonitor) externalDisplay()?.displayId ?: Display.DEFAULT_DISPLAY else Display.DEFAULT_DISPLAY
-        SessionService.start(c, display)
+        // The native session when this build has it; the Debian desktop otherwise.
+        if (io.deskdroid.app.NativeSession.available(c)) io.deskdroid.app.NativeSession.start(c, display)
+        else SessionService.start(c, display)
     }
 
     override fun onShow() {

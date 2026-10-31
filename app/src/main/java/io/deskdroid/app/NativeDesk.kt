@@ -166,7 +166,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("XDG_RUNTIME_DIR", (kwinRuntime ?: cacheDir).path)
                     if (kwinRuntime != null) {
                         put("WAYLAND_DISPLAY", "wayland-0")
-                        put("QT_PLUGIN_PATH", libs) // Qt's Wayland plugins, flat in the library folder
+                        put("QT_PLUGIN_PATH", pluginPath(libs, File(filesDir, "kwin"))) // Qt's Wayland plugins, flat in the library folder
                         put("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1") // KWin draws the borders (Breeze, soon)
                         // KWin's keymaps and fonts setup: a Wayland client compiles the keymap
                         // KWin sends, and Qt crashes when xkbcommon finds no layouts.
@@ -214,6 +214,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         qtStatus = "KWin: starting"
         try {
             unpackKWinData(File(libs, "libkwin_data.so"), data)
+            linkPlugins(libs, data)
             val runtime = File(cacheDir, "runtime").apply { mkdirs(); setReadable(true, true); setWritable(true, true); setExecutable(true, true) }
             val fonts = File(data, "fonts.conf").apply {
                 writeText("<?xml version=\"1.0\"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n" +
@@ -241,7 +242,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("XDG_DATA_DIRS", File(data, "share").path)
                     put("XDG_CONFIG_HOME", config.path)
                     put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
-                    put("QT_PLUGIN_PATH", libs) // KWin's, KDE's and Breeze's plugins, flat in the library folder
+                    put("QT_PLUGIN_PATH", pluginPath(libs, data)) // Qt's plugins flat, KDE's by namespace
                     put("XCURSOR_PATH", File(data, "share/icons").path)
                     if (bus != null) put("DBUS_SESSION_BUS_ADDRESS", bus)
                     put("FONTCONFIG_FILE", fonts.path)
@@ -278,6 +279,30 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private var sessionBus: String? = null
+
+    /** Where Qt (flat, Android style) and KDE (by namespace, Linux style) find plugins. */
+    private fun pluginPath(libs: String, data: File) = "${File(data, "plugins").path}:$libs"
+
+    /**
+     * KDE finds plugins as <plugin path>/<namespace>/<name>.so and takes the
+     * plugin's ID from that name; the APK can only carry them flat in the
+     * library folder (libplugins_<namespace>_<name>.so). So the plugins
+     * folder gets links with the real layout, from the list the build ships.
+     */
+    private fun linkPlugins(libs: String, data: File) {
+        val list = File(data, "plugins.txt").takeIf { it.exists() } ?: return
+        val root = File(data, "plugins")
+        root.deleteRecursively()
+        list.forEachLine { line ->
+            val (flat, rel) = line.split('\t').takeIf { it.size == 2 } ?: return@forEachLine
+            val link = File(root, rel)
+            if (!link.canonicalPath.startsWith(root.canonicalPath + File.separator)) return@forEachLine
+            link.parentFile?.mkdirs()
+            try { android.system.Os.symlink(File(libs, flat).path, link.path) } catch (e: Exception) {
+                AppLog.i("Native desktop test: couldn't link plugin $rel: $e")
+            }
+        }
+    }
 
     /**
      * The D-Bus session bus KDE software talks over: DeskDroid's own

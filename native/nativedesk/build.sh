@@ -78,6 +78,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       bundled+=("$OUT/libdd_dbus-daemon.so")
     fi
     plugins=0
+    : > "$WORK/plugins.txt" # flat name, then the path under plugins/ (KDE looks there by namespace)
     if [ -d "$DESKDROID_QT_ANDROID/plugins" ]; then
       while IFS= read -r rel; do
         dir="$(dirname "$rel")"; base="$(basename "$rel")"
@@ -88,6 +89,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         case "$rel" in platforms/*) case "$base" in *wayland*) ;; *) continue ;; esac ;; esac
         install -m 644 "$DESKDROID_QT_ANDROID/plugins/$rel" "$OUT/$name"
         bundled+=("$OUT/$name"); plugins=$((plugins + 1))
+        printf '%s\t%s\n' "$name" "$rel" >> "$WORK/plugins.txt"
       done < <(cd "$DESKDROID_QT_ANDROID/plugins" && find . -name '*.so' | sed 's|^\./||' | sort)
       echo "   $plugins plugins"
     fi
@@ -122,6 +124,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     rm -f "$OUT/libkwin_data.so"
     (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" share/X11/xkb \
       $(ls -d share/kwin* share/icons/breeze_cursors share/color-schemes 2>/dev/null))
+    (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" plugins.txt)
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
   fi
 else

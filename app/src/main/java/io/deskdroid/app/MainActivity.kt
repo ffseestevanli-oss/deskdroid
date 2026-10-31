@@ -36,7 +36,8 @@ class MainActivity : Activity(), Navigator {
         val paths = Paths(this)
         return when {
             InstallState.current.running || Prefs.pendingEdition(this) != null -> InstallingScreen(this, this)
-            !paths.isInstalled -> WelcomeScreen(this, this)
+            // The native session needs no Linux system to download.
+            !paths.isInstalled && !NativeSession.available(this) -> WelcomeScreen(this, this)
             !Prefs.setupDone(this) -> KeepRunningScreen(this, this)
             else -> HomeScreen(this, this)
         }

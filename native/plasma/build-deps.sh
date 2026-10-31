@@ -403,7 +403,19 @@ build_libintl() {
 
 build_karchive() { kf karchive -DWITH_BZIP2=OFF -DWITH_LIBLZMA=OFF -DWITH_LIBZSTD=OFF -DWITH_OPENSSL=OFF; }
 build_kconfig() { kf kconfig; }
-build_kcoreaddons() { kf kcoreaddons -DUSE_DBUS=ON; }
+# KDE's Android plugin lookup expects every plugin flat in the library folder
+# as libplugins_<namespace>_<name>.so, and then takes that whole file name as
+# the plugin's ID ("libplugins_org.kde.kdecoration3_org.kde.breeze" instead
+# of "org.kde.breeze"), so nothing asked for by ID is found. KCoreAddons uses
+# its Linux lookup instead: <plugin path>/<namespace>/<name>.so, which the app
+# lays out as links to the flat files the APK carries.
+build_kcoreaddons() {
+  local s; s="$(kf_src kcoreaddons)"
+  sed -i '0,/^#include <unordered_map>/s//#include <unordered_map>\n#undef Q_OS_ANDROID/' "$s/src/lib/plugin/kpluginmetadata.cpp"
+  grep -q "^#undef Q_OS_ANDROID" "$s/src/lib/plugin/kpluginmetadata.cpp"
+  unandroid "$s"
+  kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON
+}
 build_ki18n() {
   local s; s="$(kf_src ki18n)"
   # Android apps' translations come from APK assets through a function KDE's
