@@ -319,10 +319,17 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("QML_IMPORT_PATH", File(data, "qml").path)
                     put("QT_QUICK_BACKEND", "software")
                     put("KDE_DEBUG", "1")
+                    // Where KDE looks for plugins and packages, while the shell doesn't start yet.
+                    put("QT_LOGGING_RULES", "kf.package.debug=true;kf.coreaddons.debug=true")
                     sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
                 }
             }.start()
             apps += p
+            val structure = File(data, "plugins/kf6/packagestructure/plasma_shell.so")
+            synchronized(qtLines) {
+                qtLines.addLast("shell: link ${structure.path}: exists=${structure.exists()} -> " +
+                    (try { android.system.Os.readlink(structure.path) } catch (e: Exception) { "$e" }))
+            }
             Thread {
                 p.inputStream.bufferedReader().forEachLine {
                     AppLog.i("[plasmashell] $it")
