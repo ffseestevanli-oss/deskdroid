@@ -506,7 +506,7 @@ build_kwin() {
   perl -0pi -e 's/(    QPainter painter\(buffer\);\n)/$1    painter.setWindow(m_output->geometry());\n/ or die "cursor patch"' "$s/src/scene/cursordelegate_qpainter.cpp"
   # memfd_create and friends are API 30+; the Pixel has them, so link them weakly.
   # Big build, many fixes to come: keep going past errors so a run shows them all.
-  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DCMAKE_C_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
+  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -I$HERE/x11-stubs" -DCMAKE_C_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
     -DKWIN_BUILD_X11=OFF -DKWIN_BUILD_GLOBALSHORTCUTS=OFF -DKWIN_BUILD_RUNNERS=OFF -DKWIN_BUILD_TABBOX=OFF \
     -DKWIN_BUILD_ACTIVITIES=OFF -DKWIN_BUILD_EIS=OFF -DBUILD_DOC=OFF -DNATIVE_PREFIX="$QT_HOST_PATH"
 }
@@ -569,8 +569,11 @@ build_plasma_activities() {
 build_libplasma() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/libplasma-$PLASMA_VERSION.tar.xz" "libplasma-$PLASMA_VERSION.tar.xz")"
   unandroid "$s"
-  KEEP_GOING=1 kde_cmake "$s" -DWITHOUT_X11=ON
+  # KX11Extras and KWindowInfo are X11 only, and libplasma (like plasmashell)
+  # uses them, if only when on X11: do-nothing stand-ins (x11-stubs/) for them.
+  KEEP_GOING=1 kde_cmake "$s" -DWITHOUT_X11=ON -DCMAKE_CXX_FLAGS="-I$HERE/x11-stubs"
 }
+inputs_libplasma() { cat "$HERE"/x11-stubs/* "$HERE"/patches/libplasma/*; }
 build_layer_shell_qt() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/layer-shell-qt-$PLASMA_VERSION.tar.xz" "layer-shell-qt-$PLASMA_VERSION.tar.xz")"
   unandroid "$s"
@@ -586,7 +589,7 @@ build_plasmashell() {
   KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__
   test -e "$PREFIX/lib/libplasmashell.so"
 }
-inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
+inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm

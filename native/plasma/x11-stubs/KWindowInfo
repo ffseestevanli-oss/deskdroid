@@ -1,0 +1,38 @@
+// DeskDroid: KWindowSystem's X11-only KWindowInfo, as a do-nothing stand-in
+// (see KX11Extras here): it describes no window.
+#pragma once
+#include <KWindowSystem/netwm_def.h>
+#include <QByteArray>
+#include <QRect>
+#include <QString>
+#include <QStringList>
+#include <QWindow>
+
+class KWindowInfo
+{
+public:
+    KWindowInfo(WId window, NET::Properties, NET::Properties2 = NET::Properties2()) : m_win(window) { }
+    bool valid(bool = false) const { return false; }
+    WId win() const { return m_win; }
+    NET::States state() const { return {}; }
+    bool hasState(NET::States) const { return false; }
+    bool isMinimized() const { return false; }
+    NET::WindowType windowType(NET::WindowTypes) const { return NET::Unknown; }
+    QString visibleName() const { return {}; }
+    QString name() const { return {}; }
+    bool isOnCurrentDesktop() const { return true; }
+    bool isOnDesktop(int) const { return true; }
+    bool onAllDesktops() const { return true; }
+    int desktop() const { return 1; }
+    QStringList activities() const { return {}; }
+    QRect geometry() const { return {}; }
+    QRect frameGeometry() const { return {}; }
+    WId transientFor() const { return 0; }
+    QByteArray windowClassClass() const { return {}; }
+    QByteArray windowClassName() const { return {}; }
+    QByteArray desktopFileName() const { return {}; }
+    int pid() const { return 0; }
+
+private:
+    WId m_win;
+};
