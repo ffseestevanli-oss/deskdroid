@@ -1,0 +1,10 @@
+{
+    "KPackageStructure": "Plasma/Shell",
+    "KPlugin": {
+        "Description": "DeskDroid's Plasma desktop",
+        "Icon": "user-desktop",
+        "Id": "org.deskdroid.desktop",
+        "License": "GPL-2.0+",
+        "Name": "DeskDroid Desktop"
+    }
+}

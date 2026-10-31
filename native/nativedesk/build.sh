@@ -62,12 +62,17 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     unversioned() { echo "${1%%.so*}.so"; }
     bundlename() {
       local n; n="$(unversioned "$1")"
-      case "$n" in libQt6*|libKF6*|libkwin*|libkdecorations*|libKWayland*) echo "$n" ;; *) echo "libdd_${n#lib}" ;; esac
+      case "$n" in libQt6*|libKF6*|libkwin*|libkdecorations*|libKWayland*|libplasmashell*) echo "$n" ;; *) echo "libdd_${n#lib}" ;; esac
     }
     install -m 755 "$DESKDROID_QT_ANDROID/lib/libkwin_wayland.so" "$OUT/libkwin_wayland.so"
     # The Qt libraries already copied count too: some need non-Qt libraries
     # (QtDBus needs libdbus-1).
     bundled=("$OUT/libkwin_wayland.so" "$OUT/libnativedesk_qt.so" "$OUT"/libQt6*.so)
+    # Stage 4: plasmashell, a library started by QtHost like KWin.
+    if [ -e "$DESKDROID_QT_ANDROID/lib/libplasmashell.so" ]; then
+      install -m 755 "$DESKDROID_QT_ANDROID/lib/libplasmashell.so" "$OUT/libplasmashell.so"
+      bundled+=("$OUT/libplasmashell.so")
+    fi
     # Plugins (Qt's Wayland client, KDE's and KWin's), also flat in the
     # library folder: Qt and KDE on Android look there for files named
     # libplugins_<plugin folder, / as _>_<name>.so. Qt's Android build names
@@ -92,6 +97,27 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         printf '%s\t%s\n' "$name" "$rel" >> "$WORK/plugins.txt"
       done < <(cd "$DESKDROID_QT_ANDROID/plugins" && find . -name '*.so' | sed 's|^\./||' | sort)
       echo "   $plugins plugins"
+    fi
+    # QML modules (Qt's, KDE's), for plasmashell: their plugins flat in the
+    # library folder like the others (libqml_<path, / as _>.so), the rest
+    # (qmldir, .qml files) in the data; the app links each plugin back under
+    # its own name next to its qmldir, where Qt looks for it.
+    : > "$WORK/qml.txt"
+    # Qt's modules are in <prefix>/qml, KDE's may be in <prefix>/lib/qml.
+    qmlroots=()
+    for d in "$DESKDROID_QT_ANDROID" "$DESKDROID_QT_ANDROID/lib"; do [ -d "$d/qml" ] && qmlroots+=("$d"); done
+    if [ -e "$OUT/libplasmashell.so" ] && [ ${#qmlroots[@]} -gt 0 ]; then
+      qmlskip='^(QtTest|QtWayland|Qt3D|QtQuick3D|QtMultimedia|QtQuick/VirtualKeyboard|QtQuick/Scene[23]D|QtQuick/Controls/(Material|Universal|Imagine|FluentWinUI3|iOS|macOS|Windows))(/|$)'
+      qmlplugins=0
+      for root in "${qmlroots[@]}"; do
+        while IFS= read -r rel; do
+          name="libqml_$(echo "${rel%.so}" | tr '/' '_').so"
+          install -m 644 "$root/qml/$rel" "$OUT/$name"
+          bundled+=("$OUT/$name"); qmlplugins=$((qmlplugins + 1))
+          printf '%s\t%s\n' "$name" "$rel" >> "$WORK/qml.txt"
+        done < <(cd "$root/qml" && find . -name '*.so' | sed 's|^\./||' | grep -Ev "$qmlskip" | sort)
+      done
+      echo "   $qmlplugins QML plugins"
     fi
     todo=("${bundled[@]}")
     while [ ${#todo[@]} -gt 0 ]; do
@@ -125,6 +151,19 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" share/X11/xkb \
       $(ls -d share/kwin* share/icons/breeze_cursors share/color-schemes 2>/dev/null))
     (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" plugins.txt)
+    if [ -e "$OUT/libplasmashell.so" ]; then
+      # plasmashell's: Plasma's themes and packages, DeskDroid's first shell
+      # (native/plasma/shell), and the QML modules' files.
+      (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" $(ls -d share/plasma share/kf6 2>/dev/null))
+      rm -rf "$WORK/shell" && mkdir -p "$WORK/shell/share/plasma"
+      cp -r "$HERE/../plasma/shell/shells" "$HERE/../plasma/shell/plasmoids" "$HERE/../plasma/shell/wallpapers" "$WORK/shell/share/plasma/"
+      (cd "$WORK/shell" && zip -qr -X "$OUT/libkwin_data.so" share)
+      for root in "${qmlroots[@]}"; do
+        (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
+          | grep -Ev "^qml/${qmlskip#^}" | zip -q -X "$OUT/libkwin_data.so" -@)
+      done
+      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt)
+    fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
   fi
 else

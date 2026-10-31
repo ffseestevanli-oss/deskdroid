@@ -33,6 +33,10 @@ x11app = "qGuiApp->nativeInterface<QNativeInterface::QX11Application>()"
 if x11app not in t:
     sys.exit("add-to-workspace: no QX11Application use in desktopview.cpp")
 dv.write_text(t.replace(x11app, "false"))
+# No kactivitymanagerd yet: plasmashell loads without it, as in its own tests.
+edit("shell/main.cpp", "    QApplication app(argc, argv);\n",
+     "    QApplication app(argc, argv);\n"
+     "    app.setProperty(\"org.kde.KActivities.core.disableAutostart\", true);\n")
 edit("shell/main.cpp", "int main(int argc, char *argv[])", "int plasmashellMain(int argc, char *argv[])")
 
 entry = (here.parent / "kwin-nativedesk" / "qthost_entry.cpp").read_text()

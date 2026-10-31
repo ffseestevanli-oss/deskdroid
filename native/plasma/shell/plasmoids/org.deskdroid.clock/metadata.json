@@ -1,0 +1,11 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Category": "Date and Time",
+        "Icon": "preferences-system-time",
+        "Id": "org.deskdroid.clock",
+        "License": "GPL-2.0+",
+        "Name": "Clock"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

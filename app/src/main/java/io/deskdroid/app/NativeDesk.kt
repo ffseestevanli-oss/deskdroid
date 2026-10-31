@@ -263,7 +263,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     // KWin is ready for clients: a first window inside it.
                     if (!demoStarted && it.contains("Accepting client connections")) {
                         demoStarted = true
-                        main.postDelayed({ if (started) startQtApp(runtime) }, 1500)
+                        // plasmashell when the build has it, else the Qt demo.
+                        val shell = File(libs, "libplasmashell.so").exists()
+                        main.postDelayed({ if (started) { if (shell) startPlasmaShell(runtime) else startQtApp(runtime) } }, 1500)
                     }
                     synchronized(qtLines) {
                         qtLines.addLast(it.take(160))
@@ -280,6 +282,66 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
+    /**
+     * Stage 4: plasmashell (Plasma's desktop and panels), a Wayland client of
+     * KWin, run by QtHost like KWin. Its shell for now is DeskDroid's own
+     * (native/plasma/shell); its QML modules and packages come in KWin's data.
+     */
+    private fun startPlasmaShell(runtime: File) {
+        val libs = applicationInfo.nativeLibraryDir
+        val data = File(filesDir, "kwin")
+        val config = File(filesDir, "config").apply { mkdirs() }
+        // No GPU path for Qt Quick yet: Qt's software renderer, through Wayland shm.
+        File(config, "kdeglobals").takeUnless { it.exists() }
+            ?.writeText("[QtQuickRendererSettings]\nSceneGraphBackend=software\n")
+        try {
+            val p = ProcessBuilder(
+                "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
+                QtHost::class.java.name, libs, "libplasmashell.so",
+                "--no-respawn", "-p", "org.deskdroid.desktop"
+            ).redirectErrorStream(true).also { pb ->
+                pb.environment().apply {
+                    remove("LD_PRELOAD")
+                    put("CLASSPATH", applicationInfo.sourceDir)
+                    put("LD_LIBRARY_PATH", libs)
+                    put("HOME", filesDir.path)
+                    put("TMPDIR", cacheDir.path)
+                    put("XDG_RUNTIME_DIR", runtime.path)
+                    put("XDG_DATA_DIRS", File(data, "share").path)
+                    put("XDG_CONFIG_HOME", config.path)
+                    put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
+                    put("XCURSOR_PATH", File(data, "share/icons").path)
+                    put("FONTCONFIG_FILE", File(data, "fonts.conf").path)
+                    put("QT_QPA_FONTDIR", "/system/fonts")
+                    put("QT_QPA_PLATFORM", "wayland")
+                    put("WAYLAND_DISPLAY", "wayland-0")
+                    put("QT_PLUGIN_PATH", pluginPath(libs, data))
+                    put("QML_IMPORT_PATH", File(data, "qml").path)
+                    put("QT_QUICK_BACKEND", "software")
+                    put("KDE_DEBUG", "1")
+                    sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
+                }
+            }.start()
+            apps += p
+            Thread {
+                p.inputStream.bufferedReader().forEachLine {
+                    AppLog.i("[plasmashell] $it")
+                    synchronized(qtLines) {
+                        qtLines.addLast("shell: ${it.take(150)}")
+                        while (qtLines.size > 40) qtLines.removeFirst()
+                    }
+                }
+                val code = p.waitFor()
+                val exit = "exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
+                synchronized(qtLines) { qtLines.addLast("shell: $exit") }
+                AppLog.i("[plasmashell] exited ($code)")
+            }.apply { isDaemon = true }.start()
+        } catch (e: Exception) {
+            synchronized(qtLines) { qtLines.addLast("shell: couldn't start: $e") }
+            AppLog.i("Native desktop test: couldn't start plasmashell: $e")
+        }
+    }
+
     private var sessionBus: String? = null
 
     /** Where Qt (flat, Android style) and KDE (by namespace, Linux style) find plugins. */
@@ -292,14 +354,20 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * folder gets links with the real layout, from the list the build ships.
      */
     private fun linkPlugins(libs: String, data: File) {
-        val list = File(data, "plugins.txt").takeIf { it.exists() } ?: return
-        val root = File(data, "plugins")
-        root.deleteRecursively()
+        linkFlatLibraries(libs, File(data, "plugins.txt"), File(data, "plugins"), clear = true)
+        // QML plugins, next to their qmldir files (unpacked from the data).
+        linkFlatLibraries(libs, File(data, "qml.txt"), File(data, "qml"), clear = false)
+    }
+
+    private fun linkFlatLibraries(libs: String, listFile: File, root: File, clear: Boolean) {
+        val list = listFile.takeIf { it.exists() } ?: return
+        if (clear) root.deleteRecursively()
         list.forEachLine { line ->
             val (flat, rel) = line.split('\t').takeIf { it.size == 2 } ?: return@forEachLine
             val link = File(root, rel)
             if (!link.canonicalPath.startsWith(root.canonicalPath + File.separator)) return@forEachLine
             link.parentFile?.mkdirs()
+            link.delete()
             try { android.system.Os.symlink(File(libs, flat).path, link.path) } catch (e: Exception) {
                 AppLog.i("Native desktop test: couldn't link plugin $rel: $e")
             }

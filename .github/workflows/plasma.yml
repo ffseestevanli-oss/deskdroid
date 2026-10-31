@@ -66,3 +66,5 @@ jobs:
           echo "built: $(ls ~/plasma-prefix/stamps | tr '\n' ' ')"
           ls ~/plasma-prefix/lib ~/plasma-prefix/bin 2>/dev/null | grep -E '^(libkwin|kwin_wayland)' || true
           du -sh ~/plasma-prefix
+          for d in ~/plasma-prefix/qml ~/plasma-prefix/lib/qml ~/plasma-prefix/lib/plugins; do [ -d "$d" ] && echo "$d: $(ls "$d" | tr '\n' ' ')"; done
+          du -sh ~/plasma-prefix/qml ~/plasma-prefix/lib/qml 2>/dev/null || true

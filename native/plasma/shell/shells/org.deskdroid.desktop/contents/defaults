@@ -1,0 +1,15 @@
+[Desktop]
+Containment=org.deskdroid.desktopcontainment
+ToolBox=
+RuntimePlatform=Desktop
+
+[Desktop][ContainmentActions]
+
+[Panel]
+Containment=org.deskdroid.panel
+ToolBox=
+
+[Panel][ContainmentActions]
+
+[Theme]
+Theme=default
