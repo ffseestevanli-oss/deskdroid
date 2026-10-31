@@ -539,7 +539,7 @@ build_solid() { local s; s="$(kf_src solid)"; kde_cmake "$s" -DUSE_DBUS=ON; }
 # the first qtbase don't all build again: TLS only adds to Qt's API.
 build_openssl() {
   local s; s="$(unpack https://github.com/openssl/openssl/releases/download/openssl-3.5.4/openssl-3.5.4.tar.gz openssl-3.5.4.tar.gz)"
-  (cd "$s" && ANDROID_NDK_ROOT="$NDK" PATH="$BIN:$PATH" ./Configure android-arm64 -D__ANDROID_API__=$API \
+  (cd "$s" && export ANDROID_NDK_ROOT="$NDK" PATH="$BIN:$PATH" && ./Configure android-arm64 -D__ANDROID_API__=$API \
     --prefix="$PREFIX" --libdir=lib shared no-tests no-docs no-apps \
     && make -j"$JOBS" && make install_sw)
   test -e "$PREFIX/lib/libssl.so"
