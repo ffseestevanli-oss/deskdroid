@@ -67,7 +67,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     install -m 755 "$DESKDROID_QT_ANDROID/lib/libkwin_wayland.so" "$OUT/libkwin_wayland.so"
     # The Qt libraries already copied count too: some need non-Qt libraries
     # (QtDBus needs libdbus-1).
-    bundled=("$OUT/libkwin_wayland.so" "$OUT"/libQt6*.so)
+    bundled=("$OUT/libkwin_wayland.so" "$OUT/libnativedesk_qt.so" "$OUT"/libQt6*.so)
     todo=("${bundled[@]}")
     while [ ${#todo[@]} -gt 0 ]; do
       f="${todo[0]}"; todo=("${todo[@]:1}")
