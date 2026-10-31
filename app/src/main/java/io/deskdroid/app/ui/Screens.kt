@@ -624,6 +624,16 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         }, LinearLayout.LayoutParams(-1, -2))
         addView(ui.text("Experimental: windows drawn by Android itself, without the Linux system, to measure how " +
             "smooth a native desktop would be. It doesn't touch your desktop.", 12f, Party.MUTED))
+        if (io.deskdroid.app.NativeSession.available(c)) {
+            // Start desktop runs the native session; the Debian one stays reachable here until
+            // native apps replace it.
+            addView(ui.outlineButton("Debian desktop (legacy)", Party.ORANGE, Party.ORANGE) {
+                if (io.deskdroid.app.Paths(c).isInstalled) io.deskdroid.app.SessionService.start(c, Display.DEFAULT_DISPLAY)
+                else nav.go(WelcomeScreen(activity, nav))
+            }, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.text("The previous desktop: Plasma on a Debian system (proot), with Firefox, Steam and " +
+                "Flatpak apps. It downloads the system the first time.", 12f, Party.MUTED))
+        }
 
         addView(ui.switchRow(null, "Start on phone boot", "Desktop starts in the background after you unlock.", Prefs.autoStart(c)) {
             Prefs.setAutoStart(c, it)
