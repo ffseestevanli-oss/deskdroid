@@ -1,5 +1,6 @@
 // The time, as the phone's settings show it.
 import QtQuick
+import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 
 PlasmoidItem {
@@ -17,7 +18,8 @@ PlasmoidItem {
     }
 
     fullRepresentation: Text {
-        implicitWidth: contentWidth
+        Layout.minimumWidth: contentWidth
+        Layout.preferredWidth: contentWidth
         text: Qt.formatTime(root.now, Qt.locale().timeFormat(Locale.ShortFormat))
         color: "white"
         font.pixelSize: Math.max(12, height * 0.45)
