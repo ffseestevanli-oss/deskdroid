@@ -304,6 +304,12 @@ build_qtbase() {
   perl -0pi -e 's/if\(\(X11_SUPPORTED\) OR QT_FIND_ALL_PACKAGES_ALWAYS\)(\s*qt_find_package\(XKB 0)/if((X11_SUPPORTED OR ANDROID) OR QT_FIND_ALL_PACKAGES_ALWAYS)$1/' \
     "$s/src/gui/configure.cmake"
   grep -q "X11_SUPPORTED OR ANDROID" "$s/src/gui/configure.cmake"
+  # Standard paths from the XDG variables, as on Linux: Qt for Android's
+  # version asks the app's Context (a JNI call) and knows nothing of share/,
+  # where KDE software looks for its data, and KWin runs outside an Activity.
+  perl -0pi -e 's/(CONDITION ANDROID\s+SOURCES\s+)io\/qstandardpaths_android\.cpp/$1io\/qstandardpaths_unix.cpp/' \
+    "$s/src/corelib/CMakeLists.txt"
+  grep -q "qstandardpaths_unix.cpp" <(sed -n '/CONDITION ANDROID$/,/)/p' "$s/src/corelib/CMakeLists.txt")
   mkdir -p "$s/_android"
   (cd "$s/_android" && PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" "$s/configure" \
     -platform android-clang -android-ndk "$NDK" -android-sdk "$ANDROID_HOME" -android-abis arm64-v8a \
@@ -399,6 +405,11 @@ build_ki18n() {
   # Android gettext adds; ours come from files like on Linux.
   sed -i 's/^\( *\)loadMessageCatalogFile(domain, moFile);/\1(void)domain;/' "$s/src/i18n/kcatalog.cpp"
   grep -q "(void)domain;" "$s/src/i18n/kcatalog.cpp"
+  # The rest of KCatalog's Android code reads catalogs from APK assets through
+  # the app's AssetManager (a JNI call on Qt's Context); KWin runs outside an
+  # Activity, so catalogs are found in share/locale as on Linux.
+  sed -i '0,/^#ifdef Q_OS_ANDROID/s//#undef Q_OS_ANDROID\n#ifdef Q_OS_ANDROID/' "$s/src/i18n/kcatalog.cpp"
+  grep -q "^#undef Q_OS_ANDROID" "$s/src/i18n/kcatalog.cpp"
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DCMAKE_SHARED_LINKER_FLAGS=-landroid -DBUILD_WITH_QML=ON -DLibIntl_INCLUDE_DIRS="$PREFIX/include" -DLibIntl_LIBRARIES="$PREFIX/lib/libintl.so"
 }
