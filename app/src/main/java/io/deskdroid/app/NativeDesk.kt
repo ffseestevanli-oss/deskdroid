@@ -313,6 +313,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("CLASSPATH", applicationInfo.sourceDir)
                     put("LD_LIBRARY_PATH", libs)
                     put("HOME", filesDir.path)
+                    put("LANG", java.util.Locale.getDefault().let { "${it.language}_${it.country}.UTF-8" }) // the phone's language, for dates, times and text
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", runtime.path)
                     put("XDG_DATA_DIRS", File(data, "share").path)

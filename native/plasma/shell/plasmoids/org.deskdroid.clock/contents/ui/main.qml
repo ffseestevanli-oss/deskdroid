@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
+import org.kde.kirigami as Kirigami
 
 PlasmoidItem {
     id: root
@@ -11,7 +12,7 @@ PlasmoidItem {
     preferredRepresentation: fullRepresentation
 
     Timer {
-        interval: 1000
+        interval: 10000
         running: true
         repeat: true
         onTriggered: root.now = new Date()
@@ -20,8 +21,9 @@ PlasmoidItem {
     fullRepresentation: Text {
         Layout.minimumWidth: contentWidth
         Layout.preferredWidth: contentWidth
-        text: Qt.formatTime(root.now, Qt.locale().timeFormat(Locale.ShortFormat))
-        color: "white"
+        // Without seconds, even in the C locale (whose short format has them).
+        text: Qt.formatTime(root.now, Qt.locale().timeFormat(Locale.ShortFormat).replace(/:ss/, ""))
+        color: Kirigami.Theme.textColor // the panel theme's
         font.pixelSize: Math.max(12, height * 0.45)
         verticalAlignment: Text.AlignVCenter
     }
