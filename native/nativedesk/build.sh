@@ -93,17 +93,18 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         esac
         # KDE plugins installed flat (kcoreaddons_add_plugin's Android
         # naming) go back into their namespace folder, where KDE looks.
+        linkrel="$rel"
         if [ "$dir" = . ]; then
           for ns in kf6/packagestructure kf6/urifilters kf6/kiod kf6/kio_dnd kf6/kio kf6/kded kf6/parts kf6/thumbcreator \
                     kwin/effects/plugins kwin/plugins plasma/applets plasma/containmentactions org.kde.kdecoration3; do
             flatns="libplugins_${ns//\//_}_"
-            case "$base" in "$flatns"*) rel="$ns/${base#"$flatns"}"; break ;; esac
+            case "$base" in "$flatns"*) linkrel="$ns/${base#"$flatns"}"; break ;; esac
           done
         fi
         case "$rel" in platforms/*) case "$base" in *wayland*) ;; *) continue ;; esac ;; esac
         install -m 644 "$DESKDROID_QT_ANDROID/plugins/$rel" "$OUT/$name"
         bundled+=("$OUT/$name"); plugins=$((plugins + 1))
-        printf '%s\t%s\n' "$name" "$rel" >> "$WORK/plugins.txt"
+        printf '%s\t%s\n' "$name" "$linkrel" >> "$WORK/plugins.txt"
       done < <(cd "$DESKDROID_QT_ANDROID/plugins" && find . -name '*.so' | sed 's|^\./||' | sort)
       echo "   $plugins plugins"
     fi
