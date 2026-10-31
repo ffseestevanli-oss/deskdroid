@@ -549,7 +549,15 @@ build_qtbase_ssl() {
   qtbase_with_ssl
   grep -q "define QT_FEATURE_ssl 1" "$PREFIX/include/QtNetwork/qtnetwork-config.h"
 }
-build_kio() { kf kio -DWITH_WAYLAND=ON; }
+# Apps start by fork and exec here: there's no systemd to start them in scopes
+# (KIO's build leaves that code out on Android, but one #if still uses it).
+build_kio() {
+  local s; s="$(kf_src kio)"
+  sed -i 's/^#if defined(Q_OS_LINUX) && defined(WITH_QTDBUS)$/#if defined(Q_OS_LINUX) \&\& !defined(Q_OS_ANDROID) \&\& defined(WITH_QTDBUS)/' "$s/src/gui/kprocessrunner.cpp"
+  grep -q "!defined(Q_OS_ANDROID) && defined(WITH_QTDBUS)" "$s/src/gui/kprocessrunner.cpp"
+  unandroid "$s"
+  kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DWITH_WAYLAND=ON
+}
 build_kxmlgui() { kf kxmlgui; }
 build_kstatusnotifieritem() { kf kstatusnotifieritem; }
 # The library only: its QML imports need Boost, which isn't here yet.
