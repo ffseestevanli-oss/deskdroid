@@ -1,7 +1,20 @@
-
 --- a/src/plasma/private/contrasteffectwatcher.cpp	2026-10-31 18:39:56.484880130 +0000
-+++ b/src/plasma/private/contrasteffectwatcher.cpp	2026-10-31 18:39:56.690826838 +0000
-@@ -133,6 +133,9 @@
++++ b/src/plasma/private/contrasteffectwatcher.cpp	2026-10-31 18:43:12.215771277 +0000
+@@ -88,7 +88,12 @@
+     }
+ }
+ 
+-#if HAVE_X11
++#if !HAVE_X11
++bool ContrastEffectWatcher::nativeEventFilter(const QByteArray &, void *, qintptr *)
++{
++    return false;
++}
++#else
+ bool ContrastEffectWatcher::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result)
+ {
+     if (KWindowSystem::isPlatformWayland()) {
+@@ -133,6 +138,9 @@
          return m_contrastManager->isActive();
      }
  
@@ -11,7 +24,7 @@
      if (m_property == XCB_ATOM_NONE || !m_x11Interface) {
          return false;
      }
-@@ -149,6 +152,7 @@
+@@ -149,6 +157,7 @@
          }
      }
      return false;
@@ -19,7 +32,18 @@
  }
  
  } // namespace Plasma
-
+--- a/src/plasma/private/contrasteffectwatcher_p.h	2026-10-31 18:39:56.484899281 +0000
++++ b/src/plasma/private/contrasteffectwatcher_p.h	2026-10-31 18:43:12.215359517 +0000
+@@ -30,9 +30,7 @@
+     bool isEffectActive() const;
+ 
+ protected:
+-#if HAVE_X11
+     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *) override;
+-#endif
+ 
+ Q_SIGNALS:
+     void effectChanged(bool on);
 --- a/src/plasma/private/theme_p.cpp	2026-10-31 18:39:56.485022295 +0000
 +++ b/src/plasma/private/theme_p.cpp	2026-10-31 18:39:56.691423866 +0000
 @@ -17,7 +17,9 @@
