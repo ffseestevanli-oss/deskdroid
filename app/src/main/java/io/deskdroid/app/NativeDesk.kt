@@ -39,16 +39,40 @@ object NativeDesk {
     @JvmStatic external fun nativeScroll(dx: Float, dy: Float)
     @JvmStatic external fun nativeStats(): String
     @JvmStatic external fun nativeResized()
+    @JvmStatic external fun nativeDetach()
+
+    // The desktop outlives its window: Home or switching apps takes the
+    // activity's surface away, but the compositor, KWin, Plasma and the apps
+    // keep running under NativeDeskService until the user stops the desktop.
+    val apps = mutableListOf<Process>()
+    @Volatile var running = false
+    @Volatile var activity: java.lang.ref.WeakReference<Activity>? = null
+    // The overlay's last lines, kept across activity instances.
+    val qtLines = ArrayDeque<String>()
+    @Volatile var qtStatus = "Qt demo: not in this build"
+
+    /** Ends the desktop: its processes, the compositor, the service and the window. */
+    fun stop(c: android.content.Context) {
+        synchronized(apps) {
+            apps.forEach { it.destroy() }
+            apps.clear()
+        }
+        if (running) nativeStop()
+        running = false
+        c.stopService(android.content.Intent(c, NativeDeskService::class.java))
+        activity?.get()?.finish()
+        AppLog.i("Native desktop stopped")
+    }
 }
 
 class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var surfaceView: SurfaceView
     private lateinit var stats: TextView
-    private val apps = mutableListOf<Process>()
+    private val apps get() = NativeDesk.apps
     private val main = Handler(Looper.getMainLooper())
     private var started = false
     // The Qt demo's last output lines, shown in the overlay so its errors are visible.
-    private val qtLines = ArrayDeque<String>()
+    private val qtLines get() = NativeDesk.qtLines
 
     /**
      * The overlay keeps only what matters at a glance (errors, crashes, exits);
@@ -63,7 +87,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             while (qtLines.size > 12) qtLines.removeFirst()
         }
     }
-    @Volatile private var qtStatus = "Qt demo: not in this build"
+    private var qtStatus: String
+        get() = NativeDesk.qtStatus
+        set(v) { NativeDesk.qtStatus = v }
 
     private val tick = object : Runnable {
         override fun run() {
@@ -78,6 +104,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppLog.attach(this)
+        NativeDesk.activity = java.lang.ref.WeakReference(this)
         surfaceView = SurfaceView(this).apply {
             holder.addCallback(this@NativeDeskActivity)
             isFocusable = true
@@ -108,7 +135,16 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val hz = display?.supportedModes?.maxOfOrNull { it.refreshRate } ?: 60f
             holder.surface.setFrameRate(hz, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
         }
+        if (NativeDesk.running) {
+            // Back from the background: the desktop kept running, show it again.
+            started = NativeDesk.nativeStart(holder.surface)
+            AppLog.i(if (started) "Native desktop: back on screen" else "Native desktop: couldn't show it again")
+            if (started) main.post(tick)
+            return
+        }
         started = NativeDesk.nativeStart(holder.surface)
+        NativeDesk.running = started
+        if (started) startForegroundService(android.content.Intent(this, NativeDeskService::class.java))
         AppLog.i(if (started) "Native desktop test started" else "Native desktop test couldn't start (see logcat: nativedesk)")
         if (!started) {
             stats.text = "The native compositor couldn't start on this GPU."
@@ -134,9 +170,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        // Home, app switching or the screen turning off: stop drawing, keep running.
         main.removeCallbacks(tick)
-        stopApps()
-        if (started) NativeDesk.nativeStop()
+        if (started) NativeDesk.nativeDetach()
         started = false
     }
 
@@ -576,10 +612,6 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         stamp.writeText(version)
     }
 
-    private fun stopApps() {
-        apps.forEach { it.destroy() }
-        apps.clear()
-    }
 
     private val touchpad = Touchpad()
 
@@ -715,7 +747,10 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onDestroy() {
         main.removeCallbacks(tick)
-        stopApps()
+        // Back (or Stop in the notification) ends the desktop; anything else
+        // that destroys the window leaves it running in the background.
+        if (isFinishing) NativeDesk.stop(this)
+        if (NativeDesk.activity?.get() === this) NativeDesk.activity = null
         super.onDestroy()
     }
 }

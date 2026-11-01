@@ -88,6 +88,7 @@ static struct {
     EGLDisplay dpy;
     EGLSurface surf;
     EGLContext ctx;
+    EGLConfig cfg;
     GLuint prog_tex, prog_solid, vbo;
     GLint tex_rect, tex_screen, tex_flip, solid_rect, solid_screen, solid_color;
 
@@ -97,6 +98,10 @@ static struct {
     uint32_t next_window;
     uint32_t screen_w, screen_h; /* the surface size the last frame was drawn at */
     bool resized;                /* set by nativeResized: draw a frame to pick up the new size */
+    /* Swapping the window (the activity went to the background and came
+     * back): nativeStart/nativeDetach ask, the loop does it under C.lock. */
+    ANativeWindow *pending_window;
+    unsigned window_asked, window_done;
 
     pthread_mutex_t lock;     /* guards input and stats */
     struct input input[INPUT_QUEUE];
@@ -187,9 +192,9 @@ static bool egl_init(void)
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
         EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8, EGL_NONE
     };
-    EGLConfig cfg;
     EGLint n;
-    if (!eglChooseConfig(C.dpy, cfg_attr, &cfg, 1, &n) || n < 1) return false;
+    if (!eglChooseConfig(C.dpy, cfg_attr, &C.cfg, 1, &n) || n < 1) return false;
+    EGLConfig cfg = C.cfg;
     const EGLint ctx_attr[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
     C.ctx = eglCreateContext(C.dpy, cfg, EGL_NO_CONTEXT, ctx_attr);
     C.surf = eglCreateWindowSurface(C.dpy, cfg, C.window, NULL);
@@ -325,8 +330,9 @@ static bool read_client(int i)
         if (cl->w == 0 || cl->h == 0) {
             cl->desktop = true;
             cl->x = cl->y = 0;
-            cl->w = ANativeWindow_getWidth(C.window);
-            cl->h = ANativeWindow_getHeight(C.window);
+            /* In the background there's no window: the size it last had. */
+            cl->w = C.window ? (uint32_t)ANativeWindow_getWidth(C.window) : C.screen_w;
+            cl->h = C.window ? (uint32_t)ANativeWindow_getHeight(C.window) : C.screen_h;
         }
         memcpy(cl->title, m.hello.title, NDESK_TITLE_MAX);
         cl->title[NDESK_TITLE_MAX - 1] = 0;
@@ -615,6 +621,40 @@ static void update_stats(unsigned frames, double secs, double draw_ms)
     pthread_mutex_unlock(&C.lock);
 }
 
+/*
+ * The activity's surface comes and goes (Home, app switching) while the
+ * desktop keeps running: without a window the context stays current with no
+ * surface and nothing is drawn, but apps still get their buffers back and
+ * frame events, so KWin, Plasma and the apps carry on.
+ */
+static void swap_window(void)
+{
+    pthread_mutex_lock(&C.lock);
+    if (C.window_done == C.window_asked) {
+        pthread_mutex_unlock(&C.lock);
+        return;
+    }
+    ANativeWindow *next = C.pending_window;
+    C.pending_window = NULL;
+    eglMakeCurrent(C.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, C.ctx);
+    if (C.surf != EGL_NO_SURFACE) eglDestroySurface(C.dpy, C.surf);
+    C.surf = EGL_NO_SURFACE;
+    if (C.window) ANativeWindow_release(C.window);
+    C.window = next;
+    if (next) {
+        C.surf = eglCreateWindowSurface(C.dpy, C.cfg, next, NULL);
+        if (C.surf == EGL_NO_SURFACE || !eglMakeCurrent(C.dpy, C.surf, C.surf, C.ctx))
+            LOGE("can't draw to the new window (0x%x)", eglGetError());
+        eglSwapInterval(C.dpy, 1);
+        LOGI("window back: %dx%d", ANativeWindow_getWidth(next), ANativeWindow_getHeight(next));
+    } else {
+        LOGI("window gone: running in the background");
+    }
+    C.dirty = true;
+    C.window_done = C.window_asked;
+    pthread_mutex_unlock(&C.lock);
+}
+
 static void *loop(void *unused)
 {
     (void)unused;
@@ -638,8 +678,10 @@ static void *loop(void *unused)
                 idx[n] = i;
                 p[n++] = (struct pollfd){ C.clients[i]->fd, POLLIN, 0 };
             }
-        /* Idle until something happens; once dirty, the swap paces the loop. */
-        if (poll(p, n, C.dirty ? 0 : 1000) < 0 && errno != EINTR) break;
+        /* Idle until something happens; once dirty, the swap paces the loop
+         * (in the background, with no swap, at most 20 frames a second). */
+        bool shown = C.surf != EGL_NO_SURFACE;
+        if (poll(p, n, C.dirty ? (shown ? 0 : 50) : 1000) < 0 && errno != EINTR) break;
         if (p[0].revents) {
             uint64_t v;
             read(C.wake, &v, sizeof v);
@@ -657,14 +699,19 @@ static void *loop(void *unused)
         for (int k = 0; k < n_in; k++) handle_input(&in[k]);
         if (n_in) C.dirty = true;
         if (__atomic_exchange_n(&C.resized, false, __ATOMIC_ACQ_REL)) C.dirty = true;
+        swap_window();
 
         if (C.dirty) {
             /* Thread CPU time, so waiting for a free screen buffer or vsync doesn't count. */
             uint64_t t0 = clock_ns(CLOCK_THREAD_CPUTIME_ID);
             latch_commits();
-            draw();
-            send_frames();
-            if (!eglSwapBuffers(C.dpy, C.surf)) LOGE("swap failed (0x%x)", eglGetError());
+            if (C.surf != EGL_NO_SURFACE) {
+                draw();
+                send_frames();
+                if (!eglSwapBuffers(C.dpy, C.surf)) LOGE("swap failed (0x%x)", eglGetError());
+            } else {
+                send_frames();
+            }
             send_releases();
             draw_total += (clock_ns(CLOCK_THREAD_CPUTIME_ID) - t0) / 1e6;
             C.dirty = C.dirty_next;
@@ -689,6 +736,8 @@ static void *loop(void *unused)
 
 /* ---- JNI: io.deskdroid.app.NativeDesk ---- */
 
+static void wake(void);
+
 static int listen_socket(void)
 {
     int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
@@ -708,7 +757,18 @@ JNIEXPORT jboolean JNICALL
 Java_io_deskdroid_app_NativeDesk_nativeStart(JNIEnv *env, jclass cls, jobject surface)
 {
     (void)cls;
-    if (C.running) return JNI_TRUE;
+    if (C.running) {
+        /* Back from the background: draw into the new window. */
+        ANativeWindow *w = ANativeWindow_fromSurface(env, surface);
+        if (!w) return JNI_FALSE;
+        pthread_mutex_lock(&C.lock);
+        if (C.pending_window) ANativeWindow_release(C.pending_window);
+        C.pending_window = w;
+        C.window_asked++;
+        pthread_mutex_unlock(&C.lock);
+        wake();
+        return JNI_TRUE;
+    }
     C.window = ANativeWindow_fromSurface(env, surface);
     C.listen_fd = listen_socket();
     C.wake = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
@@ -742,8 +802,11 @@ Java_io_deskdroid_app_NativeDesk_nativeStop(JNIEnv *env, jclass cls)
     pthread_join(C.thread, NULL);
     close(C.listen_fd);
     close(C.wake);
-    ANativeWindow_release(C.window);
+    if (C.window) ANativeWindow_release(C.window);
     C.window = NULL;
+    if (C.pending_window) ANativeWindow_release(C.pending_window);
+    C.pending_window = NULL;
+    C.window_asked = C.window_done = 0;
     C.listen_fd = C.wake = -1;
     C.n_input = 0;
     C.stats[0] = 0;
@@ -778,6 +841,31 @@ Java_io_deskdroid_app_NativeDesk_nativeScroll(JNIEnv *env, jclass cls, jfloat dx
 {
     (void)env; (void)cls;
     queue((struct input){ .type = IN_SCROLL, .x = dx, .y = dy });
+}
+
+/*
+ * The activity's surface is going away (Home, app switching): stop drawing
+ * to it before Android takes it back, and keep everything else running.
+ */
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeDetach(JNIEnv *env, jclass cls)
+{
+    (void)env; (void)cls;
+    if (!C.running) return;
+    pthread_mutex_lock(&C.lock);
+    if (C.pending_window) ANativeWindow_release(C.pending_window);
+    C.pending_window = NULL;
+    unsigned asked = ++C.window_asked;
+    pthread_mutex_unlock(&C.lock);
+    wake();
+    for (int i = 0; i < 500; i++) { /* up to a second */
+        pthread_mutex_lock(&C.lock);
+        bool done = (int)(C.window_done - asked) >= 0;
+        pthread_mutex_unlock(&C.lock);
+        if (done) return;
+        usleep(2000);
+    }
+    LOGE("the compositor didn't let go of the window in time");
 }
 
 /* The surface changed size (the phone turned): the next frame notices. */

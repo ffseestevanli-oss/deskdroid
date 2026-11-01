@@ -63,6 +63,7 @@
         <activity
             android:name=".NativeDeskActivity"
             android:exported="false"
+            android:launchMode="singleTask"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
             android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|smallestScreenSize|density"
             android:resizeableActivity="true" />
@@ -105,6 +106,15 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Downloads and unpacks the Linux desktop system image" />
+        </service>
+
+        <service
+            android:name=".NativeDeskService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the user's native Plasma desktop running while its window is in the background" />
         </service>
 
         <service
