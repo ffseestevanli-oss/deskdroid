@@ -743,6 +743,16 @@ build_plasma_desktop_folder() {
   cp -r "$s/containments/desktop/package" "$PREFIX/share/plasma/plasmoids/org.kde.desktopcontainment"
   test -e "$PREFIX/share/plasma/plasmoids/org.kde.desktopcontainment/contents/ui/main.qml"
 }
+# KDE's app database needs share/mime/<type>/<subtype>.xml to know MIME
+# types (Qt has its own); made from the build machine's shared-mime-info.
+build_mime_stubs() {
+  local x=/usr/share/mime/packages/freedesktop.org.xml
+  [ -e "$x" ] || { sudo apt-get install -y shared-mime-info >/dev/null; }
+  rm -rf "$PREFIX/share/mime"
+  python3 "$HERE/mime/stubs.py" "$x" "$PREFIX/share/mime"
+  test -e "$PREFIX/share/mime/audio/mpeg.xml"
+}
+inputs_mime_stubs() { cat "$HERE"/mime/*; }
 inputs_plasma_desktop_folder() { cat "$HERE"/desktopcontainment/*; }
 inputs_plasma_desktop_packages() { cat "$HERE"/patches/desktoppackage/*; }
 inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
@@ -755,7 +765,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
-     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder kfilemetadata breeze_icons kcmutils_host dolphin)
+     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
