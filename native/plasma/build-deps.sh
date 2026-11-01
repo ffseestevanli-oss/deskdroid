@@ -332,6 +332,8 @@ build_qt5compat() { qt_module qt5compat; }
 build_qtsensors() { qt_module qtsensors; }
 # Text to speech, which KTextEditor needs (its "Say" actions).
 build_qtspeech() { qt_module qtspeech; }
+# Gwenview plays videos with Qt Multimedia (Android's own media backend).
+build_qtmultimedia() { qt_module qtmultimedia -DFEATURE_ffmpeg=OFF -DFEATURE_spatialaudio=OFF -DFEATURE_spatialaudio_quick3d=OFF; }
 build_qtwayland() {
   local s; s="$(qt_src qtwayland)"
   # qtwayland skips Android outright; the client side is plain Linux code.
@@ -701,6 +703,32 @@ build_kwrite() {
   test -e "$PREFIX/lib/libkwrite.so"
 }
 inputs_kwrite() { inputs_dolphin; }
+# Gwenview: KDE's image viewer, with the image libraries it reads
+# through (JPEG, PNG, and Exiv2 for metadata).
+build_libjpeg_turbo() {
+  local s; s="$(unpack https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz libjpeg-turbo-3.1.0.tar.gz)"
+  cmake_cross "$s" -DENABLE_STATIC=OFF -DWITH_TURBOJPEG=OFF
+}
+build_libpng() {
+  local s; s="$(unpack https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.47.tar.gz libpng-1.6.47.tar.gz)"
+  cmake_cross "$s" -DPNG_STATIC=OFF -DPNG_TESTS=OFF -DPNG_TOOLS=OFF -DPNG_FRAMEWORK=OFF
+}
+build_exiv2() {
+  local s; s="$(unpack https://github.com/Exiv2/exiv2/archive/refs/tags/v0.28.3.tar.gz exiv2-0.28.3.tar.gz)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -DEXIV2_ENABLE_INIH=OFF -DEXIV2_ENABLE_BROTLI=OFF -DEXIV2_ENABLE_NLS=OFF \
+    -DEXIV2_ENABLE_WEBREADY=OFF -DEXIV2_ENABLE_XMP=ON -DEXIV2_BUILD_EXIV2_COMMAND=OFF -DEXIV2_BUILD_SAMPLES=OFF \
+    -DEXIV2_BUILD_UNIT_TESTS=OFF -DEXIV2_BUILD_DOC=OFF -DEXIV2_ENABLE_LENSDATA=ON
+}
+build_gwenview() {
+  local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/gwenview-$GEAR_VERSION.tar.xz" "gwenview-$GEAR_VERSION.tar.xz")"
+  sed -i 's|^add_executable(gwenview ${gwenview_SRCS})|add_executable(gwenview)\ntarget_sources(gwenview PRIVATE ${gwenview_SRCS})|' "$s/app/CMakeLists.txt"
+  python3 "$HERE/apps/as-library.py" "$s" app/CMakeLists.txt gwenview app/main.cpp
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DWITHOUT_X11=ON -DGWENVIEW_IMAGEANNOTATOR=OFF -DGWENVIEW_NO_WAYLAND_GESTURES=ON \
+    -DGWENVIEW_SEMANTICINFO_BACKEND=None -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
+  test -e "$PREFIX/lib/libgwenview.so"
+}
+inputs_gwenview() { inputs_dolphin; }
 inputs_dolphin() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
 
 # ---- plasmashell (stage 4b) ---------------------------------------------------
@@ -782,14 +810,14 @@ inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HE
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
-     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtspeech qtwayland qttools
+     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtspeech qtmultimedia qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
      sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
-     syntax_highlighting ktexteditor kwrite)
+     syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }

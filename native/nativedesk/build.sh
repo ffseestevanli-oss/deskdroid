@@ -76,7 +76,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Stage 5: apps, built as libraries too (native/plasma/apps/as-library.py),
     # each started by its command bin/<app>, a link to libdd_qtapp.so (qtapp.sh).
     apps=()
-    for app in dolphin kioworker ksmserver-logout-greeter kwrite; do
+    for app in dolphin kioworker ksmserver-logout-greeter kwrite gwenview; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
       bundled+=("$OUT/libdd_$app.so"); apps+=("$app")
