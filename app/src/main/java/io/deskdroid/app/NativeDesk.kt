@@ -116,7 +116,30 @@ object NativeDesk {
         }.also { it.startWatching() }
     }
 
-    private fun launchAndroidApp(c: android.content.Context, pkg: String) {
+    private fun launchAndroidApp(c: android.content.Context, target: String) {
+        // An app in another profile (Private Space, Work): <package>@<profile serial>.
+        if ('@' in target) {
+            val pkg = target.substringBefore('@')
+            val users = c.getSystemService(android.os.UserManager::class.java)
+            val user = target.substringAfter('@').toLongOrNull()?.let { users.getUserForSerialNumber(it) }
+            val launcher = c.getSystemService(android.content.pm.LauncherApps::class.java)
+            try {
+                if (user == null) throw Exception("profile is gone")
+                // Locked (Private Space) or paused (Work): Android asks to unlock it first.
+                if (users.isQuietModeEnabled(user)) {
+                    users.requestQuietModeEnabled(false, user)
+                    AppLog.i("Native desktop: asked to unlock profile for $pkg")
+                    return
+                }
+                val activity = launcher.getActivityList(pkg, user).firstOrNull() ?: throw Exception("no app to open")
+                launcher.startMainActivity(activity.componentName, user, null, null)
+                AppLog.i("Native desktop: opened $target")
+            } catch (e: Exception) {
+                AppLog.i("Native desktop: couldn't open $target: $e")
+            }
+            return
+        }
+        val pkg = target
         val intent = c.packageManager.getLaunchIntentForPackage(pkg)
             ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         if (intent == null) {
@@ -391,9 +414,14 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n" +
                 "  \"http://www.freedesktop.org/standards/menu-spec/1.0/menu.dtd\">\n" +
                 "<Menu>\n  <Name>Applications</Name>\n  <DefaultAppDirs/>\n  <DefaultDirectoryDirs/>\n" +
-                "  <Include><And><All/><Not><Category>X-DeskDroid-Android</Category></Not></And></Include>\n" +
+                "  <Include><And><All/><Not><Category>X-DeskDroid-Android</Category></Not>" +
+                "<Not><Category>X-DeskDroid-Android-Private</Category></Not><Not><Category>X-DeskDroid-Android-Work</Category></Not></And></Include>\n" +
                 "  <Menu>\n    <Name>Android Apps</Name>\n" +
-                "    <Include><Category>X-DeskDroid-Android</Category></Include>\n  </Menu>\n</Menu>\n")
+                "    <Include><Category>X-DeskDroid-Android</Category></Include>\n  </Menu>\n" +
+                "  <Menu>\n    <Name>Private Space</Name>\n" +
+                "    <Include><Category>X-DeskDroid-Android-Private</Category></Include>\n  </Menu>\n" +
+                "  <Menu>\n    <Name>Work Apps</Name>\n" +
+                "    <Include><Category>X-DeskDroid-Android-Work</Category></Include>\n  </Menu>\n</Menu>\n")
             File(filesDir, ".cache").listFiles { f -> f.name.startsWith("ksycoca6") }?.forEach { it.delete() }
             // Open with Android app: KDE offers it for every file (all files derive
             // from application/octet-stream), so files without a KDE app open in
@@ -408,6 +436,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "Icon=plasmadiscover\nExec=android-open deskdroid:store\nCategories=System;\n")
             NativeDesk.watchOpenRequests(applicationContext)
             Thread { writeAndroidApps() }.start() // before plasmashell reads the menu (KWin starts first)
+            watchAndroidApps()
             val bus = startSessionBus(libs, data, runtime)
             val scale = NativeDesk.desktopScale(this).toDouble()
             val p = ProcessBuilder(
@@ -596,40 +625,86 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     /**
      * The phone's apps in Plasma's menu (Android Apps, and search): a desktop
      * file and an icon for each, run through bin/android-open as
-     * android-app:<package>. Icons are drawn again only for updated apps.
+     * android-app:<package>[@<profile>]. Apps in other profiles get their own
+     * folder: Private Space (Android 15+, listed only while DeskDroid is the
+     * home app) and Work. Icons are drawn again only for updated apps.
      */
+    private var appsWatched = false
+
+    /** The menu follows apps installed or removed, and Private Space locking or unlocking. */
+    private fun watchAndroidApps() {
+        if (appsWatched) return
+        appsWatched = true
+        val again = Runnable { Thread { writeAndroidApps() }.start() }
+        val later: () -> Unit = { main.removeCallbacks(again); main.postDelayed(again, 1500) }
+        getSystemService(android.content.pm.LauncherApps::class.java).registerCallback(object : android.content.pm.LauncherApps.Callback() {
+            override fun onPackageRemoved(packageName: String?, user: android.os.UserHandle?) = later()
+            override fun onPackageAdded(packageName: String?, user: android.os.UserHandle?) = later()
+            override fun onPackageChanged(packageName: String?, user: android.os.UserHandle?) = later()
+            override fun onPackagesAvailable(packageNames: Array<out String>?, user: android.os.UserHandle?, replacing: Boolean) = later()
+            override fun onPackagesUnavailable(packageNames: Array<out String>?, user: android.os.UserHandle?, replacing: Boolean) = later()
+        }, main)
+        if (Build.VERSION.SDK_INT >= 31) {
+            val filter = android.content.IntentFilter().apply {
+                addAction(android.content.Intent.ACTION_PROFILE_AVAILABLE)
+                addAction(android.content.Intent.ACTION_PROFILE_UNAVAILABLE)
+                addAction(android.content.Intent.ACTION_PROFILE_ADDED)
+                addAction(android.content.Intent.ACTION_PROFILE_REMOVED)
+            }
+            val receiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: android.content.Context, i: android.content.Intent) = later()
+            }
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
+            else registerReceiver(receiver, filter)
+        }
+    }
+
     private fun writeAndroidApps() {
         val dir = File(filesDir, ".local/share/applications").apply { mkdirs() }
         val icons = File(filesDir, ".local/share/deskdroid-android-icons").apply { mkdirs() }
-        val pm = packageManager
-        val apps = pm.queryIntentActivities(
-            android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0)
-            .distinctBy { it.activityInfo.packageName }
+        val launcher = getSystemService(android.content.pm.LauncherApps::class.java)
+        val users = getSystemService(android.os.UserManager::class.java)
+        val me = android.os.Process.myUserHandle()
         val keep = mutableSetOf<String>()
-        for (ri in apps) {
-            val pkg = ri.activityInfo.packageName
-            val name = "android-$pkg.desktop"
-            keep += name
-            try {
-                val updated = pm.getPackageInfo(pkg, 0).lastUpdateTime
-                val icon = File(icons, "$pkg.png")
-                if (!icon.exists() || icon.lastModified() < updated) {
-                    val d = ri.loadIcon(pm)
-                    val px = 128
-                    val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
-                    d.setBounds(0, 0, px, px)
-                    d.draw(android.graphics.Canvas(bmp))
-                    icon.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
-                    bmp.recycle()
-                }
-                val label = ri.loadLabel(pm).toString().replace("\n", " ")
-                File(dir, name).writeText("[Desktop Entry]\nType=Application\nName=$label\nComment=Android app\n" +
-                    "Icon=${icon.path}\nExec=android-open android-app:$pkg\nCategories=X-DeskDroid-Android;\n")
-            } catch (e: Exception) {
-                AppLog.i("Native desktop: couldn't list $pkg: $e")
+        for (user in launcher.profiles) {
+            val serial = users.getSerialNumberForUser(user)
+            val private = user != me && Build.VERSION.SDK_INT >= 35 &&
+                runCatching { launcher.getLauncherUserInfo(user)?.userType == android.os.UserManager.USER_TYPE_PROFILE_PRIVATE }.getOrDefault(false)
+            val (category, suffix) = when {
+                user == me -> "X-DeskDroid-Android" to ""
+                private -> "X-DeskDroid-Android-Private" to "@$serial"
+                else -> "X-DeskDroid-Android-Work" to "@$serial"
             }
+            val apps = try { launcher.getActivityList(null, user) } catch (e: Exception) {
+                AppLog.i("Native desktop: couldn't list profile $serial: $e"); emptyList()
+            }.distinctBy { it.componentName.packageName }
+            for (info in apps) {
+                val pkg = info.componentName.packageName
+                val id = pkg + suffix
+                val name = "android-$id.desktop"
+                keep += name
+                try {
+                    val icon = File(icons, "$id.png")
+                    if (!icon.exists() || icon.lastModified() < info.firstInstallTime ||
+                        icon.lastModified() < runCatching { packageManager.getPackageInfo(pkg, 0).lastUpdateTime }.getOrDefault(0L)) {
+                        val d = info.getBadgedIcon(0) // the profile's badge (briefcase, lock) on its apps
+                        val px = 128
+                        val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+                        d.setBounds(0, 0, px, px)
+                        d.draw(android.graphics.Canvas(bmp))
+                        icon.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                        bmp.recycle()
+                    }
+                    val label = info.label.toString().replace("\n", " ")
+                    File(dir, name).writeText("[Desktop Entry]\nType=Application\nName=$label\nComment=Android app\n" +
+                        "Icon=${icon.path}\nExec=android-open android-app:$id\nCategories=$category;\n")
+                } catch (e: Exception) {
+                    AppLog.i("Native desktop: couldn't list $id: $e")
+                }
+            }
+            AppLog.i("Native desktop: profile $serial${if (private) " (private)" else ""}: ${apps.size} apps")
         }
-        // Apps uninstalled since the last start.
+        // Apps uninstalled since the last start (and a locked Private Space's).
         dir.listFiles { f -> f.name.startsWith("android-") && f.name !in keep }?.forEach { it.delete() }
         AppLog.i("Native desktop: ${keep.size} Android apps in the menu")
     }

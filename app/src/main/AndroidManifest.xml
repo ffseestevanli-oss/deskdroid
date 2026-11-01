@@ -4,6 +4,11 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      Private Space's apps in the native desktop's menu: Android grants this to
+      the home app, so only while DeskDroid is the phone's home screen.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_HIDDEN_PROFILES" />
     <!-- The phone's apps in the native desktop's menu (NativeDesk.writeAndroidApps). -->
     <queries>
         <intent>
