@@ -47,6 +47,7 @@ public:
     RenderLoop *renderLoop() const override;
     void present(const std::shared_ptr<OutputFrame> &frame);
     void framePresented();
+    void setPixelSize(const QSize &pixelSize);
 
 private:
     std::unique_ptr<RenderLoop> m_renderLoop;

@@ -83,6 +83,30 @@ void NativeDeskOutput::framePresented()
     }
 }
 
+// The phone turned (or the window changed size): the screen gets a new mode
+// of the new size, at the scale it has now, and KWin lays everything out
+// again as for a rotated monitor.
+void NativeDeskOutput::setPixelSize(const QSize &pixelSize)
+{
+    if (pixelSize == modeSize()) {
+        return;
+    }
+    const uint32_t refresh = 120000;
+    auto mode = std::make_shared<OutputMode>(pixelSize, refresh, OutputMode::Flag::Preferred);
+    setInformation(Information{
+        .name = QStringLiteral("NativeDesk-1"),
+        .manufacturer = QStringLiteral("DeskDroid"),
+        .model = QStringLiteral("Android screen"),
+        .physicalSize = (QSizeF(pixelSize) / (scale() * 150.0) * 25.4).toSize(),
+        .internal = true,
+    });
+    State next = m_state;
+    next.modes = {mode};
+    next.currentMode = mode;
+    setState(next);
+    qInfo("nativedesk: screen now %dx%d", pixelSize.width(), pixelSize.height());
+}
+
 // ---- input -------------------------------------------------------------------
 
 NativeDeskInputDevice::NativeDeskInputDevice(bool keyboard)
@@ -479,6 +503,15 @@ void NativeDeskBackend::readMessages()
             break;
         case NDESK_SCROLL:
             m_pointer->scroll(m.scroll.dx / outputScale(), m.scroll.dy / outputScale());
+            break;
+        case NDESK_CONFIGURE:
+            // After the first one: the screen's size changed (rotation).
+            if (m.configure.width && m.configure.height) {
+                m_size = QSize(m.configure.width, m.configure.height);
+                if (m_output) {
+                    m_output->setPixelSize(m_size);
+                }
+            }
             break;
         case NDESK_KEY:
             m_keyboard->key(m.key.keycode, m.key.unicode, m.key.down);

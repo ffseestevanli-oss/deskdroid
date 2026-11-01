@@ -38,6 +38,7 @@ object NativeDesk {
     @JvmStatic external fun nativeKey(keycode: Int, unicode: Int, down: Boolean)
     @JvmStatic external fun nativeScroll(dx: Float, dy: Float)
     @JvmStatic external fun nativeStats(): String
+    @JvmStatic external fun nativeResized()
 }
 
 class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
@@ -124,7 +125,13 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         main.post(tick)
     }
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
+    // The phone turned: the compositor passes the new size on to KWin.
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        if (started) {
+            AppLog.i("Native desktop test: screen ${width}x$height")
+            NativeDesk.nativeResized()
+        }
+    }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         main.removeCallbacks(tick)

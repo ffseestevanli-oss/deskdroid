@@ -95,6 +95,8 @@ static struct {
     int order[MAX_CLIENTS];   /* indexes into clients, bottom to top */
     int n_order;
     uint32_t next_window;
+    uint32_t screen_w, screen_h; /* the surface size the last frame was drawn at */
+    bool resized;                /* set by nativeResized: draw a frame to pick up the new size */
 
     pthread_mutex_t lock;     /* guards input and stats */
     struct input input[INPUT_QUEUE];
@@ -500,6 +502,19 @@ static void draw(void)
     eglQuerySurface(C.dpy, C.surf, EGL_WIDTH, &sw);
     eglQuerySurface(C.dpy, C.surf, EGL_HEIGHT, &sh);
     glViewport(0, 0, sw, sh);
+    /* The screen turned: desktops (HELLO 0x0) get the new size, as on HELLO. */
+    if ((uint32_t)sw != C.screen_w || (uint32_t)sh != C.screen_h) {
+        bool first = C.screen_w == 0;
+        C.screen_w = sw;
+        C.screen_h = sh;
+        for (int i = 0; !first && i < MAX_CLIENTS; i++) {
+            struct client *cl = C.clients[i];
+            if (!cl || !cl->desktop) continue;
+            struct ndesk_msg r = { .op = NDESK_CONFIGURE, .configure = { cl->window, (uint32_t)sw, (uint32_t)sh } };
+            send_msg(cl, &r);
+            LOGI("window %u: screen now %dx%d", cl->window, sw, sh);
+        }
+    }
     glClearColor(0.06f, 0.07f, 0.14f, 1);
     glClear(GL_COLOR_BUFFER_BIT);
     glEnable(GL_BLEND);
@@ -641,6 +656,7 @@ static void *loop(void *unused)
         pthread_mutex_unlock(&C.lock);
         for (int k = 0; k < n_in; k++) handle_input(&in[k]);
         if (n_in) C.dirty = true;
+        if (__atomic_exchange_n(&C.resized, false, __ATOMIC_ACQ_REL)) C.dirty = true;
 
         if (C.dirty) {
             /* Thread CPU time, so waiting for a free screen buffer or vsync doesn't count. */
@@ -731,6 +747,7 @@ Java_io_deskdroid_app_NativeDesk_nativeStop(JNIEnv *env, jclass cls)
     C.listen_fd = C.wake = -1;
     C.n_input = 0;
     C.stats[0] = 0;
+    C.screen_w = C.screen_h = 0;
 }
 
 static void queue(struct input in)
@@ -761,6 +778,15 @@ Java_io_deskdroid_app_NativeDesk_nativeScroll(JNIEnv *env, jclass cls, jfloat dx
 {
     (void)env; (void)cls;
     queue((struct input){ .type = IN_SCROLL, .x = dx, .y = dy });
+}
+
+/* The surface changed size (the phone turned): the next frame notices. */
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeResized(JNIEnv *env, jclass cls)
+{
+    (void)env; (void)cls;
+    __atomic_store_n(&C.resized, true, __ATOMIC_RELEASE);
+    wake();
 }
 
 JNIEXPORT jstring JNICALL
