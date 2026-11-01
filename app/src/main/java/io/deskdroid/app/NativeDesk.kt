@@ -51,12 +51,52 @@ object NativeDesk {
     val qtLines = ArrayDeque<String>()
     @Volatile var qtStatus = "Qt demo: not in this build"
 
+    // Open with Android app: bin/android-open (android-open.sh) leaves each file
+    // as a request in files/open-requests; this opens it in Android's chooser.
+    private var openWatcher: android.os.FileObserver? = null
+
+    fun watchOpenRequests(c: android.content.Context) {
+        if (openWatcher != null) return
+        val dir = File(c.filesDir, "open-requests").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() } // left from an earlier session
+        @Suppress("DEPRECATION")
+        openWatcher = object : android.os.FileObserver(dir.path, MOVED_TO) {
+            override fun onEvent(event: Int, name: String?) {
+                if (name == null || !name.endsWith(".req")) return
+                val req = File(dir, name)
+                val path = try { req.readText().trim() } catch (e: Exception) { "" }
+                req.delete()
+                if (path.isNotEmpty()) Handler(Looper.getMainLooper()).post { openWithAndroid(c, path) }
+            }
+        }.also { it.startWatching() }
+    }
+
+    private fun openWithAndroid(c: android.content.Context, path: String) {
+        val file = File(if (path.startsWith("file://")) android.net.Uri.parse(path).path ?: path else path)
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(c, "${c.packageName}.files", file)
+            val ext = file.name.substringAfterLast('.', "").lowercase()
+            val type = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+            val view = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                .setDataAndType(uri, type)
+                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            val chooser = android.content.Intent.createChooser(view, file.name)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            (activity?.get() ?: c).startActivity(chooser)
+            AppLog.i("Native desktop: opening ${file.path} ($type) with an Android app")
+        } catch (e: Exception) {
+            AppLog.i("Native desktop: couldn't open ${file.path} with an Android app: $e")
+        }
+    }
+
     /** Ends the desktop: its processes, the compositor, the service and the window. */
     fun stop(c: android.content.Context) {
         synchronized(apps) {
             apps.forEach { it.destroy() }
             apps.clear()
         }
+        openWatcher?.stopWatching()
+        openWatcher = null
         if (running) nativeStop()
         running = false
         c.stopService(android.content.Intent(c, NativeDeskService::class.java))
@@ -291,6 +331,15 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "<Menu>\n  <Name>Applications</Name>\n  <DefaultAppDirs/>\n  <DefaultDirectoryDirs/>\n" +
                 "  <Include><All/></Include>\n</Menu>\n")
             File(filesDir, ".cache").listFiles { f -> f.name.startsWith("ksycoca6") }?.forEach { it.delete() }
+            // Open with Android app: KDE offers it for every file (all files derive
+            // from application/octet-stream), so files without a KDE app open in
+            // Android's app chooser.
+            File(filesDir, ".local/share/applications").apply { mkdirs() }
+                .resolve("org.deskdroid.android-open.desktop").writeText(
+                    "[Desktop Entry]\nType=Application\nName=Android app\nGenericName=Open with an Android app\n" +
+                    "Icon=smartphone\nExec=android-open %F\nMimeType=application/octet-stream;\nNoDisplay=true\n" +
+                    "InitialPreference=1\n")
+            NativeDesk.watchOpenRequests(applicationContext)
             val bus = startSessionBus(libs, data, runtime)
             // Plasma's usual size on a phone: about twice the panel's pixels.
             val scale = (resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4.0
@@ -450,6 +499,10 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             } catch (e: Exception) {
                 AppLog.i("Native desktop test: couldn't link $app: $e")
             }
+        }
+        File(libs, "libdd_android-open.so").takeIf { it.exists() }?.let {
+            try { android.system.Os.symlink(it.path, File(bin, "android-open").path) }
+            catch (e: Exception) { AppLog.i("Native desktop test: couldn't link android-open: $e") }
         }
         AppLog.i("Native desktop test: apps: ${apps.joinToString().ifEmpty { "none" }}")
         return bin

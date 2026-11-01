@@ -84,6 +84,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     printf '%s\n' "${apps[@]}" > "$WORK/apps.txt"
     if [ ${#apps[@]} -gt 0 ]; then
       install -m 755 "$HERE/qtapp.sh" "$OUT/libdd_qtapp.so"
+      # Open with Android app: bin/android-open (android-open.sh).
+      install -m 755 "$HERE/android-open.sh" "$OUT/libdd_android-open.so"
       echo "   apps: ${apps[*]}"
     fi
     # Plugins (Qt's Wayland client, KDE's and KWin's), also flat in the
