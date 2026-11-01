@@ -805,12 +805,6 @@ build_pango() {
 }
 build_gdk_pixbuf() {
   local s; s="$(unpack https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz gdk-pixbuf-2.42.12.tar.xz)"
-  # gdk-pixbuf-pixdata for the build machine too: GTK's resources use it.
-  meson setup "$s/_host" "$s" --prefix="$HOSTPREFIX" --libdir=lib --buildtype=release -Ddefault_library=static \
-    --native-file "$WORK/native.ini" -Dpng=enabled -Djpeg=disabled -Dtiff=disabled -Dothers=disabled \
-    -Dbuiltin_loaders=png -Dintrospection=disabled -Dman=false -Dgtk_doc=false -Dtests=false -Dinstalled_tests=false
-  ninja -C "$s/_host" install
-  test -x "$HOSTPREFIX/bin/gdk-pixbuf-pixdata"
   meson_cross "$s" -Dpng=enabled -Djpeg=enabled -Dtiff=disabled -Dothers=disabled -Dbuiltin_loaders=png,jpeg \
     -Dintrospection=disabled -Dman=false -Dgtk_doc=false -Dtests=false -Dinstalled_tests=false
 }
@@ -823,7 +817,9 @@ build_atk() {
   meson_cross "$s" -Datk_only=true -Dintrospection=disabled -Ddocs=false -Dx11=disabled
   test -e "$PREFIX/lib/pkgconfig/atk.pc"
 }
+# GTK's resources need gdk-pixbuf-pixdata on the build machine (CI installs it).
 build_gtk3() {
+  command -v gdk-pixbuf-pixdata >/dev/null
   local s; s="$(unpack https://download.gnome.org/sources/gtk/3.24/gtk-3.24.49.tar.xz gtk-3.24.49.tar.xz)"
   meson_cross "$s" -Dx11_backend=false -Dwayland_backend=true -Dbroadway_backend=false -Dwin32_backend=false \
     -Dquartz_backend=false -Dprint_backends=file -Dcolord=no -Dintrospection=false -Ddemos=false \
