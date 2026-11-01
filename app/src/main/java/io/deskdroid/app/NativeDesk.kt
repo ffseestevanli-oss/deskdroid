@@ -91,13 +91,12 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         get() = NativeDesk.qtStatus
         set(v) { NativeDesk.qtStatus = v }
 
+    // The screen stays clear: the compositor's numbers go to DeskDroid's log
+    // (Settings, Save log) once a minute, with the status and recent problems.
     private val tick = object : Runnable {
         override fun run() {
-            if (started) stats.text = NativeDesk.nativeStats().ifEmpty { "Starting…" } +
-                "\n$qtStatus\n" + synchronized(qtLines) { qtLines.joinToString("\n") } +
-                "\n\nTouchpad: tap to click, two-finger tap to right-click, two fingers to scroll, double tap to double-click, tap then hold to drag " +
-                "(title bars move windows). Settings → Touch mode switches to direct touch. + and - on a keyboard change the load."
-            main.postDelayed(this, 500)
+            if (started) AppLog.i("Native desktop: " + NativeDesk.nativeStats().replace("\n", " | ") + " | $qtStatus")
+            main.postDelayed(this, 60_000)
         }
     }
 
@@ -116,6 +115,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             textSize = 13f
             typeface = android.graphics.Typeface.MONOSPACE
             setPadding(24, 24, 24, 24)
+            visibility = android.view.View.GONE // only for a failed start
         }
         setContentView(FrameLayout(this).apply {
             addView(surfaceView, FrameLayout.LayoutParams(-1, -1))
@@ -147,6 +147,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (started) startForegroundService(android.content.Intent(this, NativeDeskService::class.java))
         AppLog.i(if (started) "Native desktop test started" else "Native desktop test couldn't start (see logcat: nativedesk)")
         if (!started) {
+            stats.visibility = android.view.View.VISIBLE
             stats.text = "The native compositor couldn't start on this GPU."
             return
         }
