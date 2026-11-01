@@ -471,7 +471,13 @@ build_plasma_wayland_protocols() {
   local s; s="$(unpack https://download.kde.org/stable/plasma-wayland-protocols/plasma-wayland-protocols-1.18.0.tar.xz plasma-wayland-protocols-1.18.0.tar.xz)"
   kde_cmake "$s"
 }
-build_kiconthemes() { kf kiconthemes -DUSE_BreezeIcons=OFF -DKICONTHEMES_USE_QTQUICK=OFF; }
+build_kiconthemes() {
+  local s; s="$(kf_src kiconthemes)"
+  python3 "$HERE/patches/kiconthemes/icon-theme.py" "$s"
+  unandroid "$s"
+  kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DUSE_BreezeIcons=OFF -DKICONTHEMES_USE_QTQUICK=OFF
+}
+inputs_kiconthemes() { cat "$HERE"/patches/kiconthemes/*; }
 # Breeze: KWin's window borders (and the Qt style, colors and cursors). The
 # border and style settings pages need KCMUtils, which nothing else here
 # does, so they stay out; KDE's Android switch would leave out the borders.
@@ -566,9 +572,15 @@ build_kio() {
   local s; s="$(kf_src kio)"
   sed -i 's/^#if defined(Q_OS_LINUX) && defined(WITH_QTDBUS)$/#if defined(Q_OS_LINUX) \&\& !defined(Q_OS_ANDROID) \&\& defined(WITH_QTDBUS)/' "$s/src/gui/kprocessrunner.cpp"
   grep -q "!defined(Q_OS_ANDROID) && defined(WITH_QTDBUS)" "$s/src/gui/kprocessrunner.cpp"
+  # kioworker (KIO's helper program for workers outside the app) as a
+  # library QtHost starts, found through PATH as bin/kioworker.
+  python3 "$HERE/apps/as-library.py" "$s" src/kioworker/CMakeLists.txt kioworker src/kioworker/kioworker.cpp
+  sed -i 's|install(TARGETS kioworker DESTINATION ${KDE_INSTALL_LIBEXECDIR_KF})|install(TARGETS kioworker LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR})|' "$s/src/kioworker/CMakeLists.txt"
+  grep -q "kioworker LIBRARY DESTINATION" "$s/src/kioworker/CMakeLists.txt"
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DWITH_WAYLAND=ON
 }
+inputs_kio() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
 build_kxmlgui() { kf kxmlgui; }
 build_kstatusnotifieritem() { kf kstatusnotifieritem; }
 # The library only: its QML imports need Boost, which isn't here yet.
