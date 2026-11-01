@@ -39,7 +39,7 @@ include(ECMGenerateQmlTypes)
 include(ECMDeprecationSettings)
 include(ECMQmlModule)
 
-find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Core Concurrent DBus Gui Quick Qml Widgets WaylandClient)
+find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Core Concurrent DBus Gui Quick Qml Widgets WaylandClient ShaderTools)
 
 find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS
     Config CoreAddons Crash DBusAddons GlobalAccel GuiAddons I18n IconThemes KIO
@@ -106,6 +106,12 @@ add_subdirectory(applets/kicker)
 add_subdirectory(components/trianglemousefilter)
 # The desktop containment's widget layout (org.kde.desktopcontainment).
 add_subdirectory(components/containmentlayoutmanager)
+# End Session: KDE's logout screen (an app, ksmserver-logout-greeter), the
+# Breeze look-and-feel package whose Logout.qml it shows, and the QML
+# modules that imports.
+add_subdirectory(components/sessionsprivate)
+add_subdirectory(lookandfeel)
+add_subdirectory(logout-greeter)
 remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_TO_ASCII -DQT_NO_CAST_FROM_BYTEARRAY)
 add_subdirectory(dataengines/time)
 

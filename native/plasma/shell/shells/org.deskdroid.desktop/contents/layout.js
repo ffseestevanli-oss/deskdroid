@@ -19,7 +19,11 @@ for (var i = 0; i < desktops.length; i++) {
 var panel = new Panel("org.kde.panel");
 panel.location = "bottom";
 panel.height = 2 * Math.floor(gridUnit * 2.5 / 2);
-panel.addWidget("org.kde.plasma.kickoff");
+var kickoff = panel.addWidget("org.kde.plasma.kickoff");
+// The menu's power buttons: End Session only (DeskDroid has no sleep,
+// restart or shut down for the phone yet).
+kickoff.currentConfigGroup = ["General"];
+kickoff.writeConfig("systemFavorites", "logout");
 
 var launchers = ["org.kde.dolphin.desktop"];
 for (var j = 0; j < launchers.length; j++) {

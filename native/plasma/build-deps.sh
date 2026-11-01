@@ -695,6 +695,7 @@ build_plasmashell() {
   unandroid "$s"
   KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -I$HERE/x11-stubs"
   test -e "$PREFIX/lib/libplasmashell.so"
+  test -e "$PREFIX/lib/libksmserver-logout-greeter.so"
 }
 # plasma-desktop's QML-only packages: the panel containment, and the desktop
 # shell's views and settings.
@@ -761,7 +762,7 @@ build_mime_stubs() {
 inputs_mime_stubs() { cat "$HERE"/mime/*; }
 inputs_plasma_desktop_folder() { cat "$HERE"/desktopcontainment/*; echo folder-package; }
 inputs_plasma_desktop_packages() { cat "$HERE"/patches/desktoppackage/*; }
-inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
+inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm

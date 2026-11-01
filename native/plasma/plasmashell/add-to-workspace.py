@@ -67,3 +67,81 @@ entry = entry.replace("return kwinMain(", "return plasmashellMain(")
 assert "kwinMain" not in entry and '"kwin_wayland"' not in entry
 p = ws / "shell" / "main.cpp"
 p.write_text(p.read_text() + "\n" + entry)
+
+# ---- End Session: Kickoff's Log Out and KDE's logout screen ----------------
+# Kickoff's "Log Out" is "End Session": the desktop is a session inside
+# DeskDroid, and ending it closes the desktop, not a login.
+edit("applets/kicker/systementry.cpp", 'return i18n("Log Out");', 'return QStringLiteral("End Session"); // DeskDroid')
+# No ksmserver here: SessionManagement asks the logout screen
+# (ksmserver-logout-greeter, an app on PATH) to show itself directly, instead
+# of over D-Bus activation, which this session bus doesn't do.
+sm = "libkworkspace/sessionmanagement.cpp"
+edit(sm, "#include <QEventLoopLocker>",
+     "#include <QEventLoopLocker>\n#include <QProcess>\n"
+     "static void deskdroidLogoutPrompt()\n{\n"
+     "    QProcess::startDetached(QStringLiteral(\"ksmserver-logout-greeter\"),\n"
+     "                            {QStringLiteral(\"--lookandfeel\"), QStringLiteral(\"org.kde.breeze.desktop\"), QStringLiteral(\"--logout\")});\n}\n")
+t = (ws / sm).read_text()
+a = t.index("void SessionManagement::requestLogout(ConfirmationMode confirmationMode)\n{")
+b = t.index("\n}\n", a)
+t = t[:a] + ("void SessionManagement::requestLogout(ConfirmationMode confirmationMode)\n{\n"
+             "    Q_UNUSED(confirmationMode)\n"
+             "    if (!canLogout()) {\n        return;\n    }\n"
+             "    deskdroidLogoutPrompt(); // DeskDroid") + t[b:]
+a = t.index("void SessionManagement::requestLogoutPrompt()\n{")
+b = t.index("\n}\n", a)
+t = t[:a] + "void SessionManagement::requestLogoutPrompt()\n{\n    deskdroidLogoutPrompt(); // DeskDroid" + t[b:]
+(ws / sm).write_text(t)
+
+# The logout screen, built as a library QtHost starts (apps/as-library.py).
+lg = "logout-greeter/"
+edit(lg + "CMakeLists.txt", "add_executable(ksmserver-logout-greeter ${LOGOUT_GREETER_SRCS})",
+     "add_executable(ksmserver-logout-greeter)\ntarget_sources(ksmserver-logout-greeter PRIVATE ${LOGOUT_GREETER_SRCS})")
+edit(lg + "CMakeLists.txt", "    X11::X11\n", "")
+edit(lg + "CMakeLists.txt", "install(TARGETS ksmserver-logout-greeter DESTINATION ${KDE_INSTALL_LIBEXECDIR})",
+     "install(TARGETS ksmserver-logout-greeter ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})")
+edit(lg + "CMakeLists.txt", "kdbusaddons_generate_dbus_service_file(", "# kdbusaddons_generate_dbus_service_file(")
+sd = ws / lg / "shutdowndlg.cpp"
+t = sd.read_text()
+for inc in ("#include <netwm.h>\n", "#include <X11/Xatom.h>\n", "#include <X11/Xutil.h>\n", "#include <fixx11h.h>\n"):
+    if inc not in t:
+        sys.exit(f"add-to-workspace: no {inc.strip()} in shutdowndlg.cpp")
+    t = t.replace(inc, "")
+a = t.index("    if (KWindowSystem::isPlatformX11()) {\n        constexpr auto role")
+b = t.index("NET::SkipSwitcher);\n    }\n", a) + len("NET::SkipSwitcher);\n    }\n")
+t = t[:a] + t[b:]
+# Close Desktop: DeskDroid watches $HOME/open-requests and ends the desktop
+# for an end-session request.
+old = "void KSMShutdownDlg::slotLogout()\n{\n    m_session.requestLogout(SessionManagement::ConfirmationMode::Skip);\n"
+if old not in t:
+    sys.exit("add-to-workspace: slotLogout changed")
+t = t.replace(old, "void KSMShutdownDlg::slotLogout()\n{\n"
+              "    const QString d = QDir::homePath() + QStringLiteral(\"/open-requests\");\n"
+              "    QDir().mkpath(d);\n"
+              "    QFile f(d + QStringLiteral(\"/.end-session\"));\n"
+              "    if (f.open(QIODevice::WriteOnly)) {\n        f.write(\"end-session\\n\");\n        f.close();\n"
+              "        QFile::remove(d + QStringLiteral(\"/end-session.req\"));\n"
+              "        f.rename(d + QStringLiteral(\"/end-session.req\"));\n    }\n", 1)
+t = t.replace("#include <QFile>\n", "#include <QDir>\n#include <QFile>\n", 1)
+sd.write_text(t)
+for word in ("X11/", "XChangeProperty", "fixx11h"):
+    assert word not in t, word
+# "Log Out" in KDE's logout screen is "Close Desktop".
+lo = "lookandfeel/org.kde.breeze/contents/logout/Logout.qml"
+edit(lo, 'text: root.showAllOptions ? i18nd("plasma_lookandfeel_org.kde.lookandfeel", "&Log Out")\n'
+         '                                          : i18nd("plasma_lookandfeel_org.kde.lookandfeel", "&Log Out Now")',
+     'text: "Close Desktop" // DeskDroid')
+# --logout: show the logout prompt at start (SessionManagement starts it).
+mn = lg + "main.cpp"
+edit(mn, "        parser.addOption(lnfOption);\n",
+     "        parser.addOption(lnfOption);\n"
+     "        parser.addOption(QCommandLineOption(u\"logout\"_s, u\"DeskDroid: show the logout prompt now\"_s));\n")
+edit(mn, "        windowed = parser.isSet(testingOption);\n",
+     "        windowed = parser.isSet(testingOption);\n"
+     "        deskdroidLogout = parser.isSet(u\"logout\"_s);\n")
+edit(mn, "    bool windowed = false;\n", "    bool windowed = false;\n    bool deskdroidLogout = false;\n")
+edit(mn, "        greeter.enableWindowed();\n    }\n",
+     "        greeter.enableWindowed();\n    } else if (deskdroidLogout) {\n        greeter.promptLogout();\n    }\n")
+import subprocess
+subprocess.run([sys.executable, str(here.parent / "apps" / "as-library.py"), str(ws),
+                lg + "CMakeLists.txt", "ksmserver-logout-greeter", mn], check=True)

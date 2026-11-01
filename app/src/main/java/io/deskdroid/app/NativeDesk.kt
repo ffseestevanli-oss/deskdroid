@@ -73,6 +73,12 @@ object NativeDesk {
                 val req = File(dir, name)
                 val path = try { req.readText().trim() } catch (e: Exception) { "" }
                 req.delete()
+                // KDE's logout screen: Close Desktop (patched in add-to-workspace.py).
+                if (name == "end-session.req") {
+                    AppLog.i("Native desktop: Close Desktop from the logout screen")
+                    Handler(Looper.getMainLooper()).post { stop(c) }
+                    return
+                }
                 if (path.isNotEmpty()) Handler(Looper.getMainLooper()).post { openWithAndroid(c, path) }
             }
         }.also { it.startWatching() }
@@ -418,11 +424,14 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             ?.appendText("\n[QtQuickRendererSettings]\nSceneGraphBackend=software\n")
         File(config, "kdeglobals").takeUnless { it.readText().contains("[Icons]") }
             ?.appendText("\n[Icons]\nTheme=breeze\n")
+        // No screen locker here: Lock stays out of the menus.
+        File(config, "kdeglobals").takeUnless { it.readText().contains("[KDE Action Restrictions]") }
+            ?.appendText("\n[KDE Action Restrictions]\naction/lock_screen=false\n")
         writeUserDirs(config)
         copyWallpaper()
         // While DeskDroid's default layout changes from build to build, start from it
         // again when it's newer than the saved one (layout.js runs only without one).
-        val layoutVersion = "9"
+        val layoutVersion = "10"
         val stamp = File(config, "deskdroid-layout-version")
         if (stamp.takeIf { it.exists() }?.readText() != layoutVersion) {
             File(config, "plasma-org.deskdroid.desktop-appletsrc").delete()
