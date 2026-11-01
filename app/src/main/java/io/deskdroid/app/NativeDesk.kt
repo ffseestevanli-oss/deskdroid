@@ -362,7 +362,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         copyWallpaper()
         // While DeskDroid's default layout changes from build to build, start from it
         // again when it's newer than the saved one (layout.js runs only without one).
-        val layoutVersion = "6"
+        val layoutVersion = "7"
         val stamp = File(config, "deskdroid-layout-version")
         if (stamp.takeIf { it.exists() }?.readText() != layoutVersion) {
             File(config, "plasma-org.deskdroid.desktop-appletsrc").delete()

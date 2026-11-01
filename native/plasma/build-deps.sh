@@ -707,6 +707,25 @@ build_plasma_desktop_packages() {
   # Add Widgets) under DeskDroid's shell; its own files go over these.
   python3 "$HERE/patches/desktoppackage/shell-from-desktop.py" "$s" "$PREFIX/share/plasma/shells/org.deskdroid.desktop"
   test -e "$PREFIX/share/plasma/shells/org.deskdroid.desktop/contents/configuration/PanelConfiguration.qml"
+  # The application menu.
+  rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff"
+  cp -r "$s/applets/kickoff/package" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff"
+  test -e "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff/contents/ui/main.qml"
+}
+# The application menu (Kickoff): KRunner's library and activity stats for
+# its models, Kirigami Addons for its header.
+build_krunner() { kf krunner; }
+build_plasma_activities_stats() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-activities-stats-$PLASMA_VERSION.tar.xz" "plasma-activities-stats-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  kde_cmake "$s"
+}
+KIRIGAMI_ADDONS_VERSION=1.9.0
+build_kirigami_addons() {
+  local s; s="$(unpack "https://download.kde.org/stable/kirigami-addons/kirigami-addons-$KIRIGAMI_ADDONS_VERSION.tar.xz" "kirigami-addons-$KIRIGAMI_ADDONS_VERSION.tar.xz")"
+  unandroid "$s"
+  sed -i 's/^\( *add_subdirectory(templates)\)/# \1/' "$s/CMakeLists.txt"
+  kde_cmake "$s"
 }
 inputs_plasma_desktop_packages() { cat "$HERE"/patches/desktoppackage/*; }
 inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
@@ -719,7 +738,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
-     sonnet ktextwidgets kparts attica syndication knewstuff plasmashell plasma_desktop_packages kfilemetadata breeze_icons kcmutils_host dolphin)
+     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages kfilemetadata breeze_icons kcmutils_host dolphin)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }

@@ -49,6 +49,8 @@ find_package(KF6Declarative ${KF6_MIN_VERSION} REQUIRED) # KF6::CalendarEvents
 find_package(KF6ItemModels ${KF6_MIN_VERSION} REQUIRED) # libtaskmanager
 find_package(KF6NewStuff ${KF6_MIN_VERSION} REQUIRED) # Add Widgets (shellprivate)
 find_package(KF6TextWidgets ${KF6_MIN_VERSION} REQUIRED)
+find_package(KF6Runner ${KF6_MIN_VERSION} REQUIRED) # the application menu (kicker)
+find_package(PlasmaActivitiesStats ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(Plasma ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(Plasma5Support ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(PlasmaQuick ${PROJECT_DEP_VERSION} REQUIRED)
@@ -60,6 +62,8 @@ find_package(Wayland REQUIRED COMPONENTS Client)
 
 set(HAVE_X11 0)
 set(HAVE_KTEXTEDITOR 0)
+set(HAVE_APPSTREAMQT FALSE)
+set(HAVE_ICU FALSE)
 # kscreenlocker (not built) installs this interface; plasmashell only calls it.
 set(SCREENSAVER_DBUS_INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/org.freedesktop.ScreenSaver.xml")
 set(PLASMA_RELATIVE_DATA_INSTALL_DIR "plasma")
@@ -95,6 +99,9 @@ add_subdirectory(applets/icon)
 # the right-click menu (Add Widgets, Enter Edit Mode, panel settings).
 add_subdirectory(components/shellprivate)
 add_subdirectory(containmentactions/contextmenu)
+# The application menu's models, and the hover filter its pages use.
+add_subdirectory(applets/kicker)
+add_subdirectory(components/trianglemousefilter)
 remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_TO_ASCII -DQT_NO_CAST_FROM_BYTEARRAY)
 add_subdirectory(dataengines/time)
 

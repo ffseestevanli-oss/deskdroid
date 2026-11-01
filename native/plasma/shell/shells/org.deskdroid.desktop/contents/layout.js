@@ -1,5 +1,6 @@
 // The first start's layout: the phone's wallpaper (or a gradient) on every desktop, and
-// Plasma's own panel at the bottom: app launchers on the left, the digital
+// Plasma's own panel at the bottom: the application menu and app launchers
+// on the left, the digital
 // clock on the right.
 var desktops = desktopsForActivity(currentActivity());
 // files/config is the config folder; DeskDroid copies the phone's wallpaper
@@ -14,6 +15,7 @@ for (var i = 0; i < desktops.length; i++) {
 var panel = new Panel("org.kde.panel");
 panel.location = "bottom";
 panel.height = 2 * Math.floor(gridUnit * 2.5 / 2);
+panel.addWidget("org.kde.plasma.kickoff");
 
 var launchers = ["org.kde.dolphin.desktop"];
 for (var j = 0; j < launchers.length; j++) {
