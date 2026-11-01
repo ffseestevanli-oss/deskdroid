@@ -770,8 +770,10 @@ build_glib() {
   local s; s="$(unpack https://download.gnome.org/sources/glib/2.84/glib-2.84.1.tar.xz glib-2.84.1.tar.xz)"
   local opts=(-Dtests=false -Dintrospection=disabled -Dman-pages=disabled -Ddocumentation=false -Dsysprof=disabled
     -Dselinux=disabled -Dxattr=false -Dlibmount=disabled -Dnls=disabled -Dlibelf=disabled -Dglib_debug=disabled)
-  meson setup "$s/_host" "$s" --prefix="$HOSTPREFIX" --libdir=lib --buildtype=release "${opts[@]}"
+  # Static, so the tools don't pick up the runner's older GLib when they run.
+  meson setup "$s/_host" "$s" --prefix="$HOSTPREFIX" --libdir=lib --buildtype=release -Ddefault_library=static "${opts[@]}"
   ninja -C "$s/_host" install
+  "$HOSTPREFIX/bin/glib-compile-resources" --version >/dev/null
   meson_cross "$s" "${opts[@]}"
   test -e "$PREFIX/lib/libgio-2.0.so" && test -x "$HOSTPREFIX/bin/glib-compile-resources"
 }
