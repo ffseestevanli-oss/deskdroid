@@ -773,7 +773,7 @@ build_glib() {
   # Static, so the tools don't pick up the runner's older GLib when they run.
   meson setup "$s/_host" "$s" --prefix="$HOSTPREFIX" --libdir=lib --buildtype=release -Ddefault_library=static "${opts[@]}"
   ninja -C "$s/_host" install
-  "$HOSTPREFIX/bin/glib-compile-resources" --version >/dev/null
+  "$HOSTPREFIX/bin/glib-compile-resources" --help >/dev/null
   meson_cross "$s" "${opts[@]}"
   test -e "$PREFIX/lib/libgio-2.0.so" && test -x "$HOSTPREFIX/bin/glib-compile-resources"
 }
