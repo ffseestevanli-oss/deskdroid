@@ -620,6 +620,9 @@ build_knewstuff() { kf knewstuff; }
 # File metadata without extractors for now (no taglib, exiv2, poppler).
 build_kfilemetadata() { kf kfilemetadata; }
 
+# Breeze's icon theme, as files (KIconThemes here doesn't embed it).
+build_breeze_icons() { kf breeze-icons -DWITH_ICON_GENERATION=OFF; test -e "$PREFIX/share/icons/breeze/index.theme"; }
+
 # ---- Apps (stage 5) -----------------------------------------------------------
 
 GEAR_VERSION=25.08.2
@@ -664,7 +667,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support plasmashell plasma_desktop_packages
-     sonnet ktextwidgets kparts attica syndication knewstuff kfilemetadata dolphin)
+     sonnet ktextwidgets kparts attica syndication knewstuff kfilemetadata breeze_icons dolphin)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }

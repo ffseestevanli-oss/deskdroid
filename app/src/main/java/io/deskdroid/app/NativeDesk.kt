@@ -302,16 +302,19 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // No GPU path for Qt Quick yet: Qt's software renderer, through Wayland shm.
         File(config, "kdeglobals").takeUnless { it.exists() }
             ?.writeText("[QtQuickRendererSettings]\nSceneGraphBackend=software\n")
+        File(config, "kdeglobals").takeUnless { it.readText().contains("[Icons]") }
+            ?.appendText("\n[Icons]\nTheme=breeze\n")
         writeUserDirs(config)
         // While DeskDroid's default layout changes from build to build, start from it
         // again when it's newer than the saved one (layout.js runs only without one).
-        val layoutVersion = "2"
+        val layoutVersion = "3"
         val stamp = File(config, "deskdroid-layout-version")
         if (stamp.takeIf { it.exists() }?.readText() != layoutVersion) {
             File(config, "plasma-org.deskdroid.desktop-appletsrc").delete()
             File(config, "plasmashellrc").delete()
             stamp.writeText(layoutVersion)
         }
+        val bin = linkApps(libs, data)
         try {
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
@@ -338,8 +341,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("QML_IMPORT_PATH", File(data, "qml").path)
                     put("QT_QUICK_BACKEND", "software")
                     put("KDE_DEBUG", "1")
-                    // Where KDE looks for plugins and packages, while the shell doesn't start yet.
-                    put("QT_LOGGING_RULES", "kf.package.debug=true;kf.coreaddons.debug=true")
+                    // Apps the desktop starts (bin/dolphin...) inherit all this.
+                    put("PATH", "${bin.path}:${System.getenv("PATH") ?: "/system/bin"}")
                     sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
                 }
             }.start()
@@ -374,6 +377,27 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * library folder (libplugins_<namespace>_<name>.so). So the plugins
      * folder gets links with the real layout, from the list the build ships.
      */
+    /**
+     * The apps in this build (apps.txt): each command bin/<app> is a link to
+     * libdd_qtapp.so, which starts lib<app> in an app_process through QtHost.
+     * The link lives in app storage, the program in the APK's library folder,
+     * where Android lets the app run programs.
+     */
+    private fun linkApps(libs: String, data: File): File {
+        val bin = File(data, "bin").apply { mkdirs() }
+        bin.listFiles()?.forEach { it.delete() }
+        val apps = File(data, "apps.txt").takeIf { it.exists() }?.readLines()?.filter { it.isNotBlank() }.orEmpty()
+        for (app in apps) {
+            try {
+                android.system.Os.symlink(File(libs, "libdd_qtapp.so").path, File(bin, app).path)
+            } catch (e: Exception) {
+                AppLog.i("Native desktop test: couldn't link $app: $e")
+            }
+        }
+        AppLog.i("Native desktop test: apps: ${apps.joinToString().ifEmpty { "none" }}")
+        return bin
+    }
+
     /**
      * The home folder stays in app storage (KDE's config, caches and sockets need a real
      * Linux filesystem); Documents, Downloads, Pictures, Music and Videos are the phone's

@@ -73,6 +73,19 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       install -m 755 "$DESKDROID_QT_ANDROID/lib/libplasmashell.so" "$OUT/libplasmashell.so"
       bundled+=("$OUT/libplasmashell.so")
     fi
+    # Stage 5: apps, built as libraries too (native/plasma/apps/as-library.py),
+    # each started by its command bin/<app>, a link to libdd_qtapp.so (qtapp.sh).
+    apps=()
+    for app in dolphin; do
+      [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
+      install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
+      bundled+=("$OUT/libdd_$app.so"); apps+=("$app")
+    done
+    printf '%s\n' "${apps[@]}" > "$WORK/apps.txt"
+    if [ ${#apps[@]} -gt 0 ]; then
+      install -m 755 "$HERE/qtapp.sh" "$OUT/libdd_qtapp.so"
+      echo "   apps: ${apps[*]}"
+    fi
     # Plugins (Qt's Wayland client, KDE's and KWin's), also flat in the
     # library folder: Qt and KDE on Android look there for files named
     # libplugins_<plugin folder, / as _>_<name>.so. Qt's Android build names
@@ -175,7 +188,10 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
           | grep -Ev "^qml/${qmlskip#^}" | zip -q -X "$OUT/libkwin_data.so" -@)
       done
-      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt)
+      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt)
+      # The apps' menu entries, window layouts (kxmlgui) and own data.
+      (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
+        $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/icons/breeze share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null))
     fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
   fi

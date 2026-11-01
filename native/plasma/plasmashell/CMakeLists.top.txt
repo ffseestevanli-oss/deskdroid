@@ -39,13 +39,14 @@ include(ECMGenerateQmlTypes)
 include(ECMDeprecationSettings)
 include(ECMQmlModule)
 
-find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Core DBus Gui Quick Qml Widgets WaylandClient)
+find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Core Concurrent DBus Gui Quick Qml Widgets WaylandClient)
 
 find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS
     Config CoreAddons Crash DBusAddons GlobalAccel GuiAddons I18n IconThemes KIO
     Notifications Package Service Solid StatusNotifierItem Svg WidgetsAddons
     WindowSystem XmlGui ColorScheme)
 find_package(KF6Declarative ${KF6_MIN_VERSION} REQUIRED) # KF6::CalendarEvents
+find_package(KF6ItemModels ${KF6_MIN_VERSION} REQUIRED) # libtaskmanager
 find_package(Plasma ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(Plasma5Support ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(PlasmaQuick ${PROJECT_DEP_VERSION} REQUIRED)
@@ -82,6 +83,10 @@ add_subdirectory(components/calendar)
 add_subdirectory(components/timezoneselector)
 add_subdirectory(applets/digital-clock)
 add_subdirectory(applets/panelspacer)
+# Windows and launchers (the task manager's library), and the icon widget
+# that starts an app from the panel.
+add_subdirectory(libtaskmanager)
+add_subdirectory(applets/icon)
 # The time data engine the clock reads from (with plasma-workspace's
 # dataengines/CMakeLists.txt's settings: data engines aren't ported to them).
 remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_TO_ASCII -DQT_NO_CAST_FROM_BYTEARRAY)
