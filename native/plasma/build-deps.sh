@@ -330,10 +330,11 @@ build_qtdeclarative() { qt_module qtdeclarative; }
 build_qtsvg() { qt_module qtsvg; }
 build_qt5compat() { qt_module qt5compat; }
 build_qtsensors() { qt_module qtsensors; }
-# Text to speech, which KTextEditor needs (its "Say" actions).
-build_qtspeech() { qt_module qtspeech; }
 # Gwenview plays videos with Qt Multimedia (Android's own media backend).
 build_qtmultimedia() { qt_module qtmultimedia -DFEATURE_ffmpeg=OFF -DFEATURE_spatialaudio=OFF -DFEATURE_spatialaudio_quick3d=OFF; }
+# Text to speech, which KTextEditor needs (its "Say" actions); Qt Speech
+# builds nothing without Qt Multimedia.
+build_qtspeech() { qt_module qtspeech; test -e "$PREFIX/lib/libQt6TextToSpeech_arm64-v8a.so" || test -e "$PREFIX/lib/libQt6TextToSpeech.so"; }
 build_qtwayland() {
   local s; s="$(qt_src qtwayland)"
   # qtwayland skips Android outright; the client side is plain Linux code.
@@ -691,7 +692,13 @@ build_dolphin() {
 }
 # KWrite: KDE's text editor, from Kate's sources without Kate and its
 # plugins. KSyntaxHighlighting builds its indexer for the host itself.
-build_syntax_highlighting() { kf syntax-highlighting; }
+build_syntax_highlighting() {
+  local s; s="$(kf_src syntax-highlighting)"
+  # The host's rcc compresses with zstd, which this Qt can't read.
+  sed -i 's|COMMAND Qt6::rcc --name syntax_data|COMMAND Qt6::rcc --no-zstd --name syntax_data|' "$s/data/CMakeLists.txt"
+  grep -q -- "--no-zstd" "$s/data/CMakeLists.txt"
+  unandroid "$s"; kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON
+}
 build_ktexteditor() { kf ktexteditor -DENABLE_KAUTH=OFF; }
 build_kwrite() {
   local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/kate-$GEAR_VERSION.tar.xz" "kate-$GEAR_VERSION.tar.xz")"
@@ -810,7 +817,7 @@ inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HE
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
-     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtspeech qtmultimedia qtwayland qttools
+     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtmultimedia qtspeech qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze

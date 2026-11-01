@@ -539,6 +539,11 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             globals.appendText("\n" + dark.readText() + "\n[General]\nColorScheme=BreezeDark\n")
             AppLog.i("Native desktop test: Breeze Dark colors set")
         } else if (!dark.exists()) AppLog.i("Native desktop test: no BreezeDark.colors in the data")
+        // Apps (Dolphin, KWrite...) pick their colors with KDE's colour scheme
+        // manager, which reads UiSettings (kdeglobals falls through to every
+        // app's settings); there is no KDE platform theme to set them.
+        if (!globals.exists() || !globals.readText().contains("[UiSettings]"))
+            globals.appendText("\n[UiSettings]\nColorScheme=Breeze Dark\n")
         File(config, "plasmarc").takeUnless { it.exists() && it.readText().contains("[Theme]") }
             ?.appendText("\n[Theme]\nname=breeze-dark\n")
     }
