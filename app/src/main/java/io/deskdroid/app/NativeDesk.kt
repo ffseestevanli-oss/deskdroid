@@ -522,6 +522,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("QT_QUICK_BACKEND", "software")
                     put("KDE_DEBUG", "1")
                     put("QT_LOGGING_RULES", "kf.service.*=true;js=true") // why the app database comes up empty
+                    // GTK programs: Wayland, and settings kept in memory (no dconf here).
+                    put("GDK_BACKEND", "wayland")
+                    put("GSETTINGS_BACKEND", "memory")
                     // Apps the desktop starts (bin/dolphin...) inherit all this.
                     put("PATH", "${bin.path}:${System.getenv("PATH") ?: "/system/bin"}")
                     sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
@@ -574,6 +577,11 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             } catch (e: Exception) {
                 AppLog.i("Native desktop test: couldn't link $app: $e")
             }
+        }
+        // GTK programs (gtktest.c...): the program itself, no QtHost.
+        File(data, "gtkapps.txt").takeIf { it.exists() }?.readLines()?.filter { it.isNotBlank() }?.forEach { app ->
+            try { android.system.Os.symlink(File(libs, "libdd_$app.so").path, File(bin, app).path) }
+            catch (e: Exception) { AppLog.i("Native desktop test: couldn't link $app: $e") }
         }
         // Apps from the app store (Store.kt).
         Store.installed(this).forEach { Store.linkCommand(this, it) }

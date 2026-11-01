@@ -84,6 +84,21 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       bundled+=("$OUT/libdd_$app.so"); apps+=("$app")
     done
     printf '%s\n' "${apps[@]}" > "$WORK/apps.txt"
+    # Stage 6: GTK programs (towards Floorp), plain executables named like
+    # libraries (the APK's library folder is where Android lets apps run
+    # programs from), started as bin/<name> (gtkapps.txt).
+    : > "$WORK/gtkapps.txt"
+    if [ -e "$DESKDROID_QT_ANDROID/lib/pkgconfig/gtk+-3.0.pc" ]; then
+      gtkflags="$(PKG_CONFIG_LIBDIR="$DESKDROID_QT_ANDROID/lib/pkgconfig:$DESKDROID_QT_ANDROID/share/pkgconfig" \
+        PKG_CONFIG_SYSROOT_DIR= pkg-config --cflags --libs gtk+-3.0)"
+      "$BIN/aarch64-linux-android$API-clang" -O2 -fPIE -pie -o "$OUT/libdd_gtktest.so" "$HERE/gtktest.c" \
+        -L"$DESKDROID_QT_ANDROID/lib" $gtkflags
+      bundled+=("$OUT/libdd_gtktest.so"); echo gtktest >> "$WORK/gtkapps.txt"
+      mkdir -p "$WORK/gtkshare/share/applications"
+      printf '[Desktop Entry]\nType=Application\nName=GTK Test\nComment=A GTK 3 window, natively on Android\nIcon=applications-development\nExec=gtktest\nCategories=Development;\n' \
+        > "$WORK/gtkshare/share/applications/org.deskdroid.gtktest.desktop"
+      echo "   gtk: gtktest"
+    fi
     if [ ${#apps[@]} -gt 0 ]; then
       install -m 755 "$HERE/qtapp.sh" "$OUT/libdd_qtapp.so"
       # Open with Android app: bin/android-open (android-open.sh).
@@ -243,7 +258,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
           | grep -Ev "^qml/${qmlskip#^}" | zip -q -X "$OUT/libkwin_data.so" -@)
       done
-      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt)
+      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt gtkapps.txt)
+      [ -d "$WORK/gtkshare" ] && (cd "$WORK/gtkshare" && zip -qr -X "$OUT/libkwin_data.so" share)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
         $(ls -d share/applications share/mime share/kxmlgui5 share/config.kcfg share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
