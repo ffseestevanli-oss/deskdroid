@@ -95,7 +95,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         override fun run() {
             if (started) stats.text = NativeDesk.nativeStats().ifEmpty { "Starting…" } +
                 "\n$qtStatus\n" + synchronized(qtLines) { qtLines.joinToString("\n") } +
-                "\n\nTouchpad: tap to click, two-finger tap to right-click, two fingers to scroll, tap then hold to drag " +
+                "\n\nTouchpad: tap to click, two-finger tap to right-click, two fingers to scroll, double tap to double-click, tap then hold to drag " +
                 "(title bars move windows). Settings → Touch mode switches to direct touch. + and - on a keyboard change the load."
             main.postDelayed(this, 500)
         }
@@ -662,7 +662,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     /**
      * The phone screen as a laptop touchpad, like the desktop's Touchpad mode:
      * one finger moves the pointer, a tap clicks, a two-finger tap right-clicks,
-     * two fingers scroll, and tap then hold drags.
+     * two fingers scroll, a double tap double-clicks, and tap then hold drags.
      */
     private class Touchpad {
         private var px = -1f
@@ -712,6 +712,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     val tap = travel < TAP_SLOP && e.eventTime - downAt < TAP_MS
                     when {
+                        // Tap, tap: the second touch's press, its release, then one more
+                        // click, so apps see a double click. Tap, hold (or move): a drag.
+                        dragging && tap -> { NativeDesk.nativePointer(px, py, 0); click(1) }
                         dragging -> NativeDesk.nativePointer(px, py, 0)
                         tap && maxFingers >= 2 -> click(2)
                         tap -> handler.postDelayed(pendingTap, DOUBLE_TAP_MS)
