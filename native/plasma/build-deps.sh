@@ -455,7 +455,15 @@ if(NOT TARGET KF6::kpackagetool6)
 endif()
 CMAKE
 }
-build_kirigami() { kf kirigami; }
+# Icons in the software renderer: Kirigami 6.16 adds an icon's image node
+# while the scene is being drawn, which crashes Qt's software renderer.
+# patches/kirigami holds upstream's later version of that node.
+build_kirigami() {
+  local s; s="$(kf_src kirigami)"
+  cp "$HERE"/patches/kirigami/softwarerectanglenode.* "$s/src/primitives/scenegraph/"
+  unandroid "$s"; kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON
+}
+inputs_kirigami() { cat "$HERE"/patches/kirigami/*; }
 build_kservice() { kf kservice; }
 build_ksvg() { kf ksvg; }
 

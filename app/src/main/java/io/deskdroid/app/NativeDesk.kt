@@ -237,6 +237,16 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             // Breeze cursors (shipped in KWin's data) unless the user picked others.
             File(config, "kcminputrc").takeUnless { it.exists() }
                 ?.writeText("[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24\n")
+            // KDE's app database (ksycoca) lists only the apps a menu file takes in;
+            // with none, Plasma finds no apps. One menu with every installed app,
+            // and a fresh database each start so it matches this build's apps.
+            File(config, "menus").mkdirs()
+            File(config, "menus/applications.menu").writeText(
+                "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n" +
+                "  \"http://www.freedesktop.org/standards/menu-spec/1.0/menu.dtd\">\n" +
+                "<Menu>\n  <Name>Applications</Name>\n  <DefaultAppDirs/>\n  <DefaultDirectoryDirs/>\n" +
+                "  <Include><All/></Include>\n</Menu>\n")
+            File(filesDir, ".cache").listFiles { f -> f.name.startsWith("ksycoca6") }?.forEach { it.delete() }
             val bus = startSessionBus(libs, data, runtime)
             // Plasma's usual size on a phone: about twice the panel's pixels.
             val scale = (resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4.0
