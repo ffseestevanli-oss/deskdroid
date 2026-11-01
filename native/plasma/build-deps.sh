@@ -725,6 +725,9 @@ build_kirigami_addons() {
   local s; s="$(unpack "https://download.kde.org/stable/kirigami-addons/kirigami-addons-$KIRIGAMI_ADDONS_VERSION.tar.xz" "kirigami-addons-$KIRIGAMI_ADDONS_VERSION.tar.xz")"
   unandroid "$s"
   sed -i 's/^\( *add_subdirectory(templates)\)/# \1/' "$s/CMakeLists.txt"
+  # The date picker's Android integration (Java, built with Gradle) is left out.
+  sed -i 's/^#ifdef Q_OS_ANDROID$/#if 0 \/\/ DeskDroid: no Android date picker/' "$s/src/dateandtime/types.h"
+  grep -q "^#if 0 // DeskDroid" "$s/src/dateandtime/types.h"
   kde_cmake "$s"
 }
 inputs_plasma_desktop_packages() { cat "$HERE"/patches/desktoppackage/*; }
