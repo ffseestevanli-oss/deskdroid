@@ -742,6 +742,12 @@ build_plasma_desktop_folder() {
   rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.desktopcontainment"
   cp -r "$s/containments/desktop/package" "$PREFIX/share/plasma/plasmoids/org.kde.desktopcontainment"
   test -e "$PREFIX/share/plasma/plasmoids/org.kde.desktopcontainment/contents/ui/main.qml"
+  # The desktop containment alone is Plasma's "Desktop" layout, which shows
+  # no files; "Folder View" (org.kde.plasma.folder) is its metadata with
+  # the desktop containment's files as its root.
+  rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.folder"
+  cp -r "$s/containments/folder" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.folder"
+  grep -q '"X-Plasma-RootPath": "org.kde.desktopcontainment"' "$PREFIX/share/plasma/plasmoids/org.kde.plasma.folder/metadata.json"
 }
 # KDE's app database needs share/mime/<type>/<subtype>.xml to know MIME
 # types (Qt has its own); made from the build machine's shared-mime-info.
@@ -753,7 +759,7 @@ build_mime_stubs() {
   test -e "$PREFIX/share/mime/audio/mpeg.xml"
 }
 inputs_mime_stubs() { cat "$HERE"/mime/*; }
-inputs_plasma_desktop_folder() { cat "$HERE"/desktopcontainment/*; }
+inputs_plasma_desktop_folder() { cat "$HERE"/desktopcontainment/*; echo folder-package; }
 inputs_plasma_desktop_packages() { cat "$HERE"/patches/desktoppackage/*; }
 inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
 
