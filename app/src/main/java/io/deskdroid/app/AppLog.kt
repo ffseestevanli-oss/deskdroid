@@ -33,10 +33,31 @@ object AppLog {
                 lines.addLast("== Log from before the app last restarted ==")
                 f.readLines().takeLast(MAX_LINES).forEach { lines.addLast(it) }
                 lines.addLast("== App restarted ==")
+                lastExit(c)?.let { lines.addLast(it) }
             }
             rewrite()
         } catch (e: Exception) {
             Log.w("DeskDroid", "log file: $e")
+        }
+    }
+
+    /** Why Android ended the app's previous process (low memory, a crash, a permission change...). */
+    private fun lastExit(c: Context): String? {
+        if (android.os.Build.VERSION.SDK_INT < 30) return null
+        return try {
+            val am = c.getSystemService(android.app.ActivityManager::class.java)
+            val e = am.getHistoricalProcessExitReasons(c.packageName, 0, 1).firstOrNull() ?: return null
+            val reasons = mapOf(
+                1 to "exited by itself", 2 to "killed by a signal", 3 to "low memory", 4 to "crash",
+                5 to "native crash", 6 to "not responding", 7 to "init failure", 8 to "permission change",
+                9 to "too much resource use", 10 to "user request", 11 to "user stopped", 12 to "dependency died",
+                13 to "other", 14 to "freezer", 15 to "package state change", 16 to "package updated",
+            )
+            "Previous process ended: ${reasons[e.reason] ?: "reason ${e.reason}"} (status ${e.status}, " +
+                "importance ${e.importance}, ${(e.pss / 1024)} MB) ${e.description ?: ""} at " +
+                java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date(e.timestamp))
+        } catch (e: Exception) {
+            null
         }
     }
 

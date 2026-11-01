@@ -19,7 +19,7 @@ class NativeDeskService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            NativeDesk.stop(this)
+            NativeDesk.stop(this, "Stop desktop in the notification")
             stopSelf()
             return START_NOT_STICKY
         }

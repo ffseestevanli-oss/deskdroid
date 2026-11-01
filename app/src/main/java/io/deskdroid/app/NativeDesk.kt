@@ -90,7 +90,7 @@ object NativeDesk {
                 // KDE's logout screen: Close Desktop (patched in add-to-workspace.py).
                 if (name == "end-session.req") {
                     AppLog.i("Native desktop: Close Desktop from the logout screen")
-                    Handler(Looper.getMainLooper()).post { stop(c) }
+                    Handler(Looper.getMainLooper()).post { stop(c, "Close Desktop") }
                     return
                 }
                 // Restart or Power Off on the logout screen: Android's power menu.
@@ -173,7 +173,7 @@ object NativeDesk {
     }
 
     /** Ends the desktop: its processes, the compositor, the service and the window. */
-    fun stop(c: android.content.Context) {
+    fun stop(c: android.content.Context, why: String) {
         synchronized(apps) {
             apps.forEach { it.destroy() }
             apps.clear()
@@ -184,7 +184,7 @@ object NativeDesk {
         running = false
         c.stopService(android.content.Intent(c, NativeDeskService::class.java))
         activity?.get()?.finish()
-        AppLog.i("Native desktop stopped")
+        AppLog.i("Native desktop stopped ($why)")
     }
 }
 
@@ -1048,7 +1048,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         android.app.AlertDialog.Builder(this)
             .setTitle("Stop the desktop?")
             .setMessage("Unsaved work in desktop apps will be lost.")
-            .setPositiveButton("Stop") { _, _ -> NativeDesk.stop(this) }
+            .setPositiveButton("Stop") { _, _ -> NativeDesk.stop(this, "Stop in the menu") }
             .setNegativeButton("Cancel", null)
             .show()
     }
@@ -1160,7 +1160,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         main.removeCallbacks(tick)
         // Stop (in the menu or the notification) ends the desktop; anything else
         // that destroys the window leaves it running in the background.
-        if (isFinishing) NativeDesk.stop(this)
+        if (isFinishing) NativeDesk.stop(this, "window closed")
         if (NativeDesk.activity?.get() === this) NativeDesk.activity = null
         super.onDestroy()
     }
