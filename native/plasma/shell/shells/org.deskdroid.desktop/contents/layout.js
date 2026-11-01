@@ -1,9 +1,14 @@
-// The first start's layout: the gradient wallpaper on every desktop, and
+// The first start's layout: the phone's wallpaper (or a gradient) on every desktop, and
 // Plasma's own panel at the bottom: app launchers on the left, the digital
 // clock on the right.
 var desktops = desktopsForActivity(currentActivity());
+// files/config is the config folder; DeskDroid copies the phone's wallpaper
+// to files/wallpaper.jpg at each start.
+var files = userDataPath("config").replace(/\/[^\/]*\/?$/, "");
 for (var i = 0; i < desktops.length; i++) {
     desktops[i].wallpaperPlugin = "org.deskdroid.gradient";
+    desktops[i].currentConfigGroup = ["Wallpaper", "org.deskdroid.gradient", "General"];
+    desktops[i].writeConfig("Image", "file://" + files + "/wallpaper.jpg");
 }
 
 var panel = new Panel("org.kde.panel");
@@ -16,7 +21,6 @@ for (var j = 0; j < launchers.length; j++) {
     if (!path) {
         // No app database yet: take the desktop file from the bundled share folder
         // (files/config is the config folder, files/kwin/share holds the apps).
-        var files = userDataPath("config").replace(/\/[^\/]*\/?$/, "");
         var bundled = files + "/kwin/share/applications/" + launchers[j];
         if (fileExists(bundled)) path = bundled;
     }

@@ -323,9 +323,10 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         File(config, "kdeglobals").takeUnless { it.readText().contains("[Icons]") }
             ?.appendText("\n[Icons]\nTheme=breeze\n")
         writeUserDirs(config)
+        copyWallpaper()
         // While DeskDroid's default layout changes from build to build, start from it
         // again when it's newer than the saved one (layout.js runs only without one).
-        val layoutVersion = "4"
+        val layoutVersion = "5"
         val stamp = File(config, "deskdroid-layout-version")
         if (stamp.takeIf { it.exists() }?.readText() != layoutVersion) {
             File(config, "plasma-org.deskdroid.desktop-appletsrc").delete()
@@ -423,6 +424,37 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * own folders when All files access is granted, through KDE's standard user-dirs file.
      * Written at every start, so it follows the permission.
      */
+    /**
+     * The phone's wallpaper on the desktop: Android lets an app with All files
+     * access read the current (still) wallpaper, and DeskDroid's wallpaper
+     * shows files/wallpaper.jpg over its gradient. Without access, or with a
+     * live wallpaper, the file is removed and the gradient shows.
+     */
+    private fun copyWallpaper() {
+        val out = File(filesDir, "wallpaper.jpg")
+        try {
+            val d = if (Storage.granted(this)) android.app.WallpaperManager.getInstance(this).drawable else null
+            if (d == null) {
+                out.delete()
+                AppLog.i("Native desktop test: no phone wallpaper to copy, using the gradient")
+                return
+            }
+            val w = d.intrinsicWidth.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+            val h = d.intrinsicHeight.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+            val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            d.setBounds(0, 0, w, h)
+            d.draw(android.graphics.Canvas(bmp))
+            val tmp = File(filesDir, "wallpaper.jpg.new")
+            tmp.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it) }
+            bmp.recycle()
+            tmp.renameTo(out)
+            AppLog.i("Native desktop test: phone wallpaper copied (${w}x$h)")
+        } catch (e: Exception) {
+            out.delete()
+            AppLog.i("Native desktop test: couldn't copy the phone wallpaper: $e")
+        }
+    }
+
     private fun writeUserDirs(config: File) {
         val home = filesDir.path
         fun phone(type: String) = if (Storage.granted(this))
