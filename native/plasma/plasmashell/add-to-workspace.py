@@ -145,3 +145,16 @@ edit(mn, "        greeter.enableWindowed();\n    }\n",
 import subprocess
 subprocess.run([sys.executable, str(here.parent / "apps" / "as-library.py"), str(ws),
                 lg + "CMakeLists.txt", "ksmserver-logout-greeter", mn], check=True)
+
+# Mouse actions settings: picking a mouse action whose plugin isn't built
+# (only the right-click menu is) left a null plugin that was used at once.
+cc = "shell/currentcontainmentactionsmodel.cpp"
+t = (ws / cc).read_text()
+old = ("            m_plugins[action] = Plasma::PluginLoader::self()->loadContainmentActions(m_containment, plugin);\n"
+       "            m_plugins[action]->setContainment(m_containment);\n")
+if t.count(old) < 1:
+    sys.exit("add-to-workspace: currentcontainmentactionsmodel.cpp changed")
+t = t.replace(old, "            m_plugins[action] = Plasma::PluginLoader::self()->loadContainmentActions(m_containment, plugin);\n"
+                   "            if (!m_plugins[action]) { m_plugins.remove(action); return; } // DeskDroid: plugin not built\n"
+                   "            m_plugins[action]->setContainment(m_containment);\n")
+(ws / cc).write_text(t)

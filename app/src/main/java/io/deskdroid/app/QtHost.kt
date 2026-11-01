@@ -62,13 +62,21 @@ object QtHost {
         while (left.isNotEmpty()) {
             val failed = left.filter { lib ->
                 try { load(lib); false } catch (e: UnsatisfiedLinkError) {
-                    println("QtHost: ${lib.name} later (${e.message?.substringAfter("library ")?.take(80)})")
-                    true
+                    if (e.message.orEmpty().contains("JNI_OnLoad")) {
+                        // Its Java side is missing or failed: never loads, so leave it
+                        // out; only what needs it goes without.
+                        println("QtHost: skipping ${lib.name} (${e.message?.take(120)})")
+                        false
+                    } else {
+                        println("QtHost: ${lib.name} later (${e.message?.substringAfter("library ")?.take(80)})")
+                        true
+                    }
                 }
             }
             if (failed.size == left.size) {
-                // Load one again to report why.
-                System.load(failed.first().path)
+                // None of these load: say why and go on without them.
+                failed.forEach { println("QtHost: couldn't load ${it.name}") }
+                return
             }
             left = failed
         }

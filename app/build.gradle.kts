@@ -61,7 +61,9 @@ dependencies {
     // QtHost.kt's Qt demo needs (Qt Quick's library registers natives on
     // QtQuickView when it loads). Only in builds made with Qt (native/nativedesk/build.sh).
     System.getenv("DESKDROID_QT_ANDROID")?.let { qt ->
-        implementation(files("$qt/jar/Qt6Android.jar", "$qt/jar/Qt6AndroidQuick.jar"))
+        // Every Qt module's Java side (Quick, Multimedia, TextToSpeech...): a
+        // module's library fails to load (JNI_OnLoad) without its classes.
+        implementation(fileTree("$qt/jar") { include("Qt6Android*.jar") })
     }
 }
 
