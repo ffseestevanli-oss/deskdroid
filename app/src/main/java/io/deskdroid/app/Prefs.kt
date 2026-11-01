@@ -36,6 +36,10 @@ object Prefs {
     fun scale(c: Context) = prefs(c).getFloat("scale", 1f)
     fun setScale(c: Context, s: Float) = prefs(c).edit().putFloat("scale", s).apply()
 
+    /** The native desktop's scale (KWin's output); 0 = from the display's density. */
+    fun nativeScale(c: Context) = prefs(c).getFloat("native_scale", 0f)
+    fun setNativeScale(c: Context, s: Float) = prefs(c).edit().putFloat("native_scale", s).apply()
+
     fun setupDone(c: Context) = prefs(c).getBoolean("setup_done", false)
     fun setSetupDone(c: Context, on: Boolean) = prefs(c).edit().putBoolean("setup_done", on).apply()
 

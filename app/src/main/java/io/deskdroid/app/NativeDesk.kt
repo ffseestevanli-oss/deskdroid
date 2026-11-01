@@ -15,9 +15,16 @@ import android.view.SurfaceView
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.FrameLayout
+import android.widget.LinearLayout
+import io.deskdroid.app.ui.dp
+import io.deskdroid.app.ui.spacer
+import io.deskdroid.app.ui.tile
 import android.widget.TextView
 import java.io.File
 import kotlin.math.abs
+
+/** The menu's desktop scales; 0 is automatic (from the screen's density). */
+private val SCALES = listOf(0f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
 
 /**
  * Native desktop test: the first step towards running Plasma as Android code
@@ -144,7 +151,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         super.onCreate(savedInstanceState)
         AppLog.attach(this)
         NativeDesk.activity = java.lang.ref.WeakReference(this)
-        surfaceView = SurfaceView(this).apply {
+        surfaceView = KeyboardSurface(this).apply {
             holder.addCallback(this@NativeDeskActivity)
             isFocusable = true
             isFocusableInTouchMode = true
@@ -160,6 +167,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         setContentView(FrameLayout(this).apply {
             addView(surfaceView, FrameLayout.LayoutParams(-1, -1))
             addView(stats, FrameLayout.LayoutParams(-2, -2))
+            addView(buildMenu(), FrameLayout.LayoutParams(-1, -1))
         })
         if (Build.VERSION.SDK_INT >= 30) {
             window.insetsController?.apply {
@@ -341,8 +349,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     "InitialPreference=1\n")
             NativeDesk.watchOpenRequests(applicationContext)
             val bus = startSessionBus(libs, data, runtime)
-            // Plasma's usual size on a phone: about twice the panel's pixels.
-            val scale = (resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4.0
+            // Plasma's usual size on a phone (about twice the panel's pixels), or the menu's choice.
+            val scale = Prefs.nativeScale(this).takeIf { it > 0f }?.toDouble()
+                ?: ((resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4.0)
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
                 QtHost::class.java.name, libs, "libkwin_wayland.so",
@@ -721,15 +730,112 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK) return super.onKeyDown(keyCode, e)
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (e.repeatCount == 0) showMenu(menu.visibility != android.view.View.VISIBLE)
+            return true
+        }
         if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, true)
         return true
     }
 
     override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK) return super.onKeyUp(keyCode, e)
+        if (keyCode == KeyEvent.KEYCODE_BACK) return true // Back opens the menu (onKeyDown)
         if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
         return true
+    }
+
+    // ---- DeskDroid's menu: Back opens and closes it ----
+
+    private lateinit var menu: FrameLayout
+    private lateinit var panel: LinearLayout
+
+    private fun buildMenu(): android.view.View {
+        val ui = io.deskdroid.app.ui.Ui(this)
+        menu = FrameLayout(this).apply {
+            setBackgroundColor(0x55000000)
+            visibility = android.view.View.GONE
+            setOnClickListener { showMenu(false) } // a tap outside the panel closes it
+        }
+        panel = ui.column(12) {
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setBackgroundColor(io.deskdroid.app.ui.Party.PANEL)
+            elevation = dp(16f)
+            isClickable = true // touches don't fall through to the desktop
+            addView(ui.row {
+                addView(ui.text("DESKDROID", 15f).apply { typeface = io.deskdroid.app.ui.Party.orbitron(context); letterSpacing = 0.08f })
+                spacer()
+                addView(ui.outlineButton("✕", io.deskdroid.app.ui.Party.TEXT) { showMenu(false) }, LinearLayout.LayoutParams(dp(40), dp(40)))
+            }, LinearLayout.LayoutParams(-1, -2))
+            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Touchpad", "Direct touch"),
+                if (Prefs.touchMode(context) == "direct") 1 else 0) { i ->
+                Prefs.setTouchMode(context, if (i == 1) "direct" else "touchpad")
+            }.view, LinearLayout.LayoutParams(-1, -2))
+            val scaleTile = ui.tile(scaleLabel(), io.deskdroid.app.ui.Party.YELLOW) {}
+            scaleTile.setOnClickListener {
+                val i = (SCALES.indexOf(Prefs.nativeScale(context)) + 1) % SCALES.size
+                Prefs.setNativeScale(context, SCALES[i])
+                scaleTile.text = scaleLabel()
+                android.widget.Toast.makeText(context, "The new scale applies when the desktop restarts", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            val grid = listOf(
+                ui.tile("Keyboard", io.deskdroid.app.ui.Party.CYAN) { showMenu(false); toggleKeyboard() },
+                scaleTile,
+            )
+            addView(ui.row(6) { grid.forEach { addView(ui.weight(it)) } }, LinearLayout.LayoutParams(-1, -2))
+            spacer()
+            addView(ui.text("STOP DESKTOP", 12f, 0xFFFF6B82.toInt()).apply {
+                typeface = io.deskdroid.app.ui.Party.orbitron(context)
+                letterSpacing = 0.12f
+                gravity = android.view.Gravity.CENTER
+                minHeight = dp(44)
+                background = io.deskdroid.app.ui.ChamferDrawable(dp(12f), stroke = io.deskdroid.app.ui.Party.RED, strokeWidth = dp(1.5f))
+                setOnClickListener { confirmStop() }
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        menu.addView(panel, FrameLayout.LayoutParams(dp(304), -1, android.view.Gravity.END))
+        return menu
+    }
+
+    private fun scaleLabel() = Prefs.nativeScale(this).let { if (it == 0f) "Scale: auto" else "Scale ${"%.2f".format(it).trimEnd('0').trimEnd('.')}×" }
+
+    private fun showMenu(open: Boolean) {
+        val w = dp(304f)
+        if (open) {
+            menu.visibility = android.view.View.VISIBLE
+            panel.translationX = w
+            panel.animate().translationX(0f).setDuration(180).start()
+        } else if (menu.visibility == android.view.View.VISIBLE) {
+            panel.animate().translationX(w).setDuration(150).withEndAction { menu.visibility = android.view.View.GONE }.start()
+        }
+    }
+
+    private fun toggleKeyboard() {
+        val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        surfaceView.requestFocus()
+        imm.showSoftInput(surfaceView, android.view.inputmethod.InputMethodManager.SHOW_FORCED)
+    }
+
+    private fun confirmStop() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Stop the desktop?")
+            .setMessage("Unsaved work in desktop apps will be lost.")
+            .setPositiveButton("Stop") { _, _ -> NativeDesk.stop(this) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * The desktop's view, which takes the on-screen keyboard: its text arrives as
+     * key events (BaseInputConnection without an editor), handled like a real
+     * keyboard's in onKeyDown/onKeyUp.
+     */
+    private class KeyboardSurface(c: android.content.Context) : SurfaceView(c) {
+        override fun onCheckIsTextEditor() = true
+        override fun onCreateInputConnection(info: android.view.inputmethod.EditorInfo): android.view.inputmethod.InputConnection {
+            info.inputType = android.text.InputType.TYPE_NULL
+            info.imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
+            return android.view.inputmethod.BaseInputConnection(this, false)
+        }
     }
 
     /**
@@ -823,7 +929,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onDestroy() {
         main.removeCallbacks(tick)
-        // Back (or Stop in the notification) ends the desktop; anything else
+        // Stop (in the menu or the notification) ends the desktop; anything else
         // that destroys the window leaves it running in the background.
         if (isFinishing) NativeDesk.stop(this)
         if (NativeDesk.activity?.get() === this) NativeDesk.activity = null
