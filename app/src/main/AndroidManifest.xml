@@ -3,6 +3,14 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- The phone's apps in the native desktop's menu (NativeDesk.writeAndroidApps). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -59,14 +67,38 @@
             android:resizeableActivity="true"
             android:windowSoftInputMode="stateHidden|adjustNothing" />
 
-        <!-- Native desktop test (NativeDesk.kt): opened from Settings. -->
+        <!--
+          The native desktop (NativeDesk.kt), opened from Settings. It can also be
+          the phone's home screen: pick DeskDroid in Android's Default apps, Home app.
+        -->
         <activity
             android:name=".NativeDeskActivity"
-            android:exported="false"
+            android:exported="true"
             android:launchMode="singleTask"
+            android:stateNotNeeded="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
             android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|smallestScreenSize|density"
-            android:resizeableActivity="true" />
+            android:resizeableActivity="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Restart or Power Off on the desktop's logout screen: Android's power menu. -->
+        <service
+            android:name=".PowerMenuService"
+            android:exported="false"
+            android:label="@string/power_menu_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/power_menu_service" />
+        </service>
 
         <!-- Termux:X11's own launcher entry and settings screen: hidden, DeskDroid has its own. -->
         <activity

@@ -7,6 +7,9 @@
 
 #include "core/outputconfiguration.h"
 #include "core/renderloop.h"
+#include "input.h"
+#include "window.h"
+#include "workspace.h"
 
 #include <QSocketNotifier>
 
@@ -23,6 +26,10 @@
 #include <chrono>
 
 #include "protocol.h"
+
+// Set in KWin's InputMethod::refreshActive (add-to-kwin.py): whether the
+// focused surface has an enabled text input.
+namespace KWin { extern void (*deskdroidTextInputHook)(bool); }
 
 namespace KWin
 {
@@ -107,6 +114,19 @@ void NativeDeskOutput::setPixelSize(const QSize &pixelSize)
     qInfo("nativedesk: screen now %dx%d", pixelSize.width(), pixelSize.height());
 }
 
+// The user picked another scale in DeskDroid's menu: applied now, as KDE's
+// display settings would.
+void NativeDeskOutput::setUserScale(qreal scale)
+{
+    if (qFuzzyCompare(scale, this->scale())) {
+        return;
+    }
+    State next = m_state;
+    next.scale = scale;
+    setState(next);
+    qInfo("nativedesk: scale now %.2f", scale);
+}
+
 // ---- input -------------------------------------------------------------------
 
 NativeDeskInputDevice::NativeDeskInputDevice(bool keyboard)
@@ -130,11 +150,35 @@ bool NativeDeskInputDevice::isTabletPad() const { return false; }
 bool NativeDeskInputDevice::isTabletModeSwitch() const { return false; }
 bool NativeDeskInputDevice::isLidSwitch() const { return false; }
 
+// Plasma's popups (Kickoff, the clock's calendar...) hide when they lose the
+// keyboard focus, which here they don't always get: a press outside one, other
+// than on a panel (where Kickoff's button toggles it) or in one of its menus,
+// closes it too.
+static void closeAppletPopups(const QPointF &pos)
+{
+    if (!workspace() || !input()) {
+        return;
+    }
+    Window *target = input()->findToplevel(pos);
+    if (target && (target->isAppletPopup() || target->isDock() || target->isPopupWindow())) {
+        return;
+    }
+    const auto windows = workspace()->windows();
+    for (Window *w : windows) {
+        if (w->isAppletPopup() && !w->isDeleted() && !w->isHidden()) {
+            w->closeWindow();
+        }
+    }
+}
+
 void NativeDeskInputDevice::pointer(const QPointF &pos, uint32_t buttons)
 {
     const auto time = now();
     Q_EMIT pointerMotionAbsolute(pos, time, this);
     static const struct { uint32_t bit, button; } map[] = {{1, BTN_LEFT}, {2, BTN_RIGHT}, {4, BTN_MIDDLE}};
+    if (buttons & ~m_buttons) {
+        closeAppletPopups(pos);
+    }
     for (const auto &b : map) {
         if ((buttons ^ m_buttons) & b.bit) {
             Q_EMIT pointerButtonChanged(b.button, (buttons & b.bit) ? PointerButtonState::Pressed : PointerButtonState::Released, time, this);
@@ -410,6 +454,10 @@ bool NativeDeskBackend::initialize()
     m_notifier = new QSocketNotifier(m_fd, QSocketNotifier::Read);
     connect(m_notifier, &QSocketNotifier::activated, this, &NativeDeskBackend::readMessages);
 
+    static NativeDeskBackend *self;
+    self = this;
+    deskdroidTextInputHook = [](bool active) { self->setTextInputActive(active); };
+
     m_output = new NativeDeskOutput(this, m_size, m_scale);
     Q_EMIT outputAdded(m_output);
     Q_EMIT outputsQueried();
@@ -481,6 +529,18 @@ void NativeDeskBackend::send(const ndesk_msg &m, int passFd)
     }
 }
 
+void NativeDeskBackend::setTextInputActive(bool active)
+{
+    if (active == m_textInputActive) {
+        return;
+    }
+    m_textInputActive = active;
+    ndesk_msg m = {};
+    m.op = NDESK_IME;
+    m.ime.show = active;
+    send(m);
+}
+
 void NativeDeskBackend::readMessages()
 {
     ndesk_msg m;
@@ -514,6 +574,12 @@ void NativeDeskBackend::readMessages()
                     // workspace lays out panels, windows and screen edges again.
                     Q_EMIT outputsQueried();
                 }
+            }
+            break;
+        case NDESK_SCALE:
+            if (m_output && m.scale.scale > 0) {
+                m_output->setUserScale(m.scale.scale);
+                Q_EMIT outputsQueried();
             }
             break;
         case NDESK_KEY:

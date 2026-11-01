@@ -44,6 +44,13 @@ edit(m, "    case BackendType::Virtual: {\n",
      "        break;\n"
      "    case BackendType::Virtual: {\n")
 
+# The phone's keyboard follows text fields: KWin's input method decides here
+# whether the focused surface has an enabled text input; the backend hears it.
+edit("src/inputmethod.cpp", "    if (m_internalContext->isEnabled()) {\n        active = true;\n    }\n    setActive(active);\n",
+     "    if (m_internalContext->isEnabled()) {\n        active = true;\n    }\n"
+     "    if (deskdroidTextInputHook) {\n        deskdroidTextInputHook(active);\n    }\n    setActive(active);\n")
+edit("src/inputmethod.cpp", "namespace KWin\n{\n", "namespace KWin\n{\nvoid (*deskdroidTextInputHook)(bool) = nullptr;\n")
+
 # kwin_wayland as a library with a JNI entry point, since Qt for Android needs
 # a Java VM: QtHost loads it into an app_process and calls QtHost.run().
 edit("src/CMakeLists.txt", "add_executable(kwin_wayland main_wayland.cpp)",

@@ -47,6 +47,20 @@ object NativeDesk {
     @JvmStatic external fun nativeStats(): String
     @JvmStatic external fun nativeResized()
     @JvmStatic external fun nativeDetach()
+    @JvmStatic external fun nativeSetScale(scale: Float)
+
+    /** Plasma's usual size on a phone (about twice the panel's pixels), or the menu's choice. */
+    fun desktopScale(c: android.content.Context): Float =
+        Prefs.nativeScale(c).takeIf { it > 0f }
+            ?: ((c.resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4f)
+
+    /** From the compositor: a text field in the desktop took (or lost) the keyboard focus. */
+    @JvmStatic @androidx.annotation.Keep
+    fun onIme(show: Boolean) {
+        Handler(Looper.getMainLooper()).post {
+            (activity?.get() as? NativeDeskActivity)?.softKeyboard(show)
+        }
+    }
 
     // The desktop outlives its window: Home or switching apps takes the
     // activity's surface away, but the compositor, KWin, Plasma and the apps
@@ -79,9 +93,34 @@ object NativeDesk {
                     Handler(Looper.getMainLooper()).post { stop(c) }
                     return
                 }
+                // Restart or Power Off on the logout screen: Android's power menu.
+                if (name == "power-menu.req") {
+                    Handler(Looper.getMainLooper()).post { PowerMenuService.open(activity?.get() ?: c) }
+                    return
+                }
+                // An Android app from Plasma's menu (writeAndroidApps).
+                if (path.startsWith("android-app:")) {
+                    Handler(Looper.getMainLooper()).post { launchAndroidApp(c, path.removePrefix("android-app:")) }
+                    return
+                }
                 if (path.isNotEmpty()) Handler(Looper.getMainLooper()).post { openWithAndroid(c, path) }
             }
         }.also { it.startWatching() }
+    }
+
+    private fun launchAndroidApp(c: android.content.Context, pkg: String) {
+        val intent = c.packageManager.getLaunchIntentForPackage(pkg)
+            ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (intent == null) {
+            AppLog.i("Native desktop: $pkg has no app to open")
+            return
+        }
+        try {
+            (activity?.get() ?: c).startActivity(intent)
+            AppLog.i("Native desktop: opened $pkg")
+        } catch (e: Exception) {
+            AppLog.i("Native desktop: couldn't open $pkg: $e")
+        }
     }
 
     private fun openWithAndroid(c: android.content.Context, path: String) {
@@ -344,7 +383,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n" +
                 "  \"http://www.freedesktop.org/standards/menu-spec/1.0/menu.dtd\">\n" +
                 "<Menu>\n  <Name>Applications</Name>\n  <DefaultAppDirs/>\n  <DefaultDirectoryDirs/>\n" +
-                "  <Include><All/></Include>\n</Menu>\n")
+                "  <Include><And><All/><Not><Category>X-DeskDroid-Android</Category></Not></And></Include>\n" +
+                "  <Menu>\n    <Name>Android Apps</Name>\n" +
+                "    <Include><Category>X-DeskDroid-Android</Category></Include>\n  </Menu>\n</Menu>\n")
             File(filesDir, ".cache").listFiles { f -> f.name.startsWith("ksycoca6") }?.forEach { it.delete() }
             // Open with Android app: KDE offers it for every file (all files derive
             // from application/octet-stream), so files without a KDE app open in
@@ -355,10 +396,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     "Icon=smartphone\nExec=android-open %F\nMimeType=application/octet-stream;\nNoDisplay=true\n" +
                     "InitialPreference=1\n")
             NativeDesk.watchOpenRequests(applicationContext)
+            Thread { writeAndroidApps() }.start() // before plasmashell reads the menu (KWin starts first)
             val bus = startSessionBus(libs, data, runtime)
-            // Plasma's usual size on a phone (about twice the panel's pixels), or the menu's choice.
-            val scale = Prefs.nativeScale(this).takeIf { it > 0f }?.toDouble()
-                ?: ((resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4.0)
+            val scale = NativeDesk.desktopScale(this).toDouble()
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
                 QtHost::class.java.name, libs, "libkwin_wayland.so",
@@ -422,8 +462,13 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // No GPU path for Qt Quick yet: Qt's software renderer, through Wayland shm.
         File(config, "kdeglobals").takeUnless { it.exists() && it.readText().contains("[QtQuickRendererSettings]") }
             ?.appendText("\n[QtQuickRendererSettings]\nSceneGraphBackend=software\n")
-        File(config, "kdeglobals").takeUnless { it.readText().contains("[Icons]") }
-            ?.appendText("\n[Icons]\nTheme=breeze\n")
+        // Breeze Dark's icons (white symbolic ones) to match the dark colors; earlier
+        // builds wrote the light theme here.
+        File(config, "kdeglobals").let { g ->
+            val t = g.readText()
+            if (!t.contains("[Icons]")) g.appendText("\n[Icons]\nTheme=breeze-dark\n")
+            else if (t.contains("[Icons]\nTheme=breeze\n")) g.writeText(t.replace("[Icons]\nTheme=breeze\n", "[Icons]\nTheme=breeze-dark\n"))
+        }
         // No screen locker here: Lock stays out of the menus.
         File(config, "kdeglobals").takeUnless { it.readText().contains("[KDE Action Restrictions]") }
             ?.appendText("\n[KDE Action Restrictions]\naction/lock_screen=false\n")
@@ -532,6 +577,47 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * colour settings write them, for KWin's borders and the apps) and the
      * Breeze Dark Plasma theme. A colour scheme or theme set later is kept.
      */
+    /**
+     * The phone's apps in Plasma's menu (Android Apps, and search): a desktop
+     * file and an icon for each, run through bin/android-open as
+     * android-app:<package>. Icons are drawn again only for updated apps.
+     */
+    private fun writeAndroidApps() {
+        val dir = File(filesDir, ".local/share/applications").apply { mkdirs() }
+        val icons = File(filesDir, ".local/share/deskdroid-android-icons").apply { mkdirs() }
+        val pm = packageManager
+        val apps = pm.queryIntentActivities(
+            android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0)
+            .distinctBy { it.activityInfo.packageName }
+        val keep = mutableSetOf<String>()
+        for (ri in apps) {
+            val pkg = ri.activityInfo.packageName
+            val name = "android-$pkg.desktop"
+            keep += name
+            try {
+                val updated = pm.getPackageInfo(pkg, 0).lastUpdateTime
+                val icon = File(icons, "$pkg.png")
+                if (!icon.exists() || icon.lastModified() < updated) {
+                    val d = ri.loadIcon(pm)
+                    val px = 128
+                    val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+                    d.setBounds(0, 0, px, px)
+                    d.draw(android.graphics.Canvas(bmp))
+                    icon.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                    bmp.recycle()
+                }
+                val label = ri.loadLabel(pm).toString().replace("\n", " ")
+                File(dir, name).writeText("[Desktop Entry]\nType=Application\nName=$label\nComment=Android app\n" +
+                    "Icon=${icon.path}\nExec=android-open android-app:$pkg\nCategories=X-DeskDroid-Android;\n")
+            } catch (e: Exception) {
+                AppLog.i("Native desktop: couldn't list $pkg: $e")
+            }
+        }
+        // Apps uninstalled since the last start.
+        dir.listFiles { f -> f.name.startsWith("android-") && f.name !in keep }?.forEach { it.delete() }
+        AppLog.i("Native desktop: ${keep.size} Android apps in the menu")
+    }
+
     private fun applyDarkDefault(config: File, data: File) {
         val globals = File(config, "kdeglobals")
         val dark = File(data, "share/color-schemes/BreezeDark.colors")
@@ -806,7 +892,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 val i = (SCALES.indexOf(Prefs.nativeScale(context)) + 1) % SCALES.size
                 Prefs.setNativeScale(context, SCALES[i])
                 scaleTile.text = scaleLabel()
-                android.widget.Toast.makeText(context, "The new scale applies when the desktop restarts", android.widget.Toast.LENGTH_SHORT).show()
+                // Applied now: KWin lays the desktop out again at the new scale.
+                if (started) NativeDesk.nativeSetScale(NativeDesk.desktopScale(context))
             }
             val grid = listOf(
                 ui.tile("Keyboard", io.deskdroid.app.ui.Party.CYAN) { showMenu(false); toggleKeyboard() },
@@ -844,6 +931,17 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
         surfaceView.requestFocus()
         imm.showSoftInput(surfaceView, android.view.inputmethod.InputMethodManager.SHOW_FORCED)
+    }
+
+    /** The phone's keyboard for a desktop text field (it follows the field's focus). */
+    fun softKeyboard(show: Boolean) {
+        val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        if (show) {
+            surfaceView.requestFocus()
+            imm.showSoftInput(surfaceView, 0)
+        } else {
+            imm.hideSoftInputFromWindow(surfaceView.windowToken, 0)
+        }
     }
 
     private fun confirmStop() {

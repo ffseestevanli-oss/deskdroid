@@ -122,6 +122,19 @@ t = t.replace(old, "void KSMShutdownDlg::slotLogout()\n{\n"
               "    if (f.open(QIODevice::WriteOnly)) {\n        f.write(\"end-session\\n\");\n        f.close();\n"
               "        QFile::remove(d + QStringLiteral(\"/end-session.req\"));\n"
               "        f.rename(d + QStringLiteral(\"/end-session.req\"));\n    }\n", 1)
+# Restart or Power Off: Android's power menu (DeskDroid opens it through its
+# accessibility service), for a power-menu request.
+old = "void KSMShutdownDlg::slotReboot()\n{\n"
+if old not in t:
+    sys.exit("add-to-workspace: slotReboot changed")
+t = t.replace(old, old +
+              "    {\n        const QString d = QDir::homePath() + QStringLiteral(\"/open-requests\");\n"
+              "        QDir().mkpath(d);\n"
+              "        QFile f(d + QStringLiteral(\"/.power-menu\"));\n"
+              "        if (f.open(QIODevice::WriteOnly)) {\n            f.write(\"power-menu\\n\");\n            f.close();\n"
+              "            QFile::remove(d + QStringLiteral(\"/power-menu.req\"));\n"
+              "            f.rename(d + QStringLiteral(\"/power-menu.req\"));\n        }\n"
+              "        reject(); // the logout screen closes, the desktop stays\n        return;\n    }\n", 1)
 t = t.replace("#include <QFile>\n", "#include <QDir>\n#include <QFile>\n", 1)
 sd.write_text(t)
 for word in ("X11/", "XChangeProperty", "fixx11h"):
@@ -131,6 +144,14 @@ lo = "lookandfeel/org.kde.breeze/contents/logout/Logout.qml"
 edit(lo, 'text: root.showAllOptions ? i18nd("plasma_lookandfeel_org.kde.lookandfeel", "&Log Out")\n'
          '                                          : i18nd("plasma_lookandfeel_org.kde.lookandfeel", "&Log Out Now")',
      'text: "Close Desktop" // DeskDroid')
+edit(lo, "            LogoutButton {\n                id: cancelButton\n",
+     "            LogoutButton { // DeskDroid: Android's power menu\n"
+     "                id: phonePowerButton\n"
+     "                icon.name: \"system-shutdown\"\n"
+     "                text: \"Restart or Power Off\"\n"
+     "                onClicked: rebootRequested()\n"
+     "            }\n"
+     "            LogoutButton {\n                id: cancelButton\n")
 # --logout: show the logout prompt at start (SessionManagement starts it).
 mn = lg + "main.cpp"
 edit(mn, "        parser.addOption(lnfOption);\n",

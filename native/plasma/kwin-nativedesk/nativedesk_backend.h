@@ -48,6 +48,7 @@ public:
     void present(const std::shared_ptr<OutputFrame> &frame);
     void framePresented();
     void setPixelSize(const QSize &pixelSize);
+    void setUserScale(qreal scale);
 
 private:
     std::unique_ptr<RenderLoop> m_renderLoop;
@@ -152,6 +153,8 @@ public:
 
     // Copies a finished frame into a free buffer and shows it.
     void submit(const QImage &image);
+    // A text field took (true) or lost the keyboard focus: the phone's keyboard.
+    void setTextInputActive(bool active);
 
 private:
     struct Buffer
@@ -177,6 +180,7 @@ private:
     NativeDeskOutput *m_output = nullptr;
     std::unique_ptr<NativeDeskInputDevice> m_pointer;
     std::unique_ptr<NativeDeskInputDevice> m_keyboard;
+    bool m_textInputActive = false;
 };
 
 } // namespace KWin

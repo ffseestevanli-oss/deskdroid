@@ -193,7 +193,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
-        $(ls -d share/applications share/mime share/kxmlgui5 share/config.kcfg share/icons/breeze share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null))
+        $(ls -d share/applications share/mime share/kxmlgui5 share/config.kcfg share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null))
     fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
   fi

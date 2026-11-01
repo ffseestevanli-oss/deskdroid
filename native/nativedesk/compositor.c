@@ -80,6 +80,8 @@ struct input {
 };
 
 static struct {
+    JavaVM *vm;     /* for NativeDesk.onIme from the loop thread */
+    jclass cls;
     pthread_t thread;
     bool running;
     ANativeWindow *window;
@@ -98,6 +100,7 @@ static struct {
     uint32_t next_window;
     uint32_t screen_w, screen_h; /* the surface size the last frame was drawn at */
     bool resized;                /* set by nativeResized: draw a frame to pick up the new size */
+    float new_scale;             /* set by nativeSetScale: for the desktops, then 0 */
     /* Swapping the window (the activity went to the background and came
      * back): nativeStart/nativeDetach ask, the loop does it under C.lock. */
     ANativeWindow *pending_window;
@@ -303,6 +306,18 @@ static void accept_client(void)
     close(fd);
 }
 
+/* The phone's on-screen keyboard, shown or hidden by the app (NativeDesk.onIme). */
+static void ime(bool show)
+{
+    JNIEnv *env;
+    if (!C.vm || !C.cls) return;
+    if ((*C.vm)->GetEnv(C.vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK
+        && (*C.vm)->AttachCurrentThread(C.vm, &env, NULL) != JNI_OK) return;
+    jmethodID m = (*env)->GetStaticMethodID(env, C.cls, "onIme", "(Z)V");
+    if (m) (*env)->CallStaticVoidMethod(env, C.cls, m, (jboolean)show);
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+}
+
 /* Reads one packet; returns false when the client is gone. */
 static bool read_client(int i)
 {
@@ -403,6 +418,9 @@ static bool read_client(int i)
         C.dirty = true;
         break;
     }
+    case NDESK_IME:
+        ime(m.ime.show != 0);
+        break;
     default:
         if (fence >= 0) close(fence);
         return false;
@@ -699,6 +717,17 @@ static void *loop(void *unused)
         for (int k = 0; k < n_in; k++) handle_input(&in[k]);
         if (n_in) C.dirty = true;
         if (__atomic_exchange_n(&C.resized, false, __ATOMIC_ACQ_REL)) C.dirty = true;
+        pthread_mutex_lock(&C.lock);
+        float scale = C.new_scale;
+        C.new_scale = 0;
+        pthread_mutex_unlock(&C.lock);
+        for (int i = 0; scale > 0 && i < MAX_CLIENTS; i++) {
+            struct client *cl = C.clients[i];
+            if (!cl || !cl->desktop) continue;
+            struct ndesk_msg r = { .op = NDESK_SCALE, .scale = { scale } };
+            send_msg(cl, &r);
+            LOGI("window %u: scale %.2f", cl->window, scale);
+        }
         swap_window();
 
         if (C.dirty) {
@@ -731,6 +760,9 @@ static void *loop(void *unused)
     for (int i = 0; i < MAX_CLIENTS; i++)
         if (C.clients[i]) drop_client(i);
     egl_fini();
+    JNIEnv *env;
+    if (C.vm && (*C.vm)->GetEnv(C.vm, (void **)&env, JNI_VERSION_1_6) == JNI_OK)
+        (*C.vm)->DetachCurrentThread(C.vm); /* attached by ime() */
     return NULL;
 }
 
@@ -768,6 +800,10 @@ Java_io_deskdroid_app_NativeDesk_nativeStart(JNIEnv *env, jclass cls, jobject su
         pthread_mutex_unlock(&C.lock);
         wake();
         return JNI_TRUE;
+    }
+    if (!C.vm) {
+        (*env)->GetJavaVM(env, &C.vm);
+        C.cls = (*env)->NewGlobalRef(env, cls);
     }
     C.window = ANativeWindow_fromSurface(env, surface);
     C.listen_fd = listen_socket();
@@ -874,6 +910,16 @@ Java_io_deskdroid_app_NativeDesk_nativeResized(JNIEnv *env, jclass cls)
 {
     (void)env; (void)cls;
     __atomic_store_n(&C.resized, true, __ATOMIC_RELEASE);
+    wake();
+}
+
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeSetScale(JNIEnv *env, jclass cls, jfloat scale)
+{
+    (void)env; (void)cls;
+    pthread_mutex_lock(&C.lock);
+    C.new_scale = scale;
+    pthread_mutex_unlock(&C.lock);
     wake();
 }
 

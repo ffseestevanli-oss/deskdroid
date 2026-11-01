@@ -648,15 +648,33 @@ build_knewstuff() { kf knewstuff; }
 build_kfilemetadata() { kf kfilemetadata; }
 
 # Breeze's icon theme, as files (KIconThemes here doesn't embed it).
-# Its library and Breeze Dark need tools it builds for the target (no host
-# variants), so only the light theme's files are installed.
+# Its library needs tools it builds for the target (no host variants), so only
+# the themes' files are installed. Breeze Dark's symbolic icons are made from
+# the light ones by its generate-symbolic-dark, built here for the host; icons
+# it doesn't recolor come from Breeze, which Breeze Dark inherits (instead of
+# copies of them all).
 build_breeze_icons() {
-  local s; s="$(kf_src breeze-icons)"
-  sed -i -E 's/^add_subdirectory\((autotests|icons-dark|src)\)/# &/' "$s/CMakeLists.txt"
-  ! grep -qE '^add_subdirectory\((icons-dark|src)\)' "$s/CMakeLists.txt"
+  local s d; s="$(kf_src breeze-icons)"; d="$(mktemp -d)"
+  sed -i -E 's/^add_subdirectory\((autotests|src)\)/# &/' "$s/CMakeLists.txt"
+  ! grep -qE '^add_subdirectory\(src\)' "$s/CMakeLists.txt"
   perl -0pi -e 's/install\(EXPORT KF6BreezeIconsTargets.*?\)\n//s or die "breeze-icons export"' "$s/CMakeLists.txt"
+  perl -0pi -e 's/\n\s*foreach \(icon_file \$\{BREEZE_LIGHT_ICONS\}\).*?endforeach\(\)//s or die "breeze-dark fallback copies"' "$s/icons-dark/CMakeLists.txt"
   kde_cmake "$s" -DWITH_ICON_GENERATION=OFF
+  cat > "$d/CMakeLists.txt" <<EOF2
+cmake_minimum_required(VERSION 3.16)
+project(breeze_icons_host_tools CXX)
+find_package(Qt6 REQUIRED COMPONENTS Core)
+add_executable(generate-symbolic-dark "$s/src/tools/generate-symbolic-dark.cpp")
+target_link_libraries(generate-symbolic-dark Qt6::Core)
+EOF2
+  cmake -S "$d" -B "$d/_host" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_HOST_PATH"
+  cmake --build "$d/_host"
+  "$d/_host/generate-symbolic-dark" "$s/icons" "$d/dark"
+  find "$d/dark" -xtype l -delete
+  cp -a "$d/dark/." "$PREFIX/share/icons/breeze-dark/"
   test -e "$PREFIX/share/icons/breeze/index.theme"
+  test -e "$PREFIX/share/icons/breeze-dark/index.theme"
+  test -n "$(find "$PREFIX/share/icons/breeze-dark/places" -name 'folder*.svg' | head -1)"
 }
 # kcmutils' build tool (desktop files for settings pages), for the host: apps
 # with settings pages (Dolphin) run it at build time.
