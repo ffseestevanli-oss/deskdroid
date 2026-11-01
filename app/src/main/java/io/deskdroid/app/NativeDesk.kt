@@ -329,6 +329,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             // Breeze cursors (shipped in KWin's data) unless the user picked others.
             File(config, "kcminputrc").takeUnless { it.exists() }
                 ?.writeText("[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24\n")
+            applyDarkDefault(config, data)
             // KDE's app database (ksycoca) lists only the apps a menu file takes in;
             // with none, Plasma finds no apps. One menu with every installed app,
             // and a fresh database each start so it matches this build's apps.
@@ -413,8 +414,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         val data = File(filesDir, "kwin")
         val config = File(filesDir, "config").apply { mkdirs() }
         // No GPU path for Qt Quick yet: Qt's software renderer, through Wayland shm.
-        File(config, "kdeglobals").takeUnless { it.exists() }
-            ?.writeText("[QtQuickRendererSettings]\nSceneGraphBackend=software\n")
+        File(config, "kdeglobals").takeUnless { it.exists() && it.readText().contains("[QtQuickRendererSettings]") }
+            ?.appendText("\n[QtQuickRendererSettings]\nSceneGraphBackend=software\n")
         File(config, "kdeglobals").takeUnless { it.readText().contains("[Icons]") }
             ?.appendText("\n[Icons]\nTheme=breeze\n")
         writeUserDirs(config)
@@ -515,6 +516,22 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         AppLog.i("Native desktop test: apps: ${apps.joinToString().ifEmpty { "none" }}")
         return bin
+    }
+
+    /**
+     * Breeze Dark by default, once: its colors in kdeglobals (as Plasma's
+     * colour settings write them, for KWin's borders and the apps) and the
+     * Breeze Dark Plasma theme. A colour scheme or theme set later is kept.
+     */
+    private fun applyDarkDefault(config: File, data: File) {
+        val globals = File(config, "kdeglobals")
+        val dark = File(data, "share/color-schemes/BreezeDark.colors")
+        if (dark.exists() && !(globals.exists() && globals.readText().contains("ColorScheme="))) {
+            globals.appendText("\n" + dark.readText() + "\n[General]\nColorScheme=BreezeDark\n")
+            AppLog.i("Native desktop test: Breeze Dark colors set")
+        } else if (!dark.exists()) AppLog.i("Native desktop test: no BreezeDark.colors in the data")
+        File(config, "plasmarc").takeUnless { it.exists() && it.readText().contains("[Theme]") }
+            ?.appendText("\n[Theme]\nname=breeze-dark\n")
     }
 
     /**
