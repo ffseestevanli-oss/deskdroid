@@ -2,7 +2,7 @@
 
 A real KDE Plasma desktop on non-rooted Android phones: one app, tap to start, with a panel, windows, a file manager and a keyboard and mouse, on the phone screen or an external monitor. Licensed GPL-3.0. Distributed through GitHub Releases and F-Droid (not Google Play).
 
-**Try it:** the first alpha is on the [Releases page](https://github.com/ffseestevanli-oss/deskdroid/releases). It is an early test build, so expect rough edges.
+**Try it:** the first alpha, [0.1.0 alpha](https://github.com/ffseestevanli-oss/deskdroid/releases/tag/v0.1.0-alpha), is on the Releases page. It is an early test build, so expect rough edges.
 
 ## Plasma, running natively on Android
 
