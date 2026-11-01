@@ -805,6 +805,12 @@ build_pango() {
 }
 build_gdk_pixbuf() {
   local s; s="$(unpack https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz gdk-pixbuf-2.42.12.tar.xz)"
+  # gdk-pixbuf-pixdata for the build machine too: GTK's resources use it.
+  meson setup "$s/_host" "$s" --prefix="$HOSTPREFIX" --libdir=lib --buildtype=release -Ddefault_library=static \
+    --native-file "$WORK/native.ini" -Dpng=enabled -Djpeg=disabled -Dtiff=disabled -Dothers=disabled \
+    -Dbuiltin_loaders=png -Dintrospection=disabled -Dman=false -Dgtk_doc=false -Dtests=false -Dinstalled_tests=false
+  ninja -C "$s/_host" install
+  test -x "$HOSTPREFIX/bin/gdk-pixbuf-pixdata"
   meson_cross "$s" -Dpng=enabled -Djpeg=enabled -Dtiff=disabled -Dothers=disabled -Dbuiltin_loaders=png,jpeg \
     -Dintrospection=disabled -Dman=false -Dgtk_doc=false -Dtests=false -Dinstalled_tests=false
 }
