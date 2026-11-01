@@ -510,6 +510,9 @@ void NativeDeskBackend::readMessages()
                 m_size = QSize(m.configure.width, m.configure.height);
                 if (m_output) {
                     m_output->setPixelSize(m_size);
+                    // As KWin's nested Wayland backend does on a resize: the
+                    // workspace lays out panels, windows and screen edges again.
+                    Q_EMIT outputsQueried();
                 }
             }
             break;
