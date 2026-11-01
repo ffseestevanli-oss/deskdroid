@@ -58,9 +58,19 @@ object AppLog {
         } catch (e: Exception) {
             out = null
         }
-        val text = lines.joinToString("\n")
-        main.post { listener?.invoke(text) }
+        // The main screen's view of the log: at most five updates a second, and
+        // none while nothing shows it. Joining every line and posting it for
+        // each new line kept the main thread so busy, when the desktop logged a
+        // lot, that Android reported the app as not responding.
+        if (listener != null && !updatePending) {
+            updatePending = true
+            main.postDelayed({
+                synchronized(this) { updatePending = false }
+                listener?.invoke(text())
+            }, 200)
+        }
     }
+    private var updatePending = false
 
     @Synchronized
     fun text(): String = lines.joinToString("\n")
