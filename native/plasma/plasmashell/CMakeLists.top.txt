@@ -47,6 +47,8 @@ find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS
     WindowSystem XmlGui ColorScheme)
 find_package(KF6Declarative ${KF6_MIN_VERSION} REQUIRED) # KF6::CalendarEvents
 find_package(KF6ItemModels ${KF6_MIN_VERSION} REQUIRED) # libtaskmanager
+find_package(KF6NewStuff ${KF6_MIN_VERSION} REQUIRED) # Add Widgets (shellprivate)
+find_package(KF6TextWidgets ${KF6_MIN_VERSION} REQUIRED)
 find_package(Plasma ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(Plasma5Support ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(PlasmaQuick ${PROJECT_DEP_VERSION} REQUIRED)
@@ -89,6 +91,10 @@ add_subdirectory(libtaskmanager)
 add_subdirectory(applets/icon)
 # The time data engine the clock reads from (with plasma-workspace's
 # dataengines/CMakeLists.txt's settings: data engines aren't ported to them).
+# Editing the desktop and panels: the Add Widgets sidebar's QML module, and
+# the right-click menu (Add Widgets, Enter Edit Mode, panel settings).
+add_subdirectory(components/shellprivate)
+add_subdirectory(containmentactions/contextmenu)
 remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_TO_ASCII -DQT_NO_CAST_FROM_BYTEARRAY)
 add_subdirectory(dataengines/time)
 

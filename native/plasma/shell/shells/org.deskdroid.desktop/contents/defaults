@@ -4,12 +4,14 @@ ToolBox=
 RuntimePlatform=Desktop
 
 [Desktop][ContainmentActions]
+RightButton;NoModifier=org.kde.contextmenu
 
 [Panel]
 Containment=org.kde.panel
 ToolBox=
 
 [Panel][ContainmentActions]
+RightButton;NoModifier=org.kde.contextmenu
 
 [Theme]
 Theme=default

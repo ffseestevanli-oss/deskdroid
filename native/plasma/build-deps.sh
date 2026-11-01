@@ -694,7 +694,8 @@ build_plasmashell() {
   KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -I$HERE/x11-stubs"
   test -e "$PREFIX/lib/libplasmashell.so"
 }
-# plasma-desktop's QML-only packages, as they are: the panel containment.
+# plasma-desktop's QML-only packages: the panel containment, and the desktop
+# shell's views and settings.
 build_plasma_desktop_packages() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-desktop-$PLASMA_VERSION.tar.xz" "plasma-desktop-$PLASMA_VERSION.tar.xz")"
   rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.panel"
@@ -702,7 +703,12 @@ build_plasma_desktop_packages() {
   cp -r "$s/containments/panel" "$PREFIX/share/plasma/plasmoids/org.kde.panel"
   rm -f "$PREFIX/share/plasma/plasmoids/org.kde.panel/Messages.sh"
   test -e "$PREFIX/share/plasma/plasmoids/org.kde.panel/contents/ui/main.qml"
+  # Plasma's desktop shell views and settings (edit mode, panel settings,
+  # Add Widgets) under DeskDroid's shell; its own files go over these.
+  python3 "$HERE/patches/desktoppackage/shell-from-desktop.py" "$s" "$PREFIX/share/plasma/shells/org.deskdroid.desktop"
+  test -e "$PREFIX/share/plasma/shells/org.deskdroid.desktop/contents/configuration/PanelConfiguration.qml"
 }
+inputs_plasma_desktop_packages() { cat "$HERE"/patches/desktoppackage/*; }
 inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
@@ -712,8 +718,8 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
-     kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support plasmashell plasma_desktop_packages
-     sonnet ktextwidgets kparts attica syndication knewstuff kfilemetadata breeze_icons kcmutils_host dolphin)
+     kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
+     sonnet ktextwidgets kparts attica syndication knewstuff plasmashell plasma_desktop_packages kfilemetadata breeze_icons kcmutils_host dolphin)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
