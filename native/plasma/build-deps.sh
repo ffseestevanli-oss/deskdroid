@@ -809,6 +809,9 @@ build_gdk_pixbuf() {
 # ATK only (GTK 3 needs it; the D-Bus accessibility bus is for X11).
 build_atk() {
   local s; s="$(unpack https://download.gnome.org/sources/at-spi2-core/2.56/at-spi2-core-2.56.0.tar.xz at-spi2-core-2.56.0.tar.xz)"
+  # libxml2 is for the accessibility bus's tools, not ATK.
+  sed -i "s/^libxml_dep = dependency('libxml-2.0', version: libxml_req_version)$/libxml_dep = dependency('libxml-2.0', version: libxml_req_version, required: not get_option('atk_only'))/" "$s/meson.build"
+  grep -q "required: not get_option('atk_only'))" "$s/meson.build"
   meson_cross "$s" -Datk_only=true -Dintrospection=disabled -Ddocs=false -Dx11=disabled
   test -e "$PREFIX/lib/pkgconfig/atk.pc"
 }
