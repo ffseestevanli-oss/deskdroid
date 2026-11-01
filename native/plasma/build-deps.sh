@@ -732,6 +732,18 @@ build_kirigami_addons() {
   grep -q "^#if 0 // DeskDroid" "$s/src/dateandtime/types.h"
   kde_cmake "$s"
 }
+# Plasma's desktop: the folder view containment (files, icons, drag and
+# drop, right-click menu) and its C++ plugin.
+build_plasma_desktop_folder() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-desktop-$PLASMA_VERSION.tar.xz" "plasma-desktop-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  rm -rf "$s/_folderview" && cp -r "$HERE/desktopcontainment" "$s/_folderview"
+  kde_cmake "$s/_folderview" -DDESKTOP_SRC="$s"
+  rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.desktopcontainment"
+  cp -r "$s/containments/desktop/package" "$PREFIX/share/plasma/plasmoids/org.kde.desktopcontainment"
+  test -e "$PREFIX/share/plasma/plasmoids/org.kde.desktopcontainment/contents/ui/main.qml"
+}
+inputs_plasma_desktop_folder() { cat "$HERE"/desktopcontainment/*; }
 inputs_plasma_desktop_packages() { cat "$HERE"/patches/desktoppackage/*; }
 inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
 
@@ -743,7 +755,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
-     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages kfilemetadata breeze_icons kcmutils_host dolphin)
+     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder kfilemetadata breeze_icons kcmutils_host dolphin)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }

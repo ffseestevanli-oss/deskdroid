@@ -10,6 +10,10 @@ for (var i = 0; i < desktops.length; i++) {
     desktops[i].wallpaperPlugin = "org.deskdroid.gradient";
     desktops[i].currentConfigGroup = ["Wallpaper", "org.deskdroid.gradient", "General"];
     desktops[i].writeConfig("Image", "file://" + files + "/wallpaper.jpg");
+    // Plasma's folder view shows the Desktop folder (files/Desktop) directly:
+    // its usual desktop:/ address needs a KIO worker not built yet.
+    desktops[i].currentConfigGroup = ["General"];
+    desktops[i].writeConfig("url", "file://" + files + "/Desktop");
 }
 
 var panel = new Panel("org.kde.panel");

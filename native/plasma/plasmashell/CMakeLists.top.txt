@@ -104,6 +104,8 @@ add_subdirectory(containmentactions/contextmenu)
 # The application menu's models, and the hover filter its pages use.
 add_subdirectory(applets/kicker)
 add_subdirectory(components/trianglemousefilter)
+# The desktop containment's widget layout (org.kde.desktopcontainment).
+add_subdirectory(components/containmentlayoutmanager)
 remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_TO_ASCII -DQT_NO_CAST_FROM_BYTEARRAY)
 add_subdirectory(dataengines/time)
 
