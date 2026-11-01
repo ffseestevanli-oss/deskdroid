@@ -98,6 +98,14 @@ object NativeDesk {
                     Handler(Looper.getMainLooper()).post { PowerMenuService.open(activity?.get() ?: c) }
                     return
                 }
+                // App Store in Plasma's menu.
+                if (path == "deskdroid:store") {
+                    Handler(Looper.getMainLooper()).post {
+                        val a = activity?.get() ?: c
+                        a.startActivity(android.content.Intent(a, StoreActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                    return
+                }
                 // An Android app from Plasma's menu (writeAndroidApps).
                 if (path.startsWith("android-app:")) {
                     Handler(Looper.getMainLooper()).post { launchAndroidApp(c, path.removePrefix("android-app:")) }
@@ -395,6 +403,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     "[Desktop Entry]\nType=Application\nName=Android app\nGenericName=Open with an Android app\n" +
                     "Icon=smartphone\nExec=android-open %F\nMimeType=application/octet-stream;\nNoDisplay=true\n" +
                     "InitialPreference=1\n")
+            File(filesDir, ".local/share/applications/org.deskdroid.store.desktop").writeText(
+                "[Desktop Entry]\nType=Application\nName=App Store\nGenericName=Install KDE apps\n" +
+                "Icon=plasmadiscover\nExec=android-open deskdroid:store\nCategories=System;\n")
             NativeDesk.watchOpenRequests(applicationContext)
             Thread { writeAndroidApps() }.start() // before plasmashell reads the menu (KWin starts first)
             val bus = startSessionBus(libs, data, runtime)
@@ -564,6 +575,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 AppLog.i("Native desktop test: couldn't link $app: $e")
             }
         }
+        // Apps from the app store (Store.kt).
+        Store.installed(this).forEach { Store.linkCommand(this, it) }
         File(libs, "libdd_android-open.so").takeIf { it.exists() }?.let {
             try { android.system.Os.symlink(it.path, File(bin, "android-open").path) }
             catch (e: Exception) { AppLog.i("Native desktop test: couldn't link android-open: $e") }
@@ -572,11 +585,6 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         return bin
     }
 
-    /**
-     * Breeze Dark by default, once: its colors in kdeglobals (as Plasma's
-     * colour settings write them, for KWin's borders and the apps) and the
-     * Breeze Dark Plasma theme. A colour scheme or theme set later is kept.
-     */
     /**
      * The phone's apps in Plasma's menu (Android Apps, and search): a desktop
      * file and an icon for each, run through bin/android-open as
@@ -618,6 +626,11 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         AppLog.i("Native desktop: ${keep.size} Android apps in the menu")
     }
 
+    /**
+     * Breeze Dark by default, once: its colors in kdeglobals (as Plasma's
+     * colour settings write them, for KWin's borders and the apps) and the
+     * Breeze Dark Plasma theme. A colour scheme or theme set later is kept.
+     */
     private fun applyDarkDefault(config: File, data: File) {
         val globals = File(config, "kdeglobals")
         val dark = File(data, "share/color-schemes/BreezeDark.colors")
@@ -898,6 +911,10 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val grid = listOf(
                 ui.tile("Keyboard", io.deskdroid.app.ui.Party.CYAN) { showMenu(false); toggleKeyboard() },
                 scaleTile,
+                ui.tile("App Store", io.deskdroid.app.ui.Party.GREEN) {
+                    showMenu(false)
+                    startActivity(android.content.Intent(this@NativeDeskActivity, StoreActivity::class.java))
+                },
             )
             addView(ui.row(6) { grid.forEach { addView(ui.weight(it)) } }, LinearLayout.LayoutParams(-1, -2))
             spacer()

@@ -78,6 +78,7 @@ jobs:
           -PdeskdroidRootfsBaseUrl=https://github.com/${{ github.repository }}/releases/download/rootfs-latest/
           -PdeskdroidImagePublicKey="${{ vars.MINISIGN_PUBLIC_KEY }}"
           -PdeskdroidBuildNumber=${{ github.run_number }}
+          -PdeskdroidStoreBaseUrl=https://github.com/${{ github.repository }}/releases/download/${{ github.event_name == 'pull_request' && format('store-pr-{0}', github.event.pull_request.number) || 'store-latest' }}/
       # Fail the build if the APK wouldn't install: bad signature or manifest.
       - name: Check the APK
         run: |
@@ -119,6 +120,28 @@ jobs:
           fi
       # Pull requests from this repo get their own pre-release (apk-pr-N), so a
       # test build can be installed from a phone without GitHub's artifact zips.
+      # The app store's catalog and packages (Store.kt): store-latest for main,
+      # store-pr-N for a pull request's test builds, which point there.
+      - name: Publish the app store
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          dir=app/build/generated/nativeTools/store
+          if [ ! -s "$dir/index.json" ]; then echo "No store packages in this build"; exit 0; fi
+          cat "$dir/index.json"
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            tag="store-pr-${{ github.event.pull_request.number }}"; pre=--prerelease
+          else
+            tag=store-latest; pre=
+          fi
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "${{ github.event.pull_request.head.sha || github.sha }}" $pre --latest=false \
+              --title "DeskDroid app store ($tag)" --notes "Apps for DeskDroid's native desktop, installed from its App Store. Not meant to be downloaded by hand."
+          fi
+          gh release upload "$tag" "$dir"/* --clobber
+
       - name: Publish as the apk-pr-N pre-release
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:

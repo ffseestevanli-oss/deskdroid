@@ -76,7 +76,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Stage 5: apps, built as libraries too (native/plasma/apps/as-library.py),
     # each started by its command bin/<app>, a link to libdd_qtapp.so (qtapp.sh).
     apps=()
-    for app in dolphin kioworker ksmserver-logout-greeter kwrite gwenview; do
+    # Apps in DeskDroid's app store instead of the APK: packaged below.
+    store_apps=(gwenview)
+    for app in dolphin kioworker ksmserver-logout-greeter kwrite; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
       bundled+=("$OUT/libdd_$app.so"); apps+=("$app")
@@ -173,6 +175,57 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       "$BIN/llvm-strip" --strip-unneeded "$f"
     done
     echo "   ${#bundled[@]} libraries, $(du -ch "${bundled[@]}" | tail -1 | cut -f1)"
+    # The app store's packages (StoreActivity.kt installs them): one zip per
+    # app with its library, the libraries it needs that the APK doesn't have
+    # (lib/), its menu entry, icons and data (share/), and its catalog entry.
+    # They go next to the APK's libraries' folder; CI publishes them.
+    STORE_OUT="$(dirname "$(dirname "$OUT")")/store"
+    rm -rf "$STORE_OUT" && mkdir -p "$STORE_OUT"
+    store_entries=()
+    for app in "${store_apps[@]}"; do
+      [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
+      pkg="$WORK/store/$app"; rm -rf "$pkg"; mkdir -p "$pkg/lib" "$pkg/share"
+      install -m 644 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$pkg/lib/libdd_$app.so"
+      todo=("$pkg/lib/libdd_$app.so"); own=("$pkg/lib/libdd_$app.so")
+      while [ ${#todo[@]} -gt 0 ]; do
+        f="${todo[0]}"; todo=("${todo[@]:1}")
+        for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
+          [ -e "$sysroot/$API/$(unversioned "$lib")" ] || [ -e "$sysroot/$(unversioned "$lib")" ] && continue
+          name="$(bundlename "$lib")"
+          [ -e "$OUT/$name" ] || [ -e "$pkg/lib/$name" ] && continue
+          src="$DESKDROID_QT_ANDROID/lib/$lib"
+          if [ ! -e "$src" ]; then echo "   ? $lib (for $app, not in the prefix)"; continue; fi
+          install -m 644 "$src" "$pkg/lib/$name"
+          own+=("$pkg/lib/$name"); todo+=("$src")
+        done
+      done
+      for f in "${own[@]}"; do
+        args=()
+        for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
+          name="$(bundlename "$lib")"
+          [ "$name" != "$lib" ] && { [ -e "$OUT/$name" ] || [ -e "$pkg/lib/$name" ]; } && args+=(--replace-needed "$lib" "$name")
+        done
+        soname="$("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Library soname: \[\([^]]*\)\].*/\1/p')"
+        [ -n "$soname" ] && [ "$soname" != "$(basename "$f")" ] && args+=(--set-soname "$(basename "$f")")
+        [ ${#args[@]} -gt 0 ] && patchelf --page-size 16384 "${args[@]}" "$f"
+        "$BIN/llvm-strip" --strip-unneeded "$f"
+      done
+      (cd "$DESKDROID_QT_ANDROID" && for d in share/applications/*"$app"*.desktop share/"$app" share/kxmlgui5/"$app" \
+          share/icons/hicolor/*/apps/"$app".* share/config.kcfg/"$app"* share/metainfo/*"$app"*; do
+        [ -e "$d" ] && mkdir -p "$pkg/$(dirname "$d")" && cp -r "$d" "$pkg/$d"
+      done; true)
+      desktop="$(ls "$pkg"/share/applications/*.desktop 2>/dev/null | head -1)"
+      title="$(sed -n 's/^Name=//p' "$desktop" | head -1)"; summary="$(sed -n 's/^GenericName=//p' "$desktop" | head -1)"
+      version="$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' "$pkg"/share/metainfo/*"$app"* 2>/dev/null | head -1)"
+      echo "$app" > "$pkg/app.txt"
+      rm -f "$STORE_OUT/$app.zip"; (cd "$pkg" && zip -qr -X "$STORE_OUT/$app.zip" .)
+      size="$(stat -c %s "$STORE_OUT/$app.zip")"; sha="$(sha256sum "$STORE_OUT/$app.zip" | cut -d' ' -f1)"
+      cp "$(ls "$pkg"/share/icons/hicolor/128x128/apps/"$app".png "$pkg"/share/icons/hicolor/*/apps/"$app".png 2>/dev/null | head -1)" "$STORE_OUT/$app.png" 2>/dev/null || true
+      store_entries+=("$(printf '{"id":"%s","name":"%s","summary":"%s","version":"%s","size":%s,"sha256":"%s","file":"%s.zip","icon":"%s.png"}' \
+        "$app" "${title:-$app}" "$summary" "${version:-}" "$size" "$sha" "$app" "$app")")
+      echo "   store: $app ($(du -h "$STORE_OUT/$app.zip" | cut -f1), ${#own[@]} libraries)"
+    done
+    (IFS=,; echo "{\"version\":1,\"apps\":[${store_entries[*]}]}") > "$STORE_OUT/index.json"
     # Data KWin reads at run time (keyboard layouts, its own files), as a zip
     # named like a library so it ships the same way; the app unpacks it.
     rm -f "$OUT/libkwin_data.so"
@@ -193,7 +246,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
-        $(ls -d share/applications share/mime share/kxmlgui5 share/config.kcfg share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null))
+        $(ls -d share/applications share/mime share/kxmlgui5 share/config.kcfg share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
+        -x $(for a in "${store_apps[@]}"; do echo "share/applications/*$a*"; done))
     fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
   fi

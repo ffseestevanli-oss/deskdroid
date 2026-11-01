@@ -24,7 +24,9 @@ object QtHost {
         load(File(libs, "libc++_shared.so"))
         load(File(libs, "libQt6Core_arm64-v8a.so"))
         loadInAnyOrder(File(libs).listFiles { f -> f.name.startsWith("libQt6") }.orEmpty().sortedBy { it.name })
-        loadWithDependencies(File(libs, args[1]))
+        // An app from DeskDroid's app store comes as a full path (qtapp.sh), its
+        // own libraries next to it; the rest come from the APK.
+        loadWithDependencies(File(args[1]).takeIf { it.isAbsolute } ?: File(libs, args[1]), libs)
         println("QtHost: libraries loaded, starting ${args[1]}")
         System.exit(run(args.copyOfRange(2, args.size)))
     }
@@ -33,16 +35,16 @@ object QtHost {
      * Loads a library after whatever it needs from the same directory, found
      * from the linker's own "library ... not found" errors.
      */
-    private fun loadWithDependencies(lib: File, tried: MutableSet<String> = mutableSetOf()) {
+    private fun loadWithDependencies(lib: File, libs: String, tried: MutableSet<String> = mutableSetOf()) {
         while (true) {
             try {
                 load(lib)
                 return
             } catch (e: UnsatisfiedLinkError) {
                 val missing = Regex("library \"([^\"]+)\" not found").find(e.message.orEmpty())?.groupValues?.get(1)
-                val dep = missing?.let { File(lib.parentFile, it) }
+                val dep = missing?.let { File(lib.parentFile, it).takeIf { f -> f.exists() } ?: File(libs, it) }
                 if (dep == null || !dep.exists() || !tried.add(dep.name)) throw e
-                loadWithDependencies(dep, tried)
+                loadWithDependencies(dep, libs, tried)
             }
         }
     }

@@ -86,6 +86,12 @@
             </intent-filter>
         </activity>
 
+        <!-- The app store (Store.kt), over the desktop. -->
+        <activity
+            android:name=".StoreActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
         <!-- Restart or Power Off on the desktop's logout screen: Android's power menu. -->
         <service
             android:name=".PowerMenuService"

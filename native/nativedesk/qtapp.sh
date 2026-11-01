@@ -8,4 +8,7 @@ self="$(readlink -f "$0")"
 libs="${self%/*}"
 app="${0##*/}"
 if [ "$app" = libdd_qtapp.so ]; then app="$1"; shift; fi
-exec /system/bin/app_process -Xnoimage-dex2oat / io.deskdroid.app.QtHost "$libs" "libdd_$app.so" "$@"
+# An app installed from DeskDroid's app store (StoreActivity.kt) has its own folder.
+lib="libdd_$app.so"
+[ -e "$HOME/store/apps/$app/lib/$lib" ] && lib="$HOME/store/apps/$app/lib/$lib"
+exec /system/bin/app_process -Xnoimage-dex2oat / io.deskdroid.app.QtHost "$libs" "$lib" "$@"

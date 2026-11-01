@@ -22,6 +22,11 @@ android {
             "String", "ROOTFS_BASE_URL",
             "\"${project.findProperty("deskdroidRootfsBaseUrl")}\""
         )
+        // The app store's catalog and packages (Store.kt), a release CI publishes.
+        buildConfigField(
+            "String", "STORE_BASE_URL",
+            "\"${project.findProperty("deskdroidStoreBaseUrl") ?: "https://github.com/ffseestevanli-oss/deskdroid/releases/download/store-latest/"}\""
+        )
         buildConfigField(
             "String", "IMAGE_PUBLIC_KEY",
             "\"${project.findProperty("deskdroidImagePublicKey") ?: ""}\""
