@@ -24,6 +24,8 @@ t = t.replace(exe, f"add_library({target} SHARED)\nset_target_properties({target
 # Installed with the libraries, not as a program.
 t = t.replace(f"install(TARGETS {target} ${{KDE_INSTALL_TARGETS_DEFAULT_ARGS}})",
               f"install(TARGETS {target} LIBRARY DESTINATION ${{KDE_INSTALL_LIBDIR}})")
+# Windows and macOS app icons only, and only for executables.
+t = re.sub(rf"ecm_add_app_icon\({re.escape(target)}\b[^)]*\)", "", t)
 p.write_text(t)
 
 p = src / main

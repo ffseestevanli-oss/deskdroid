@@ -621,7 +621,32 @@ build_knewstuff() { kf knewstuff; }
 build_kfilemetadata() { kf kfilemetadata; }
 
 # Breeze's icon theme, as files (KIconThemes here doesn't embed it).
-build_breeze_icons() { kf breeze-icons -DWITH_ICON_GENERATION=OFF; test -e "$PREFIX/share/icons/breeze/index.theme"; }
+# Its library and Breeze Dark need tools it builds for the target (no host
+# variants), so only the light theme's files are installed.
+build_breeze_icons() {
+  local s; s="$(kf_src breeze-icons)"
+  sed -i -E 's/^add_subdirectory\((autotests|icons-dark|src)\)/# &/' "$s/CMakeLists.txt"
+  ! grep -qE '^add_subdirectory\((icons-dark|src)\)' "$s/CMakeLists.txt"
+  kde_cmake "$s" -DWITH_ICON_GENERATION=OFF
+  test -e "$PREFIX/share/icons/breeze/index.theme"
+}
+# kcmutils' build tool (desktop files for settings pages), for the host: apps
+# with settings pages (Dolphin) run it at build time.
+build_kcmutils_host() {
+  local s d; s="$(kf_src kcmutils)"; d="$(mktemp -d)"
+  cat > "$d/CMakeLists.txt" <<EOF2
+cmake_minimum_required(VERSION 3.16)
+project(kcmutils_host_tools CXX)
+find_package(Qt6 REQUIRED COMPONENTS Core)
+add_executable(kcmdesktopfilegenerator "$s/tools/kcmmetadatagenerator.cpp")
+target_link_libraries(kcmdesktopfilegenerator Qt6::Core)
+install(TARGETS kcmdesktopfilegenerator EXPORT KF6KCMUtilsToolingTargets DESTINATION lib/libexec/kf6)
+install(EXPORT KF6KCMUtilsToolingTargets DESTINATION lib/cmake/KF6KCMUtils FILE KF6KCMUtilsToolingTargets.cmake NAMESPACE KF6::)
+EOF2
+  cmake -S "$d" -B "$d/_host" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_HOST_PATH" -DCMAKE_INSTALL_PREFIX="$HOSTPREFIX"
+  cmake --build "$d/_host" && cmake --install "$d/_host"
+  test -e "$HOSTPREFIX/lib/cmake/KF6KCMUtils/KF6KCMUtilsToolingTargets.cmake"
+}
 
 # ---- Apps (stage 5) -----------------------------------------------------------
 
@@ -667,7 +692,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support plasmashell plasma_desktop_packages
-     sonnet ktextwidgets kparts attica syndication knewstuff kfilemetadata breeze_icons dolphin)
+     sonnet ktextwidgets kparts attica syndication knewstuff kfilemetadata breeze_icons kcmutils_host dolphin)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }

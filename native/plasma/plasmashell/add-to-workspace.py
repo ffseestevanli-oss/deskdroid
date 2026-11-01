@@ -56,6 +56,10 @@ t = t[:a] + t[b:]
 assert "icu" not in t and "m_tzNames" not in t
 (ws / dc / "timezonesi18n.cpp").write_text(t)
 
+# libtaskmanager's X11 helper (used only on X11) asks for QX11Application.
+edit("libtaskmanager/virtualdesktopinfo.cpp",
+     "return qGuiApp->nativeInterface<QNativeInterface::QX11Application>()->connection();", "return nullptr;")
+
 entry = (here.parent / "kwin-nativedesk" / "qthost_entry.cpp").read_text()
 entry = entry.replace("KWin's main_wayland.cpp: on Android kwin_wayland", "plasmashell's main.cpp: on Android plasmashell")
 entry = entry.replace('args.push_back("kwin_wayland")', 'args.push_back("plasmashell")')
