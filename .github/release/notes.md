@@ -23,3 +23,5 @@
 - Restart or Power Off asks you to turn on "DeskDroid power menu" in Accessibility settings the first time.
 
 If something breaks, a log from DeskDroid's menu helps a lot.
+
+Built from [6a0b1ab](https://github.com/ffseestevanli-oss/deskdroid/commit/6a0b1ab0f0e93a7ae3251b36ba2cf3413c036429) in pull request #31 (CI build 200). The native desktop isn't merged into main yet.

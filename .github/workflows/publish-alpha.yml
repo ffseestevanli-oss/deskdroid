@@ -22,6 +22,6 @@ jobs:
           cp "$src" deskdroid-0.1.0-alpha-build-200.apk
           sha256sum deskdroid-0.1.0-alpha-build-200.apk
           gh release create v0.1.0-alpha deskdroid-0.1.0-alpha-build-200.apk \
-            --target 6a0b1ab0f0e93a7ae3251b36ba2cf3413c036429 \
+            --target 3731845f51465092b6ce679b42b10beeb7aea591 \
             --title "DeskDroid 0.1.0 alpha (build 200): native Plasma" \
             --notes-file .github/release/notes.md --prerelease --latest=false
