@@ -559,6 +559,25 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             "TEMPLATES" to "$home/Templates",
             "PUBLICSHARE" to "$home/Public",
         )
+        // The desktop shows the phone's Desktop folder when DeskDroid has All files
+        // access: files/Desktop (where the desktop and user-dirs point) links to it.
+        val desktop = File(home, "Desktop")
+        if (Storage.granted(this)) {
+            val phoneDesktop = File(android.os.Environment.getExternalStorageDirectory(), "Desktop").apply { mkdirs() }
+            try {
+                val link = java.nio.file.Files.isSymbolicLink(desktop.toPath())
+                if (!link && desktop.isDirectory && desktop.list().isNullOrEmpty()) desktop.delete()
+                if (!link && desktop.exists()) {
+                    AppLog.i("Native desktop test: files/Desktop has files, so the desktop keeps showing it")
+                } else if (!link) {
+                    android.system.Os.symlink(phoneDesktop.path, desktop.path)
+                }
+            } catch (e: Exception) {
+                AppLog.i("Native desktop test: couldn't link the phone's Desktop folder: $e")
+            }
+        } else if (java.nio.file.Files.isSymbolicLink(desktop.toPath())) {
+            desktop.delete() // no access to the phone's folder any more
+        }
         dirs.values.forEach { File(it).mkdirs() }
         File(config, "user-dirs.dirs").writeText(dirs.entries.joinToString("") { (k, v) -> "XDG_${k}_DIR=\"$v\"\n" })
         AppLog.i("Native desktop test: user folders ${if (Storage.granted(this)) "on the phone's storage" else "in app storage (no All files access)"}")
