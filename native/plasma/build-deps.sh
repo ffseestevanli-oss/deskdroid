@@ -330,6 +330,8 @@ build_qtdeclarative() { qt_module qtdeclarative; }
 build_qtsvg() { qt_module qtsvg; }
 build_qt5compat() { qt_module qt5compat; }
 build_qtsensors() { qt_module qtsensors; }
+# Text to speech, which KTextEditor needs (its "Say" actions).
+build_qtspeech() { qt_module qtspeech; }
 build_qtwayland() {
   local s; s="$(qt_src qtwayland)"
   # qtwayland skips Android outright; the client side is plain Linux code.
@@ -685,6 +687,20 @@ build_dolphin() {
   KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
   test -e "$PREFIX/lib/libdolphin.so"
 }
+# KWrite: KDE's text editor, from Kate's sources without Kate and its
+# plugins. KSyntaxHighlighting builds its indexer for the host itself.
+build_syntax_highlighting() { kf syntax-highlighting; }
+build_ktexteditor() { kf ktexteditor -DENABLE_KAUTH=OFF; }
+build_kwrite() {
+  local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/kate-$GEAR_VERSION.tar.xz" "kate-$GEAR_VERSION.tar.xz")"
+  sed -i 's|^add_executable(kwrite main.cpp data/kwrite.qrc)|add_executable(kwrite)\ntarget_sources(kwrite PRIVATE main.cpp data/kwrite.qrc)|' "$s/apps/kwrite/CMakeLists.txt"
+  python3 "$HERE/apps/as-library.py" "$s" apps/kwrite/CMakeLists.txt kwrite apps/kwrite/main.cpp
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DBUILD_addons=OFF -DBUILD_kate=OFF -DBUILD_doc=OFF -DENABLE_PCH=OFF -DUSE_DBUS=ON \
+    -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
+  test -e "$PREFIX/lib/libkwrite.so"
+}
+inputs_kwrite() { inputs_dolphin; }
 inputs_dolphin() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
 
 # ---- plasmashell (stage 4b) ---------------------------------------------------
@@ -766,13 +782,14 @@ inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HE
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
-     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtwayland qttools
+     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtspeech qtwayland qttools
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
-     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin)
+     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
+     syntax_highlighting ktexteditor kwrite)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
