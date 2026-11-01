@@ -599,9 +599,11 @@ build_libplasma() {
 inputs_libplasma() { cat "$HERE"/x11-stubs/* "$HERE"/patches/libplasma/*; }
 build_layer_shell_qt() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/layer-shell-qt-$PLASMA_VERSION.tar.xz" "layer-shell-qt-$PLASMA_VERSION.tar.xz")"
+  python3 "$HERE/patches/layer-shell-qt/popup-role.py" "$s"
   unandroid "$s"
   kde_cmake "$s"
 }
+inputs_layer_shell_qt() { cat "$HERE"/patches/layer-shell-qt/*; }
 
 # Global shortcuts: KWin runs kglobalacceld's library in its own process (it
 # answers org.kde.kglobalaccel on D-Bus for plasmashell and apps), with its own
