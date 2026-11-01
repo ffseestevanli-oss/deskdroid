@@ -261,7 +261,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("FONTCONFIG_FILE", fonts.path)
                     put("QT_QPA_FONTDIR", "/system/fonts")
                     put("KWIN_COMPOSE", "Q") // QPainter: the backend draws on the CPU for now
-                    put("KDE_DEBUG", "1") // no KCrash handler: our own prints where a crash happened
+                    put("KDE_DEBUG", "1")
+                    put("QT_LOGGING_RULES", "kf.service.*=true;js=true") // why the app database comes up empty // no KCrash handler: our own prints where a crash happened
                     put("KWIN_FORCE_OWN_QPA", "1") // KWin only takes its own Qt platform plugin when the program is named kwin_wayland; ours is app_process
                 }
             }.start()
@@ -307,7 +308,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         writeUserDirs(config)
         // While DeskDroid's default layout changes from build to build, start from it
         // again when it's newer than the saved one (layout.js runs only without one).
-        val layoutVersion = "3"
+        val layoutVersion = "4"
         val stamp = File(config, "deskdroid-layout-version")
         if (stamp.takeIf { it.exists() }?.readText() != layoutVersion) {
             File(config, "plasma-org.deskdroid.desktop-appletsrc").delete()
@@ -341,6 +342,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("QML_IMPORT_PATH", File(data, "qml").path)
                     put("QT_QUICK_BACKEND", "software")
                     put("KDE_DEBUG", "1")
+                    put("QT_LOGGING_RULES", "kf.service.*=true;js=true") // why the app database comes up empty
                     // Apps the desktop starts (bin/dolphin...) inherit all this.
                     put("PATH", "${bin.path}:${System.getenv("PATH") ?: "/system/bin"}")
                     sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }

@@ -13,6 +13,14 @@ panel.height = 2 * Math.floor(gridUnit * 2.5 / 2);
 var launchers = ["org.kde.dolphin.desktop"];
 for (var j = 0; j < launchers.length; j++) {
     var path = applicationPath(launchers[j]);
+    if (!path) {
+        // No app database yet: take the desktop file from the bundled share folder
+        // (files/config is the config folder, files/kwin/share holds the apps).
+        var files = userDataPath("config").replace(/\/[^\/]*\/?$/, "");
+        var bundled = files + "/kwin/share/applications/" + launchers[j];
+        if (fileExists(bundled)) path = bundled;
+    }
+    print("deskdroid layout: " + launchers[j] + " -> " + path);
     if (path) {
         var icon = panel.addWidget("org.kde.plasma.icon");
         icon.currentConfigGroup = ["General"];
