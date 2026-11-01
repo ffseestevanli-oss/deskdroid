@@ -756,6 +756,70 @@ build_gwenview() {
 inputs_gwenview() { inputs_dolphin; }
 inputs_dolphin() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
 
+# ---- GTK 3 (for Floorp, stage 6) ----------------------------------------------
+# GNOME's toolkit for Android: GLib, Cairo, Pango and GTK 3 with only its
+# Wayland backend, shown on KWin like the KDE apps.
+
+build_pcre2() {
+  local s; s="$(unpack https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.45/pcre2-10.45.tar.bz2 pcre2-10.45.tar.bz2)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -DPCRE2_BUILD_PCRE2GREP=OFF -DPCRE2_BUILD_TESTS=OFF -DPCRE2_SUPPORT_JIT=ON
+}
+# GLib's build tools (glib-compile-resources, -schemas, glib-mkenums...) for
+# the build machine first, then GLib for Android.
+build_glib() {
+  local s; s="$(unpack https://download.gnome.org/sources/glib/2.84/glib-2.84.1.tar.xz glib-2.84.1.tar.xz)"
+  local opts=(-Dtests=false -Dintrospection=disabled -Dman-pages=disabled -Ddocumentation=false -Dsysprof=disabled
+    -Dselinux=disabled -Dxattr=false -Dlibmount=disabled -Dnls=disabled -Dlibelf=disabled -Dglib_debug=disabled)
+  meson setup "$s/_host" "$s" --prefix="$HOSTPREFIX" --libdir=lib --buildtype=release "${opts[@]}"
+  ninja -C "$s/_host" install
+  meson_cross "$s" "${opts[@]}"
+  test -e "$PREFIX/lib/libgio-2.0.so" && test -x "$HOSTPREFIX/bin/glib-compile-resources"
+}
+build_pixman() {
+  local s; s="$(unpack https://cairographics.org/releases/pixman-0.46.0.tar.gz pixman-0.46.0.tar.gz)"
+  meson_cross "$s" -Dtests=disabled -Ddemos=disabled -Dgtk=disabled -Dlibpng=disabled
+}
+build_fribidi() {
+  local s; s="$(unpack https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz fribidi-1.0.16.tar.xz)"
+  meson_cross "$s" -Ddocs=false -Dtests=false -Dbin=false
+}
+build_harfbuzz() {
+  local s; s="$(unpack https://github.com/harfbuzz/harfbuzz/releases/download/11.2.1/harfbuzz-11.2.1.tar.xz harfbuzz-11.2.1.tar.xz)"
+  meson_cross "$s" -Dglib=enabled -Dgobject=enabled -Dfreetype=enabled -Dcairo=disabled -Dicu=disabled \
+    -Dtests=disabled -Ddocs=disabled -Dintrospection=disabled -Dutilities=disabled -Dbenchmark=disabled
+}
+build_cairo() {
+  local s; s="$(unpack https://cairographics.org/releases/cairo-1.18.4.tar.xz cairo-1.18.4.tar.xz)"
+  meson_cross "$s" -Dxlib=disabled -Dxcb=disabled -Dquartz=disabled -Dtee=disabled -Dpng=enabled \
+    -Dfreetype=enabled -Dfontconfig=enabled -Dglib=enabled -Dtests=disabled -Dgtk_doc=false \
+    -Dspectre=disabled -Dsymbol-lookup=disabled -Dlzo=disabled
+  test -e "$PREFIX/lib/pkgconfig/cairo-gobject.pc"
+}
+build_pango() {
+  local s; s="$(unpack https://download.gnome.org/sources/pango/1.56/pango-1.56.3.tar.xz pango-1.56.3.tar.xz)"
+  meson_cross "$s" -Dintrospection=disabled -Dbuild-testsuite=false -Dbuild-examples=false -Dxft=disabled \
+    -Dfontconfig=enabled -Dfreetype=enabled -Dcairo=enabled -Dlibthai=disabled -Dsysprof=disabled -Ddocumentation=false
+  test -e "$PREFIX/lib/pkgconfig/pangoft2.pc"
+}
+build_gdk_pixbuf() {
+  local s; s="$(unpack https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz gdk-pixbuf-2.42.12.tar.xz)"
+  meson_cross "$s" -Dpng=enabled -Djpeg=enabled -Dtiff=disabled -Dothers=disabled -Dbuiltin_loaders=png,jpeg \
+    -Dintrospection=disabled -Dman=false -Dgtk_doc=false -Dtests=false -Dinstalled_tests=false
+}
+# ATK only (GTK 3 needs it; the D-Bus accessibility bus is for X11).
+build_atk() {
+  local s; s="$(unpack https://download.gnome.org/sources/at-spi2-core/2.56/at-spi2-core-2.56.0.tar.xz at-spi2-core-2.56.0.tar.xz)"
+  meson_cross "$s" -Datk_only=true -Dintrospection=disabled -Ddocs=false -Dx11=disabled
+  test -e "$PREFIX/lib/pkgconfig/atk.pc"
+}
+build_gtk3() {
+  local s; s="$(unpack https://download.gnome.org/sources/gtk/3.24/gtk-3.24.49.tar.xz gtk-3.24.49.tar.xz)"
+  meson_cross "$s" -Dx11_backend=false -Dwayland_backend=true -Dbroadway_backend=false -Dwin32_backend=false \
+    -Dquartz_backend=false -Dprint_backends=file -Dcolord=no -Dintrospection=false -Ddemos=false \
+    -Dexamples=false -Dtests=false -Dinstalled_tests=false -Dgtk_doc=false -Dman=false
+  test -e "$PREFIX/lib/libgtk-3.so" && test -e "$PREFIX/lib/pkgconfig/gtk+-wayland-3.0.pc"
+}
+
 # ---- plasmashell (stage 4b) ---------------------------------------------------
 
 build_plasmashell() {
@@ -842,7 +906,8 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
      sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
-     syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview)
+     syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview
+     pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
