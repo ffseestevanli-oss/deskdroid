@@ -627,6 +627,7 @@ build_breeze_icons() {
   local s; s="$(kf_src breeze-icons)"
   sed -i -E 's/^add_subdirectory\((autotests|icons-dark|src)\)/# &/' "$s/CMakeLists.txt"
   ! grep -qE '^add_subdirectory\((icons-dark|src)\)' "$s/CMakeLists.txt"
+  perl -0pi -e 's/install\(EXPORT KF6BreezeIconsTargets.*?\)\n//s or die "breeze-icons export"' "$s/CMakeLists.txt"
   kde_cmake "$s" -DWITH_ICON_GENERATION=OFF
   test -e "$PREFIX/share/icons/breeze/index.theme"
 }
