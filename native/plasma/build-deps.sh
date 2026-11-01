@@ -607,6 +607,35 @@ build_plasma5support() {
   test -e "$PREFIX/lib/cmake/Plasma5Support/Plasma5SupportConfig.cmake"
 }
 
+# ---- Apps' frameworks (stage 5) ----------------------------------------------
+
+# Spell checking: no dictionaries backend yet (Hunspell comes later); the
+# trigram data for language guessing needs a host tool, so it's left out.
+build_sonnet() { kf sonnet -DSONNET_NO_BACKENDS=ON; }
+build_ktextwidgets() { kf ktextwidgets -DWITH_TEXT_TO_SPEECH=OFF; }
+build_kparts() { kf kparts; }
+build_attica() { kf attica; }
+build_syndication() { kf syndication; }
+build_knewstuff() { kf knewstuff; }
+# File metadata without extractors for now (no taglib, exiv2, poppler).
+build_kfilemetadata() { kf kfilemetadata; }
+
+# ---- Apps (stage 5) -----------------------------------------------------------
+
+GEAR_VERSION=25.08.2
+# Dolphin, as a library QtHost starts (apps/as-library.py), like plasmashell.
+build_dolphin() {
+  local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/dolphin-$GEAR_VERSION.tar.xz" "dolphin-$GEAR_VERSION.tar.xz")"
+  python3 "$HERE/apps/as-library.py" "$s" src/CMakeLists.txt dolphin src/main.cpp
+  # Wayland only: Dolphin assumes X11 on any Unix.
+  sed -i 's/^    set(HAVE_X11 TRUE)/    set(HAVE_X11 FALSE)/' "$s/CMakeLists.txt"
+  grep -q "set(HAVE_X11 FALSE)" "$s/CMakeLists.txt"
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
+  test -e "$PREFIX/lib/libdolphin.so"
+}
+inputs_dolphin() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
+
 # ---- plasmashell (stage 4b) ---------------------------------------------------
 
 build_plasmashell() {
@@ -634,7 +663,8 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
-     kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support plasmashell plasma_desktop_packages)
+     kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support plasmashell plasma_desktop_packages
+     sonnet ktextwidgets kparts attica syndication knewstuff kfilemetadata dolphin)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
