@@ -825,8 +825,8 @@ build_kcalc() {
 }
 inputs_kcalc() { inputs_dolphin; }
 # Konsole: KDE's terminal, on KPty and KNotifyConfig. Its right-to-left text
-# uses ICU's C API (ubidi, ushape), whose tables are compiled in: ICU's data
-# is left out (the "archive" packaging with no archive shipped).
+# uses ICU's C API (ubidi, ushape), whose tables are compiled in: only ICU's
+# libraries are built, its data left out (libicudata is the stub).
 build_icu() {
   local s; s="$(unpack https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz icu4c-76_1-src.tgz)"
   mkdir -p "$s/_host" "$s/_android"
@@ -836,10 +836,13 @@ build_icu() {
     CXXFLAGS="-O2 -fPIC" LDFLAGS="-lc++_shared" \
     ../source/configure --host=$TRIPLE --prefix="$PREFIX" --libdir="$PREFIX/lib" --with-cross-build="$s/_host" \
       --with-data-packaging=archive --disable-tests --disable-samples --disable-extras --disable-tools --disable-icuio \
-      --disable-layoutex --enable-shared --disable-static && make -j"$JOBS" && make install)
+      --disable-layoutex --enable-shared --disable-static)
+  # Only the libraries: the data build wants an ICU data list the host
+  # tools would make, and no data is shipped. stubdata is the empty libicudata.
+  for d in stubdata common i18n; do make -C "$s/_android/$d" -j"$JOBS" || return 1; make -C "$s/_android/$d" install || return 1; done
   test -e "$PREFIX/lib/libicuuc.so"
 }
-build_kpty() { kf kpty; }
+build_kpty() { kf kpty -DCMAKE_DISABLE_FIND_PACKAGE_UTEMPTER=ON; }
 build_knotifyconfig() { kf knotifyconfig; }
 build_konsole() {
   local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/konsole-$GEAR_VERSION.tar.xz" "konsole-$GEAR_VERSION.tar.xz")"
