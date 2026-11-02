@@ -483,6 +483,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 val code = p.waitFor()
                 qtStatus = "KWin: exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
                 AppLog.i("[kwin] exited ($code)")
+                if (code == 137) AppLog.i("[kwin] killed: " + AppLog.memoryReport(this))
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
             qtStatus = "KWin: couldn't start: $e"
@@ -572,6 +573,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 val dir = File(data, "plugins/kf6/packagestructure")
                 AppLog.i("[plasmashell] ${dir.path}: ${dir.list()?.joinToString() ?: "missing"}")
                 AppLog.i("[plasmashell] exited ($code)")
+                if (code == 137) AppLog.i("[plasmashell] killed: " + AppLog.memoryReport(this))
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
             synchronized(qtLines) { qtLines.addLast("shell: couldn't start: $e") }

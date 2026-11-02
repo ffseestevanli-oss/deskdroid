@@ -3,21 +3,16 @@ package io.deskdroid.app
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.view.View
 import android.view.WindowManager
 import io.deskdroid.app.ui.HomeScreen
-import io.deskdroid.app.ui.InstallScreen
-import io.deskdroid.app.ui.InstallingScreen
 import io.deskdroid.app.ui.KeepRunningScreen
 import io.deskdroid.app.ui.Navigator
 import io.deskdroid.app.ui.Party
 import io.deskdroid.app.ui.Screen
-import io.deskdroid.app.ui.WelcomeScreen
 
-/** The launcher: setup flow (Welcome → Install → Installing → Keep it running) and Home. */
+/** The launcher: setup (Keep it running) and Home. */
 class MainActivity : Activity(), Navigator {
     private val stack = ArrayList<Screen>()
-    private var locked = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,34 +27,13 @@ class MainActivity : Activity(), Navigator {
         replace(firstScreen())
     }
 
-    private fun firstScreen(): Screen {
-        val paths = Paths(this)
-        return when {
-            InstallState.current.running || Prefs.pendingEdition(this) != null -> InstallingScreen(this, this)
-            // The native session needs no Linux system to download.
-            !paths.isInstalled && !NativeSession.available(this) -> WelcomeScreen(this, this)
-            !Prefs.setupDone(this) -> KeepRunningScreen(this, this)
-            else -> HomeScreen(this, this)
-        }
-    }
+    // The Debian desktop (proot) is out of the app for now: its install screens and
+    // lock aren't reachable. Its code stays until it's deleted for good.
+    private fun firstScreen(): Screen =
+        if (!Prefs.setupDone(this)) KeepRunningScreen(this, this) else HomeScreen(this, this)
 
     override fun onResume() {
         super.onResume()
-        // An install interrupted by the app being killed resumes where it stopped.
-        val pending = Prefs.pendingEdition(this)
-        if (pending != null && InstallState.current == InstallState.Snapshot()) {
-            InstallService.startEdition(this, pending)
-        }
-        if (Paths(this).isInstalled && LockGate.needsUnlock(this)) {
-            if (!locked) {
-                locked = true
-                window.decorView.visibility = View.INVISIBLE
-                LockGate.unlock(this) { ok ->
-                    locked = false
-                    if (ok) window.decorView.visibility = View.VISIBLE else finish()
-                }
-            }
-        }
         stack.lastOrNull()?.onShow()
     }
 
@@ -110,7 +84,7 @@ class MainActivity : Activity(), Navigator {
         val uri = data?.data ?: return
         if (requestCode == PICK_IMAGE && resultCode == RESULT_OK) {
             InstallService.startFile(this, uri)
-            replace(InstallingScreen(this, this))
+            replace(io.deskdroid.app.ui.InstallingScreen(this, this))
         }
     }
 

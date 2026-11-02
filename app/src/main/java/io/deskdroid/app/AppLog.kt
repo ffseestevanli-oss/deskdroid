@@ -28,6 +28,12 @@ object AppLog {
     fun attach(c: Context) {
         if (file != null) return
         val f = File(c.filesDir, "session.log").also { file = it }
+        // A crash's stack trace in the log, before Android's own handler ends the app.
+        val android = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            try { i("CRASH in ${t.name}: ${Log.getStackTraceString(e).take(4000)}") } catch (_: Throwable) {}
+            android?.uncaughtException(t, e)
+        }
         try {
             if (lines.isEmpty() && f.exists()) {
                 lines.addLast("== Log from before the app last restarted ==")
@@ -59,6 +65,22 @@ object AppLog {
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * The phone's memory when a desktop process is killed (signal 9): Android's
+     * memory numbers and the kernel's out-of-memory events for the app's group.
+     */
+    fun memoryReport(c: Context): String = try {
+        val am = c.getSystemService(android.app.ActivityManager::class.java)
+        val mi = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        val cg = File("/proc/self/cgroup").readLines().firstOrNull { it.startsWith("0::") }?.substringAfter("0::")
+        val events = cg?.let { p -> listOf("memory.events", "memory.max", "memory.peak").joinToString(", ") { n ->
+            "$n=" + (runCatching { File("/sys/fs/cgroup$p/$n").readText().trim().replace("\n", " ") }.getOrNull() ?: "?")
+        } }
+        "memory: ${mi.availMem shr 20} MB free of ${mi.totalMem shr 20} MB, low=${mi.lowMemory}; cgroup $cg: $events"
+    } catch (e: Exception) {
+        "memory: $e"
     }
 
     private fun rewrite() {
