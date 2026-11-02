@@ -45,4 +45,10 @@ edit("build/moz.configure/pkg.configure",
      '    if sysroot_path and target.kernel != "Darwin":\n',
      '    if sysroot_path and target.kernel != "Darwin" and target.os != "Android":  # DeskDroid\n')
 
+# Local AI inference (ggml) is left out where the code says ANDROID (the OS),
+# but its build files test the widget toolkit: follow the OS, as the code does.
+edit("toolkit/components/ml/moz.build",
+     'if CONFIG["MOZ_WIDGET_TOOLKIT"] != "android":\n',
+     'if CONFIG["OS_TARGET"] != "Android":  # DeskDroid: GTK widgets, Android OS\n')
+
 print("floorp port: applied")
