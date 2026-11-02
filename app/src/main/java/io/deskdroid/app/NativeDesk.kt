@@ -774,12 +774,16 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * shows files/wallpaper.jpg over its gradient. Without access, or with a
      * live wallpaper, the file is removed and the gradient shows.
      */
+    private fun phoneWallpaperInPlasma() =
+        File(filesDir, ".local/share/wallpapers/Phone wallpaper.jpg").also { it.parentFile?.mkdirs() }
+
     private fun copyWallpaper() {
         val out = File(filesDir, "wallpaper.jpg")
         try {
             val d = if (Storage.granted(this)) android.app.WallpaperManager.getInstance(this).drawable else null
             if (d == null) {
                 out.delete()
+                phoneWallpaperInPlasma().delete()
                 AppLog.i("Native desktop test: no phone wallpaper to copy, using the gradient")
                 return
             }
@@ -792,6 +796,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             tmp.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it) }
             bmp.recycle()
             tmp.renameTo(out)
+            // Also among Plasma's wallpapers, for the Image wallpaper's settings page.
+            out.copyTo(phoneWallpaperInPlasma(), overwrite = true)
             AppLog.i("Native desktop test: phone wallpaper copied (${w}x$h)")
         } catch (e: Exception) {
             out.delete()

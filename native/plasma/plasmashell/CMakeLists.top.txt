@@ -102,6 +102,9 @@ add_subdirectory(applets/icon)
 # (build_plasma_desktop_taskmanager).
 add_subdirectory(libkmpris)
 add_subdirectory(components/dbus)
+# Plasma's wallpapers: Image (pick a picture, with its settings page in
+# Configure Desktop and Wallpaper), Slideshow and Plain Color.
+add_subdirectory(wallpapers)
 # The time data engine the clock reads from (with plasma-workspace's
 # dataengines/CMakeLists.txt's settings: data engines aren't ported to them).
 # Editing the desktop and panels: the Add Widgets sidebar's QML module, and

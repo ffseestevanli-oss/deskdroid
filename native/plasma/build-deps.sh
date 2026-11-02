@@ -872,6 +872,10 @@ build_plasma_desktop_packages() {
   rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff"
   cp -r "$s/applets/kickoff/package" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff"
   test -e "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff/contents/ui/main.qml"
+  # Add Panel's choices (Default Panel, Empty Panel): without them its menu
+  # was empty. The default panel leaves out widgets not built yet.
+  python3 "$HERE/patches/desktoppackage/layout-templates.py" "$s" "$PREFIX/share/plasma/layout-templates"
+  test -e "$PREFIX/share/plasma/layout-templates/org.kde.plasma.desktop.defaultPanel/contents/layout.js"
 }
 # The application menu (Kickoff): KRunner's library and activity stats for
 # its models, Kirigami Addons for its header.

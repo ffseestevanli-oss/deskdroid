@@ -5,10 +5,17 @@ var desktops = desktopsForActivity(currentActivity());
 // files/config is the config folder; DeskDroid copies the phone's wallpaper
 // to files/wallpaper.jpg at each start.
 var files = userDataPath("config").replace(/\/[^\/]*\/?$/, "");
+var phoneWallpaper = files + "/wallpaper.jpg";
 for (var i = 0; i < desktops.length; i++) {
-    desktops[i].wallpaperPlugin = "org.deskdroid.gradient";
-    desktops[i].currentConfigGroup = ["Wallpaper", "org.deskdroid.gradient", "General"];
-    desktops[i].writeConfig("Image", "file://" + files + "/wallpaper.jpg");
+    if (fileExists(phoneWallpaper)) {
+        // Plasma's Image wallpaper, so Configure Desktop and Wallpaper can change it.
+        desktops[i].wallpaperPlugin = "org.kde.image";
+        desktops[i].currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
+    } else {
+        desktops[i].wallpaperPlugin = "org.deskdroid.gradient";
+        desktops[i].currentConfigGroup = ["Wallpaper", "org.deskdroid.gradient", "General"];
+    }
+    desktops[i].writeConfig("Image", "file://" + phoneWallpaper);
     // Plasma's folder view shows the Desktop folder (files/Desktop) directly:
     // its usual desktop:/ address needs a KIO worker not built yet.
     desktops[i].currentConfigGroup = ["General"];
