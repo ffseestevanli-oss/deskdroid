@@ -39,6 +39,26 @@ edit(ws, "        static bool permissionCheckDisabled = ",
      "        }\n"
      "        static bool permissionCheckDisabled = ")
 
+# The same for each window's program name (its resource name, which effects
+# and window rules go by: the Scale effect leaves plasmashell's popups to the
+# Sliding Popups effect by it): the library QtHost runs, not app_process.
+edit("src/waylandwindow.cpp",
+     "        const QByteArray executableFileName = fileInfo.fileName().toUtf8();\n",
+     "        QByteArray executableFileName = fileInfo.fileName().toUtf8();\n"
+     "        if (executableFileName.startsWith(\"app_process\")) { // DeskDroid: QtHost's library\n"
+     "            QFile cmdline(QStringLiteral(\"/proc/%1/cmdline\").arg(surface()->client()->processId()));\n"
+     "            if (cmdline.open(QIODevice::ReadOnly)) {\n"
+     "                for (const QByteArray &arg : cmdline.readAll().split('\\0')) {\n"
+     "                    const QByteArray name = arg.mid(arg.lastIndexOf('/') + 1);\n"
+     "                    if (name.startsWith(\"lib\") && name.endsWith(\".so\") && !name.startsWith(\"libdd_\")) {\n"
+     "                        executableFileName = name.mid(3, name.size() - 6);\n"
+     "                        break;\n"
+     "                    }\n"
+     "                }\n"
+     "            }\n"
+     "        }\n")
+edit("src/waylandwindow.cpp", "#include \"waylandwindow.h\"\n", "#include \"waylandwindow.h\"\n#include <QFile>\n")
+
 edit("src/backends/CMakeLists.txt", "add_subdirectory(virtual)", "add_subdirectory(virtual)\nadd_subdirectory(nativedesk)")
 m = "src/main_wayland.cpp"
 edit(m, '#include "backends/virtual/virtual_backend.h"\n',
