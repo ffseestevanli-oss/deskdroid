@@ -163,6 +163,39 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       done
       echo "   $qmlplugins QML plugins"
     fi
+    # Floorp (native/floorp, published by floorp.yml): its programs and
+    # libraries go in the library folder like everything else (Android runs
+    # programs only from there), its other files (omni.ja...) in the data;
+    # the app links the first into data/floorp next to the second, where
+    # Floorp looks for them (floorp.txt), and bin/floorp starts it (floorp.sh).
+    : > "$WORK/floorp.txt"
+    if [ -n "${DESKDROID_FLOORP:-}" ] && [ -e "$DESKDROID_FLOORP" ]; then
+      rm -rf "$WORK/ff" && mkdir -p "$WORK/ff" && tar xf "$DESKDROID_FLOORP" -C "$WORK/ff"
+      ffroot="$(ls "$WORK/ff" | head -1)"
+      mkdir -p "$WORK/ffdata/floorp"
+      while IFS= read -r rel; do
+        f="$WORK/ff/$ffroot/$rel"
+        if [ "$(head -c 4 "$f" | od -An -c | tr -d ' ')" = '177ELF' ]; then
+          # Its own libraries by the name the others ask for (libxul.so as
+          # libdd_xul.so, as for any library here), the rest by their path.
+          case "$rel" in
+            */*) name="libdd_ff_$(echo "${rel%.so}" | tr '/' '_').so" ;;
+            *.so) name="$(bundlename "$rel")" ;;
+            *) name="libdd_ff_$rel.so" ;;
+          esac
+          install -m 755 "$f" "$OUT/$name"; bundled+=("$OUT/$name")
+          printf '%s\t%s\n' "$name" "$rel" >> "$WORK/floorp.txt"
+        else
+          mkdir -p "$WORK/ffdata/floorp/$(dirname "$rel")" && cp -p "$f" "$WORK/ffdata/floorp/$rel"
+        fi
+      done < <(cd "$WORK/ff/$ffroot" && find . -type f | sed 's|^\./||' | sort)
+      echo "$ffroot" > "$WORK/ffdata/floorp/program.txt"
+      install -m 755 "$HERE/floorp.sh" "$OUT/libdd_floorp-run.so"
+      mkdir -p "$WORK/ffdata/share/applications"
+      printf '[Desktop Entry]\nType=Application\nName=Floorp\nGenericName=Web Browser\nComment=Browse the web\nIcon=internet-web-browser\nExec=floorp %%u\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\n' \
+        > "$WORK/ffdata/share/applications/org.deskdroid.floorp.desktop"
+      echo "   floorp: $ffroot, $(wc -l < "$WORK/floorp.txt") programs and libraries"
+    fi
     todo=("${bundled[@]}")
     while [ ${#todo[@]} -gt 0 ]; do
       f="${todo[0]}"; todo=("${todo[@]:1}")
@@ -266,7 +299,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
           | grep -Ev "^qml/${qmlskip#^}" | zip -q -X "$OUT/libkwin_data.so" -@)
       done
-      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt gtkapps.txt)
+      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt gtkapps.txt floorp.txt)
+      [ -d "$WORK/ffdata" ] && (cd "$WORK/ffdata" && zip -qr -X "$OUT/libkwin_data.so" floorp share)
       [ -d "$WORK/gtkshare" ] && (cd "$WORK/gtkshare" && zip -qr -X "$OUT/libkwin_data.so" share)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \

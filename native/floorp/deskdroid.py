@@ -54,4 +54,28 @@ edit(R + "nsRemoteService.cpp",
      '#  else\n  mRemoteServer = MakeUnique<nsGTKRemoteServer>();\n#  endif',
      '#  elif defined(MOZ_X11)\n  mRemoteServer = MakeUnique<nsGTKRemoteServer>();\n#  else\n  return;\n#  endif')
 
+# Android runs programs only from the APK's library folder, so Floorp's
+# program is a link in its own folder to a file there, and /proc/self/exe
+# names the library folder. bin/floorp (native/nativedesk/floorp.sh) says
+# where the link is; Floorp finds its files next to it, and starts its child
+# processes through it.
+edit("xpcom/build/BinaryPath.h",
+     "#elif defined(XP_UNIX)\n#  include <stdlib.h>\n",
+     "#elif defined(XP_UNIX)\n#  include <stdio.h>  // DeskDroid: snprintf\n#  include <stdlib.h>\n")
+edit("xpcom/build/BinaryPath.h",
+     """    ssize_t len = readlink(path, aResult, MAXPATHLEN - 1);
+    if (len < 0) {
+      return NS_ERROR_FAILURE;
+    }
+""",
+     """    if (const char* deskdroid = getenv("DESKDROID_FIREFOX_BINARY")) {  // DeskDroid
+      snprintf(aResult, MAXPATHLEN, "%s", deskdroid);
+      return NS_OK;
+    }
+    ssize_t len = readlink(path, aResult, MAXPATHLEN - 1);
+    if (len < 0) {
+      return NS_ERROR_FAILURE;
+    }
+""")
+
 print("deskdroid changes: applied")

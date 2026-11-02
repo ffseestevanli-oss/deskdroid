@@ -75,6 +75,18 @@ jobs:
           sudo apt-get install -y -q librsvg2-bin
           ndk="$ANDROID_HOME/ndk/$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)"
           QT_HOST_PATH="$DESKDROID_QT_HOST" native/store/build-apps.sh ~/plasma-prefix "$ndk"
+      # Floorp (floorp.yml publishes it), bundled when there is one.
+      - name: Fetch Floorp
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release download floorp-build -p floorp.tar.xz -D ~/floorp-pkg; then
+            echo "DESKDROID_FLOORP=$HOME/floorp-pkg/floorp.tar.xz" >> "$GITHUB_ENV"
+            ls -la ~/floorp-pkg
+          else
+            echo "No Floorp build published yet"
+          fi
       - uses: actions/cache@v4
         with:
           path: |

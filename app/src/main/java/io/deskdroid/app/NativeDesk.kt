@@ -707,6 +707,12 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             try { android.system.Os.symlink(File(libs, "libdd_$app.so").path, File(bin, app).path) }
             catch (e: Exception) { AppLog.i("Native desktop test: couldn't link $app: $e") }
         }
+        // Floorp (native/floorp): bin/floorp starts it (floorp.sh); its
+        // programs and libraries are linked into data/floorp in linkPlugins.
+        File(libs, "libdd_floorp-run.so").takeIf { it.exists() }?.let {
+            try { android.system.Os.symlink(it.path, File(bin, "floorp").path) }
+            catch (e: Exception) { AppLog.i("Native desktop test: couldn't link floorp: $e") }
+        }
         // Apps from the app store (Store.kt).
         Store.installed(this).forEach { Store.linkCommand(this, it) }
         File(libs, "libdd_android-open.so").takeIf { it.exists() }?.let {
@@ -910,6 +916,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         linkFlatLibraries(libs, File(data, "plugins.txt"), File(data, "plugins"), clear = true)
         // QML plugins, next to their qmldir files (unpacked from the data).
         linkFlatLibraries(libs, File(data, "qml.txt"), File(data, "qml"), clear = false)
+        // Floorp's programs and libraries, next to its files (unpacked from the data).
+        linkFlatLibraries(libs, File(data, "floorp.txt"), File(data, "floorp"), clear = false)
     }
 
     private fun linkFlatLibraries(libs: String, listFile: File, root: File, clear: Boolean) {

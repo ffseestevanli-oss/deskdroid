@@ -44,6 +44,8 @@ jobs:
       cancel-in-progress: true
     runs-on: ubuntu-24.04
     timeout-minutes: 350
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
       - name: Make room (Firefox needs ~25 GB)
@@ -98,6 +100,20 @@ jobs:
         with:
           path: ~/.cache/sccache
           key: floorp-sccache-${{ github.run_id }}
+      # The APK build (android.yml) takes the newest package from here.
+      - name: Publish as the floorp-build release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pkg="$(ls ~/floorp-out/*.tar.* | head -1)"
+          notes="Floorp for DeskDroid, built from $(cat native/floorp/runtime-commit.txt) by run ${{ github.run_id }} (${{ github.event.pull_request.head.sha || github.sha }}). The APK bundles it."
+          if gh release view floorp-build >/dev/null 2>&1; then
+            gh release edit floorp-build --notes "$notes" --prerelease --latest=false
+          else
+            gh release create floorp-build --title "Floorp build for DeskDroid" --notes "$notes" --prerelease --latest=false
+          fi
+          gh release view floorp-build --json assets -q '.assets[].name' | while read -r old; do gh release delete-asset floorp-build "$old" --yes; done
+          cp "$pkg" ~/floorp.tar.xz && gh release upload floorp-build ~/floorp.tar.xz --clobber
       - uses: actions/upload-artifact@v4
         if: always()
         with:
