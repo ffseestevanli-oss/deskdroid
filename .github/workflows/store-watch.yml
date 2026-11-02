@@ -1,0 +1,28 @@
+name: App store watcher
+
+# Keeps the app store's apps from other repositories (native/store/apps.json)
+# up to date: every few hours, when one of their branches has a new commit,
+# starts the APK build of main, which builds them and publishes the store
+# (store-latest). Changes to apps.json itself rebuild on push like any change.
+on:
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: store-watch
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compare the apps' branches with the published store
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: native/store/watch.sh
