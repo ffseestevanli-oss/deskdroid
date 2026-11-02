@@ -1250,7 +1250,14 @@ internal inline fun java.io.BufferedReader.outputLines(action: (String) -> Unit)
  * desktop mode; Start desktop with Monitor also opens it there. Its own class
  * because a monitor's home can't be a single-task activity like the phone's.
  */
-class ExternalDeskActivity : NativeDeskActivity()
+class ExternalDeskActivity : NativeDeskActivity() {
+    // Input comes from the phone's touchpad or a USB/Bluetooth mouse, which
+    // Android doesn't count as activity on the monitor: without this it sleeps.
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+}
 
 /**
  * The phone's screen while the desktop is on a monitor: a touchpad (the same
@@ -1275,6 +1282,7 @@ class PhoneTouchpadActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         NativeDesk.touchpad = java.lang.ref.WeakReference(this)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         pad = NativeDeskActivity.KeyboardSurface(this).apply {
             isFocusable = true
             isFocusableInTouchMode = true
