@@ -206,29 +206,22 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private var started = false
     private var lastInsets: WindowInsets? = null
 
-    /**
-     * Screen pixels at each edge to keep panels and maximized windows out of:
-     * the cutout's safe inset, and enough of each rounded corner that a
-     * panel's ends stay visible (where the corner's curve crosses 45°).
-     */
+    /** Screen pixels at the left and right edges to keep panels out of. */
     fun sendSafeArea() {
         val insets = lastInsets
         val e = FloatArray(4) // left, top, right, bottom
         if (insets != null && Prefs.dodgeCutouts(this)) {
-            insets.displayCutout?.let {
-                e[0] = it.safeInsetLeft.toFloat(); e[1] = it.safeInsetTop.toFloat()
-                e[2] = it.safeInsetRight.toFloat(); e[3] = it.safeInsetBottom.toFloat()
-            }
+            // Panels dodge sideways only, by the same amount on both sides so
+            // they stay centred: the deeper of the cutouts and the full
+            // radius of the screen's rounded corners.
+            var side = 0f
+            insets.displayCutout?.let { side = maxOf(it.safeInsetLeft, it.safeInsetRight).toFloat() }
             if (Build.VERSION.SDK_INT >= 31) {
-                fun r(p: Int) = insets.getRoundedCorner(p)?.radius?.toFloat() ?: 0f
-                val k = 0.2929f // 1 - 1/√2
-                val tl = r(android.view.RoundedCorner.POSITION_TOP_LEFT)
-                val tr = r(android.view.RoundedCorner.POSITION_TOP_RIGHT)
-                val bl = r(android.view.RoundedCorner.POSITION_BOTTOM_LEFT)
-                val br = r(android.view.RoundedCorner.POSITION_BOTTOM_RIGHT)
-                e[0] = maxOf(e[0], k * maxOf(tl, bl)); e[1] = maxOf(e[1], k * maxOf(tl, tr))
-                e[2] = maxOf(e[2], k * maxOf(tr, br)); e[3] = maxOf(e[3], k * maxOf(bl, br))
+                for (p in listOf(android.view.RoundedCorner.POSITION_TOP_LEFT, android.view.RoundedCorner.POSITION_TOP_RIGHT,
+                        android.view.RoundedCorner.POSITION_BOTTOM_LEFT, android.view.RoundedCorner.POSITION_BOTTOM_RIGHT))
+                    side = maxOf(side, insets.getRoundedCorner(p)?.radius?.toFloat() ?: 0f)
             }
+            e[0] = side; e[2] = side
         }
         NativeDesk.nativeSetSafeArea(e[0], e[1], e[2], e[3])
     }

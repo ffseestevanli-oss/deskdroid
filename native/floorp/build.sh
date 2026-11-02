@@ -34,8 +34,13 @@ done
 [ ${#failed[@]} -eq 0 ] || echo "== patches that didn't apply: ${failed[*]}"
 python3 "$HERE/deskdroid.py" "$SRC"
 
+# glibc's libpthread and librt are part of Bionic's libc: empty stand-ins
+# for the build files that still ask for them (Termux ships the same).
+STUBLIBS="$HOME/floorp-stublibs"; mkdir -p "$STUBLIBS"
+for l in pthread rt; do "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" rc "$STUBLIBS/lib$l.a"; done
+
 LIBCLANG="$(dirname "$(ls /usr/lib/llvm-*/lib/libclang.so* | sort -V | tail -1)")"
-sed -e "s|@NDK@|$NDK|g" -e "s|@PREFIX@|$PREFIX|g" -e "s|@LIBCLANG@|$LIBCLANG|g" -e "s|@BRANDING@|$BRANDING|g" \
+sed -e "s|@NDK@|$NDK|g" -e "s|@PREFIX@|$PREFIX|g" -e "s|@LIBCLANG@|$LIBCLANG|g" -e "s|@BRANDING@|$BRANDING|g" -e "s|@STUBLIBS@|$STUBLIBS|g" \
   "$HERE/mozconfig" > "$SRC/mozconfig"
 cat "$SRC/mozconfig"
 

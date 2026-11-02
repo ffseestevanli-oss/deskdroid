@@ -20,7 +20,6 @@ ac_add_options --disable-updater
 ac_add_options --disable-sandbox
 ac_add_options --disable-accessibility
 ac_add_options --disable-crashreporter
-ac_add_options --disable-dbus
 ac_add_options --disable-necko-wifi
 ac_add_options --disable-hardening
 ac_add_options --disable-parental-controls
@@ -35,9 +34,9 @@ ac_add_options --enable-audio-backends=aaudio
 # __TERMUX__ on, as in Termux: Bionic, but Linux everywhere else.
 export CC="@NDK@/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=aarch64-linux-android29"
 export CXX="@NDK@/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=aarch64-linux-android29"
-export CFLAGS="-D__TERMUX__"
+export CFLAGS="-D__TERMUX__ -Dsecure_getenv=getenv"
 export CXXFLAGS="-D__TERMUX__ -U__ANDROID__ -D_LIBCPP_HAS_NO_C11_ALIGNED_ALLOC"
-export LDFLAGS="-llog"
+export LDFLAGS="-llog -L@STUBLIBS@"
 export HOST_CC=clang-19
 export HOST_CXX=clang++-19
 export BINDGEN_CFLAGS="--target=aarch64-linux-android29 --sysroot=@NDK@/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
