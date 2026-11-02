@@ -32,6 +32,7 @@ for p in "$HERE"/termux-patches/*.patch; do
   fi
 done
 [ ${#failed[@]} -eq 0 ] || echo "== patches that didn't apply: ${failed[*]}"
+python3 "$HERE/deskdroid.py" "$SRC"
 
 LIBCLANG="$(dirname "$(ls /usr/lib/llvm-*/lib/libclang.so* | sort -V | tail -1)")"
 sed -e "s|@NDK@|$NDK|g" -e "s|@PREFIX@|$PREFIX|g" -e "s|@LIBCLANG@|$LIBCLANG|g" -e "s|@BRANDING@|$BRANDING|g" \

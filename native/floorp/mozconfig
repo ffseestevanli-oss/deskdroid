@@ -28,6 +28,8 @@ ac_add_options --disable-webspeech
 ac_add_options --disable-synth-speechd
 ac_add_options --disable-elf-hack
 ac_add_options --disable-webrtc
+# Sound through Android itself (AAudio); Termux uses PulseAudio.
+ac_add_options --enable-audio-backends=aaudio
 # The NDK's clang for the phone (API 29, Android 10), the runner's clang 19
 # for build tools that run on the build machine. __ANDROID__ off for C++ and
 # __TERMUX__ on, as in Termux: Bionic, but Linux everywhere else.
