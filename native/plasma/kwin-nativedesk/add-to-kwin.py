@@ -11,9 +11,10 @@ kwin = pathlib.Path(sys.argv[1])
 
 dest = kwin / "src/backends/nativedesk"
 dest.mkdir(parents=True, exist_ok=True)
-for f in ("CMakeLists.txt", "nativedesk_backend.h", "nativedesk_backend.cpp"):
+for f in ("CMakeLists.txt", "nativedesk_backend.h", "nativedesk_backend.cpp", "deskdroid_ahb_server.h", "deskdroid_ahb_server.cpp"):
     shutil.copy(here / f, dest / f)
 shutil.copy(here.parent.parent / "nativedesk/protocol.h", dest / "protocol.h")
+shutil.copy(here.parent / "ahb/deskdroid_ahb.h", dest / "deskdroid_ahb.h")
 
 
 def edit(path, old, new):
@@ -64,6 +65,55 @@ edit("src/inputmethod.cpp", "    if (m_internalContext->isEnabled()) {\n        
      "    if (m_internalContext->isEnabled()) {\n        active = true;\n    }\n"
      "    if (deskdroidTextInputHook) {\n        deskdroidTextInputHook(active);\n    }\n    setActive(active);\n")
 edit("src/inputmethod.cpp", "namespace KWin\n{\n", "namespace KWin\n{\nvoid (*deskdroidTextInputHook)(bool) = nullptr;\n")
+
+# Apps that draw with the GPU hand KWin their buffers (deskdroid_ahb_v1):
+# KWin takes them as wl_buffers and samples them as textures.
+edit("src/wayland/display.cpp", '#include "singlepixelbuffer.h"\n',
+     '#include "singlepixelbuffer.h"\n#include "backends/nativedesk/deskdroid_ahb_server.h"\n')
+edit("src/wayland/display.cpp", "    } else if (auto buffer = SinglePixelClientBuffer::get(resource)) {\n        return buffer;\n",
+     "    } else if (auto buffer = SinglePixelClientBuffer::get(resource)) {\n        return buffer;\n"
+     "    } else if (auto buffer = AhbClientBuffer::get(resource)) {\n        return buffer;\n")
+si = "src/scene/surfaceitem.cpp"
+edit(si, '#include "utils/common.h"\n', '#include "utils/common.h"\n#include "backends/nativedesk/deskdroid_ahb_server.h"\n')
+edit(si, "bool OpenGLSurfaceTexture::create()\n{\n",
+     "// DeskDroid: an app's GPU buffer, sampled where it is.\n"
+     "static bool deskdroidBindAhb(EglBackend *backend, AhbClientBuffer *ahb, OpenGLSurfaceContents &contents)\n"
+     "{\n"
+     "    EGLImageKHR image = ahb->image(backend->eglDisplayObject());\n"
+     "    if (image == EGL_NO_IMAGE_KHR) {\n"
+     "        return false;\n"
+     "    }\n"
+     "    if (contents.planes.count() != 1 || contents.planes[0]->size() != ahb->size()) {\n"
+     "        auto texture = std::make_shared<GLTexture>(GL_TEXTURE_2D);\n"
+     "        texture->setSize(ahb->size());\n"
+     "        if (!texture->create()) {\n"
+     "            return false;\n"
+     "        }\n"
+     "        texture->setWrapMode(GL_CLAMP_TO_EDGE);\n"
+     "        texture->setFilter(GL_LINEAR);\n"
+     "        contents = OpenGLSurfaceContents(texture);\n"
+     "    }\n"
+     "    contents.planes[0]->bind();\n"
+     "    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, static_cast<GLeglImageOES>(image));\n"
+     "    contents.planes[0]->unbind();\n"
+     "    contents.planes[0]->setContentTransform(ahb->yInverted() ? OutputTransform::Normal : OutputTransform::FlipY);\n"
+     "    return true;\n"
+     "}\n\n"
+     "bool OpenGLSurfaceTexture::create()\n{\n"
+     "    if (auto ahb = AhbClientBuffer::from(m_pixmap->item()->buffer())) {\n"
+     "        m_texture.reset();\n"
+     "        m_bufferType = BufferType::None;\n"
+     "        return deskdroidBindAhb(m_backend, ahb, m_texture);\n"
+     "    }\n")
+edit(si, "void OpenGLSurfaceTexture::update(const QRegion &region)\n{\n",
+     "void OpenGLSurfaceTexture::update(const QRegion &region)\n{\n"
+     "    if (auto ahb = AhbClientBuffer::from(m_pixmap->item()->buffer())) {\n"
+     "        if (m_bufferType != BufferType::None) {\n"
+     "            destroy();\n"
+     "        }\n"
+     "        deskdroidBindAhb(m_backend, ahb, m_texture);\n"
+     "        return;\n"
+     "    }\n")
 
 # kwin_wayland as a library with a JNI entry point, since Qt for Android needs
 # a Java VM: QtHost loads it into an app_process and calls QtHost.run().

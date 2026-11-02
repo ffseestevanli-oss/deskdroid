@@ -345,6 +345,15 @@ build_qtwayland() {
   cmake --build "$s/_android" -j "$JOBS"
   cmake --install "$s/_android"
 }
+# Qt apps draw on the GPU: Qt Wayland's client side for KWin's
+# deskdroid_ahb_v1 (ahb/), standing in for wayland-egl.
+build_deskdroid_ahb() {
+  local s="$WORK/deskdroid-ahb"
+  rm -rf "$s"; mkdir -p "$s"; cp "$HERE"/ahb/* "$s/"
+  kde_cmake "$s"
+  ls "$PREFIX"/plugins/wayland-graphics-integration-client/ | grep deskdroid-ahb
+}
+inputs_deskdroid_ahb() { cat "$HERE"/ahb/*; }
 # Only for QUiLoader, which KWin's scripting configuration uses.
 build_qttools() {
   qt_module qttools -DFEATURE_assistant=OFF -DFEATURE_designer=ON -DFEATURE_linguist=OFF \
@@ -944,7 +953,7 @@ inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HE
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
-     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtmultimedia qtspeech qtwayland qttools
+     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtmultimedia qtspeech qtwayland qttools deskdroid_ahb
      ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
@@ -955,7 +964,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
-inputs_kwin() { cat "$HERE"/kwin-nativedesk/* "$HERE/../nativedesk/protocol.h"; }
+inputs_kwin() { cat "$HERE"/kwin-nativedesk/*.* "$HERE"/kwin-nativedesk/CMakeLists.txt "$HERE/../nativedesk/protocol.h" "$HERE/ahb/deskdroid_ahb.h"; }
 
 failed=()
 after_qtbase=0

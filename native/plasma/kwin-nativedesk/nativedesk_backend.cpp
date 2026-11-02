@@ -8,6 +8,7 @@
 #include "core/outputconfiguration.h"
 #include "core/renderloop.h"
 #include "input.h"
+#include "deskdroid_ahb_server.h"
 #include "opengl/eglcontext.h"
 #include "opengl/egldisplay.h"
 #include "opengl/eglimagetexture.h"
@@ -16,6 +17,8 @@
 #include "opengl/glrendertimequery.h"
 #include "opengl/glutils.h"
 #include "window.h"
+#include "wayland/display.h"
+#include "wayland_server.h"
 #include "workspace.h"
 
 #include <QSocketNotifier>
@@ -648,6 +651,7 @@ void NativeDeskEglBackend::init()
     }
     qInfo("nativedesk: compositing on the GPU: %s, %s", glGetString(GL_RENDERER), glGetString(GL_VERSION));
     initWayland();
+    deskdroidAhbCreateGlobal(*waylandServer()->display());
     m_layer = std::make_unique<NativeDeskEglLayer>(m_backend->output(), this);
 }
 

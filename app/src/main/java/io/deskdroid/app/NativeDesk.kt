@@ -78,6 +78,8 @@ object NativeDesk {
     // The overlay's last lines, kept across activity instances.
     val qtLines = ArrayDeque<String>()
     @Volatile var qtStatus = "Qt demo: not in this build"
+    // KWin said it takes apps' GPU buffers (deskdroid_ahb_v1): Qt apps draw on the GPU.
+    @Volatile var kwinTakesGpuBuffers = false
 
     // Open with Android app: bin/android-open (android-open.sh) leaves each file
     // as a request in files/open-requests; this opens it in Android's chooser.
@@ -378,6 +380,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         put("WAYLAND_DISPLAY", "wayland-0")
                         put("QT_PLUGIN_PATH", pluginPath(libs, File(filesDir, "kwin"))) // Qt's Wayland plugins, flat in the library folder
                         put("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1") // KWin draws the borders (Breeze, soon)
+                        if (appsOnGpu()) put("QT_WAYLAND_CLIENT_BUFFER_INTEGRATION", "deskdroid-ahb") else put("QT_QUICK_BACKEND", "software")
                         // KWin's keymaps and fonts setup: a Wayland client compiles the keymap
                         // KWin sends, and Qt crashes when xkbcommon finds no layouts.
                         val data = File(filesDir, "kwin")
@@ -496,11 +499,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 }
             }.start()
             apps += p
+            NativeDesk.kwinTakesGpuBuffers = false
             qtStatus = "KWin: running"
             Thread {
                 var demoStarted = false
                 p.inputStream.bufferedReader().outputLines {
                     AppLog.i("[kwin] $it")
+                    if (it.contains("deskdroid_ahb: apps can hand KWin GPU buffers")) NativeDesk.kwinTakesGpuBuffers = true
                     // KWin is ready for clients: a first window inside it.
                     if (!demoStarted && it.contains("Accepting client connections")) {
                         demoStarted = true
@@ -532,9 +537,16 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         val libs = applicationInfo.nativeLibraryDir
         val data = File(filesDir, "kwin")
         val config = File(filesDir, "config").apply { mkdirs() }
-        // No GPU path for Qt Quick yet: Qt's software renderer, through Wayland shm.
-        File(config, "kdeglobals").takeUnless { it.exists() && it.readText().contains("[QtQuickRendererSettings]") }
-            ?.appendText("\n[QtQuickRendererSettings]\nSceneGraphBackend=software\n")
+        // Qt Quick on the GPU when KWin takes GPU buffers (a file named app-cpu in the
+        // app's files folder forces the CPU, to compare); else Qt's software renderer
+        // through Wayland shm. KDE reads its choice of renderer from kdeglobals.
+        val gpu = appsOnGpu()
+        File(config, "kdeglobals").let { g ->
+            val t = if (g.exists()) g.readText() else ""
+            val section = "[QtQuickRendererSettings]\nSceneGraphBackend=" + (if (gpu) "rhi" else "software") + "\n"
+            val old = Regex("\\[QtQuickRendererSettings]\nSceneGraphBackend=[a-z]*\n")
+            g.writeText(if (old.containsMatchIn(t)) t.replace(old, Regex.escapeReplacement(section)) else t + "\n" + section)
+        }
         // Breeze Dark's icons (white symbolic ones) to match the dark colors; earlier
         // builds wrote the light theme here.
         File(config, "kdeglobals").let { g ->
@@ -581,7 +593,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("WAYLAND_DISPLAY", "wayland-0")
                     put("QT_PLUGIN_PATH", pluginPath(libs, data))
                     put("QML_IMPORT_PATH", File(data, "qml").path)
-                    put("QT_QUICK_BACKEND", "software")
+                    if (gpu) put("QT_WAYLAND_CLIENT_BUFFER_INTEGRATION", "deskdroid-ahb") else put("QT_QUICK_BACKEND", "software")
                     put("KDE_DEBUG", "1")
                     put("QT_LOGGING_RULES", "kf.service.*=true;js=true") // why the app database comes up empty
                     // GTK programs: Wayland, and settings kept in memory (no dconf here).
@@ -616,6 +628,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private var sessionBus: String? = null
 
     /** Where Qt (flat, Android style) and KDE (by namespace, Linux style) find plugins. */
+    private fun appsOnGpu() = NativeDesk.kwinTakesGpuBuffers && !File(filesDir, "app-cpu").exists()
+
     private fun pluginPath(libs: String, data: File) = "${File(data, "plugins").path}:$libs"
 
     /**
