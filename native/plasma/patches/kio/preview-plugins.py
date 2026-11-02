@@ -26,4 +26,12 @@ assert t.count(old) == 1, "constructor"
 t = t.replace(old, new)
 t = t.replace("#include <QMimeDatabase>", "#include <QMimeDatabase>\n#include <QMutex>", 1)
 assert "#include <QMutex>" in t
+# Thumbnails are saved in <cache>/thumbnails/<size>/, made with a plain
+# mkdir of the size folder: on Linux thumbnails/ is always there already, here
+# it wasn't, so nothing could be cached and its device check failed.
+old = """        thumbRoot = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QLatin1String("/thumbnails/");
+"""
+assert t.count(old) == 1, "thumbRoot"
+t = t.replace(old, old + """        QDir().mkpath(thumbRoot);
+""")
 open(p, "w").write(t)

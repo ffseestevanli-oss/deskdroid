@@ -33,4 +33,21 @@ new = old + """
         }"""
 assert t.count(old) == 1, "plugin loop"
 t = t.replace(old, new)
+old = """    if (!currentItem.item.isNull()) {
+        if (!succeeded) {
+            Q_EMIT q->failed(currentItem.item);"""
+new = """    if (!currentItem.item.isNull()) {
+        if (!succeeded) {
+            qCWarning(KIO_GUI) << "DeskDroid: no preview made for" << currentItem.item.url() << "size" << currentItem.item.size() << "last step" << int(state);
+            Q_EMIT q->failed(currentItem.item);"""
+assert t.count(old) == 1, "determineNextFile"
+t = t.replace(old, new)
+old = """    if (thumb.isNull()) {
+        // fallback a raw QImage
+        str >> thumb;
+    }
+"""
+assert t.count(old) == 1, "slotThumbData"
+t = t.replace(old, old + """    qCWarning(KIO_GUI) << "DeskDroid: thumbnail worker sent" << data.size() << "bytes, image" << thumb.size() << "for" << currentItem.item.url();
+""")
 open(p, "w").write(t)
