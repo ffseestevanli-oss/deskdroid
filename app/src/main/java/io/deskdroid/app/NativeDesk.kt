@@ -58,7 +58,8 @@ object NativeDesk {
     @JvmStatic @androidx.annotation.Keep
     fun onIme(show: Boolean) {
         Handler(Looper.getMainLooper()).post {
-            (activity?.get() as? NativeDeskActivity)?.softKeyboard(show)
+            // On a monitor the keyboard belongs to the phone's touchpad screen.
+            touchpad?.get()?.softKeyboard(show) ?: (activity?.get() as? NativeDeskActivity)?.softKeyboard(show)
         }
     }
 
@@ -68,6 +69,12 @@ object NativeDesk {
     val apps = mutableListOf<Process>()
     @Volatile var running = false
     @Volatile var activity: java.lang.ref.WeakReference<Activity>? = null
+    // The window the compositor draws into now (the phone's or a monitor's), and its size.
+    @Volatile var owner: java.lang.ref.WeakReference<Activity>? = null
+    @Volatile var surfaceW = 0f
+    @Volatile var surfaceH = 0f
+    // The phone's touchpad screen while the desktop is on a monitor.
+    @Volatile var touchpad: java.lang.ref.WeakReference<PhoneTouchpadActivity>? = null
     // The overlay's last lines, kept across activity instances.
     val qtLines = ArrayDeque<String>()
     @Volatile var qtStatus = "Qt demo: not in this build"
@@ -188,12 +195,14 @@ object NativeDesk {
     }
 }
 
-class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
+open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var surfaceView: SurfaceView
     private lateinit var stats: TextView
     private val apps get() = NativeDesk.apps
     private val main = Handler(Looper.getMainLooper())
     private var started = false
+    /** On a monitor (display out): the phone becomes its touchpad and keyboard. */
+    private val external get() = (display?.displayId ?: android.view.Display.DEFAULT_DISPLAY) != android.view.Display.DEFAULT_DISPLAY
     // The Qt demo's last output lines, shown in the overlay so its errors are visible.
     private val qtLines get() = NativeDesk.qtLines
 
@@ -262,11 +271,12 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (NativeDesk.running) {
             // Back from the background: the desktop kept running, show it again.
             started = NativeDesk.nativeStart(holder.surface)
-            AppLog.i(if (started) "Native desktop: back on screen" else "Native desktop: couldn't show it again")
-            if (started) main.post(tick)
+            AppLog.i(if (started) "Native desktop: back on screen" + (if (external) " (monitor)" else "") else "Native desktop: couldn't show it again")
+            if (started) { tookSurface(); main.post(tick) }
             return
         }
         started = NativeDesk.nativeStart(holder.surface)
+        if (started) tookSurface()
         NativeDesk.running = started
         if (started) startForegroundService(android.content.Intent(this, NativeDeskService::class.java))
         AppLog.i(if (started) "Native desktop test started" else "Native desktop test couldn't start (see logcat: nativedesk)")
@@ -286,8 +296,21 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         main.post(tick)
     }
 
+    /** This window shows the desktop now; on a monitor, the phone becomes its touchpad. */
+    private fun tookSurface() {
+        NativeDesk.owner = java.lang.ref.WeakReference(this)
+        surfaceView.holder.surfaceFrame.let { NativeDesk.surfaceW = it.width().toFloat(); NativeDesk.surfaceH = it.height().toFloat() }
+        if (external) {
+            AppLog.i("Native desktop: on a monitor (display ${display?.displayId}); the phone is its touchpad")
+            val opts = android.app.ActivityOptions.makeBasic().setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY)
+            startActivity(android.content.Intent(this, PhoneTouchpadActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK), opts.toBundle())
+        }
+    }
+
     // The phone turned: the compositor passes the new size on to KWin.
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        if (started && NativeDesk.owner?.get() === this) { NativeDesk.surfaceW = width.toFloat(); NativeDesk.surfaceH = height.toFloat() }
         if (started) {
             AppLog.i("Native desktop test: screen ${width}x$height")
             NativeDesk.nativeResized()
@@ -297,7 +320,12 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         // Home, app switching or the screen turning off: stop drawing, keep running.
         main.removeCallbacks(tick)
-        if (started) NativeDesk.nativeDetach()
+        // Only the window the compositor draws into lets go of it: the phone's
+        // window going away while a monitor shows the desktop changes nothing.
+        if (started && NativeDesk.owner?.get() === this) {
+            NativeDesk.nativeDetach()
+            NativeDesk.owner = null
+        }
         started = false
     }
 
@@ -1062,7 +1090,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * key events (BaseInputConnection without an editor), handled like a real
      * keyboard's in onKeyDown/onKeyUp.
      */
-    private class KeyboardSurface(c: android.content.Context) : SurfaceView(c) {
+    class KeyboardSurface(c: android.content.Context) : SurfaceView(c) {
         override fun onCheckIsTextEditor() = true
         override fun onCreateInputConnection(info: android.view.inputmethod.EditorInfo): android.view.inputmethod.InputConnection {
             info.inputType = android.text.InputType.TYPE_NULL
@@ -1076,7 +1104,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * one finger moves the pointer, a tap clicks, a two-finger tap right-clicks,
      * two fingers scroll, a double tap double-clicks, and tap then hold drags.
      */
-    private class Touchpad {
+    class Touchpad {
         private var px = -1f
         private var py = -1f
         private var lastX = 0f
@@ -1164,7 +1192,8 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         main.removeCallbacks(tick)
         // Stop (in the menu or the notification) ends the desktop; anything else
         // that destroys the window leaves it running in the background.
-        if (isFinishing) NativeDesk.stop(this, "window closed")
+        // A monitor unplugged closes its window; the desktop goes on, back on the phone.
+        if (isFinishing && !external) NativeDesk.stop(this, "window closed")
         if (NativeDesk.activity?.get() === this) NativeDesk.activity = null
         super.onDestroy()
     }
@@ -1180,5 +1209,99 @@ internal inline fun java.io.BufferedReader.outputLines(action: (String) -> Unit)
     } catch (e: java.io.IOException) {
     } finally {
         runCatching { close() }
+    }
+}
+
+/**
+ * The desktop on a monitor (display out). Android starts it there as the
+ * monitor's home when DeskDroid is the phone's home app, instead of its own
+ * desktop mode; Start desktop with Monitor also opens it there. Its own class
+ * because a monitor's home can't be a single-task activity like the phone's.
+ */
+class ExternalDeskActivity : NativeDeskActivity()
+
+/**
+ * The phone's screen while the desktop is on a monitor: a touchpad (the same
+ * gestures as Touchpad mode) and the keyboard. It closes when the monitor goes,
+ * and the desktop comes back to the phone.
+ */
+class PhoneTouchpadActivity : Activity() {
+    private val touchpad = NativeDeskActivity.Touchpad()
+    private lateinit var pad: NativeDeskActivity.KeyboardSurface
+    private val displays by lazy { getSystemService(android.hardware.display.DisplayManager::class.java) }
+    private val listener = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayAdded(id: Int) = Unit
+        override fun onDisplayChanged(id: Int) = Unit
+        override fun onDisplayRemoved(id: Int) {
+            if (displays.displays.none { it.displayId != android.view.Display.DEFAULT_DISPLAY }) {
+                AppLog.i("Native desktop: monitor unplugged, back to the phone")
+                finish()
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        NativeDesk.touchpad = java.lang.ref.WeakReference(this)
+        pad = NativeDeskActivity.KeyboardSurface(this).apply {
+            isFocusable = true
+            isFocusableInTouchMode = true
+            setZOrderOnTop(false)
+        }
+        val hint = TextView(this).apply {
+            text = "Touchpad · the desktop is on your monitor\nOne finger moves, tap clicks, two fingers scroll or right-click"
+            setTextColor(0x99FFFFFF.toInt())
+            textSize = 14f
+            gravity = android.view.Gravity.CENTER
+            setPadding(48, 48, 48, 48)
+        }
+        val keyboard = TextView(this).apply {
+            text = "⌨  Keyboard"
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            setPadding(48, 32, 48, 32)
+            setOnClickListener { softKeyboard(true) }
+        }
+        setContentView(FrameLayout(this).apply {
+            setBackgroundColor(0xFF101018.toInt())
+            addView(pad, FrameLayout.LayoutParams(-1, -1))
+            addView(hint, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER))
+            addView(keyboard, FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP or android.view.Gravity.END))
+        })
+        displays.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
+    }
+
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (NativeDesk.surfaceW <= 0f) return false
+        touchpad.onTouch(e, NativeDesk.surfaceW, NativeDesk.surfaceH)
+        return true
+    }
+
+    override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) return true
+        NativeDesk.nativeKey(keyCode, e.unicodeChar, true)
+        return true
+    }
+
+    override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) return true
+        NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
+        return true
+    }
+
+    fun softKeyboard(show: Boolean) {
+        val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        if (show) {
+            pad.requestFocus()
+            imm.showSoftInput(pad, 0)
+        } else {
+            imm.hideSoftInputFromWindow(pad.windowToken, 0)
+        }
+    }
+
+    override fun onDestroy() {
+        displays.unregisterDisplayListener(listener)
+        if (NativeDesk.touchpad?.get() === this) NativeDesk.touchpad = null
+        super.onDestroy()
     }
 }

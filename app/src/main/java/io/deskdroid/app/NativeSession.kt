@@ -17,7 +17,9 @@ object NativeSession {
 
     /** Starts (or brings back) the session, on the given display. */
     fun start(c: Context, display: Int = Display.DEFAULT_DISPLAY) {
-        val intent = Intent(c, NativeDeskActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // A monitor gets its own window (ExternalDeskActivity); the phone keeps its touchpad.
+        val cls = if (display != Display.DEFAULT_DISPLAY) ExternalDeskActivity::class.java else NativeDeskActivity::class.java
+        val intent = Intent(c, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val options = ActivityOptions.makeBasic().setLaunchDisplayId(display)
         c.startActivity(intent, options.toBundle())
     }

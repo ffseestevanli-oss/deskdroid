@@ -91,6 +91,35 @@
             </intent-filter>
         </activity>
 
+        <!--
+          The desktop on a monitor (display out). As the home app's SECONDARY_HOME,
+          Android opens it on a connected monitor instead of its own desktop mode.
+          A monitor's home can't be single-task, hence its own activity.
+        -->
+        <activity
+            android:name=".ExternalDeskActivity"
+            android:exported="true"
+            android:launchMode="standard"
+            android:stateNotNeeded="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|smallestScreenSize|density"
+            android:resizeableActivity="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.SECONDARY_HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- The phone as touchpad and keyboard while the desktop is on a monitor. -->
+        <activity
+            android:name=".PhoneTouchpadActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|smallestScreenSize|density"
+            android:windowSoftInputMode="stateHidden|adjustNothing" />
+
         <!-- The app store (Store.kt), over the desktop. -->
         <activity
             android:name=".StoreActivity"
