@@ -27,6 +27,12 @@ object QtHost {
             System.out.flush()
             Runtime.getRuntime().halt(70)
         }
+        // Qt's Java side makes Handlers on the main Looper (Qt Multimedia's
+        // QtAudioDeviceManager), which an app_process doesn't have.
+        if (android.os.Looper.getMainLooper() == null) {
+            @Suppress("DEPRECATION")
+            android.os.Looper.prepareMainLooper()
+        }
         giveQtClassLoader()
         // Core first: only the library passed to System.load gets JNI_OnLoad.
         load(File(libs, "libc++_shared.so"))
