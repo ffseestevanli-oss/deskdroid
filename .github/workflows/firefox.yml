@@ -1,24 +1,24 @@
-name: Floorp
+name: Firefox
 
-# The web browser: Floorp's runtime (Firefox) ported to the native desktop,
-# desktop Firefox on GTK 3/Wayland for Android's libc (native/floorp). Built
+# The web browser: vanilla Firefox ported to the native desktop, desktop
+# Firefox on GTK 3/Wayland for Android's libc (native/firefox). Built
 # against the GTK stack from the Plasma deps cache; a compiler cache keeps
 # later runs short.
 on:
   pull_request:
     paths:
-      - native/floorp/**
-      - .github/workflows/floorp.yml
+      - native/firefox/**
+      - .github/workflows/firefox.yml
   workflow_dispatch:
 
 jobs:
   # A pull request's paths filter looks at the whole PR, so every push starts
-  # this workflow: build only when the push itself changes Floorp's files (or
+  # this workflow: build only when the push itself changes Firefox's files (or
   # it's the PR's first run), and never cancel a build for an unrelated push.
   changes:
     runs-on: ubuntu-24.04
     outputs:
-      floorp: ${{ steps.diff.outputs.floorp }}
+      firefox: ${{ steps.diff.outputs.firefox }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -31,16 +31,16 @@ jobs:
         run: |
           if [ "$GITHUB_EVENT_NAME" != pull_request ] || [ "$ACTION" != synchronize ] || [ -z "$BEFORE" ] \
              || ! git cat-file -e "$BEFORE" 2>/dev/null \
-             || git diff --name-only "$BEFORE" HEAD | grep -qE '^(native/floorp/|\.github/workflows/floorp\.yml$)'; then
-            echo floorp=true >> "$GITHUB_OUTPUT"
+             || git diff --name-only "$BEFORE" HEAD | grep -qE '^(native/firefox/|\.github/workflows/firefox\.yml$)'; then
+            echo firefox=true >> "$GITHUB_OUTPUT"
           else
-            echo floorp=false >> "$GITHUB_OUTPUT"
+            echo firefox=false >> "$GITHUB_OUTPUT"
           fi
-  floorp:
+  firefox:
     needs: changes
-    if: needs.changes.outputs.floorp == 'true'
+    if: needs.changes.outputs.firefox == 'true'
     concurrency:
-      group: floorp-${{ github.ref }}
+      group: firefox-${{ github.ref }}
       cancel-in-progress: true
     runs-on: ubuntu-24.04
     timeout-minutes: 350
@@ -84,39 +84,42 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: ~/.cache/sccache
-          key: floorp-sccache-${{ github.run_id }}
-          restore-keys: floorp-sccache-
-      - name: Fetch Floorp's runtime source
+          key: firefox-sccache-${{ github.run_id }}
+          # Floorp's (the browser before Firefox) is mostly the same code.
+          restore-keys: |
+            firefox-sccache-
+            floorp-sccache-
+      - name: Fetch Firefox's source
         run: |
-          mkdir ~/floorp-src && cd ~/floorp-src
-          git init -q && git remote add origin https://github.com/Floorp-Projects/Floorp-Runtime
-          git fetch -q --depth 1 origin "$(cat "$GITHUB_WORKSPACE/native/floorp/runtime-commit.txt")"
+          mkdir ~/firefox-src && cd ~/firefox-src
+          git init -q && git remote add origin "$(sed -n 1p "$GITHUB_WORKSPACE/native/firefox/source.txt")"
+          git fetch -q --depth 1 origin "$(sed -n 2p "$GITHUB_WORKSPACE/native/firefox/source.txt")"
           git checkout -q FETCH_HEAD
           du -sh . && df -h /
       - name: Build
-        run: native/floorp/build.sh ~/plasma-prefix "$NDK" ~/floorp-src ~/floorp-out
+        run: native/firefox/build.sh ~/plasma-prefix "$NDK" ~/firefox-src ~/firefox-out
       - uses: actions/cache/save@v4
         if: always()
         with:
           path: ~/.cache/sccache
-          key: floorp-sccache-${{ github.run_id }}
+          key: firefox-sccache-${{ github.run_id }}
       # The APK build (android.yml) takes the newest package from here.
-      - name: Publish as the floorp-build release
+      - name: Publish as the firefox-build release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pkg="$(ls ~/floorp-out/*.tar.* | head -1)"
-          notes="Floorp for DeskDroid, built from $(cat native/floorp/runtime-commit.txt) by run ${{ github.run_id }} (${{ github.event.pull_request.head.sha || github.sha }}). The APK bundles it."
-          if gh release view floorp-build >/dev/null 2>&1; then
-            gh release edit floorp-build --notes "$notes" --prerelease --latest=false
+          pkg="$(ls ~/firefox-out/*.tar.* | head -1)"
+          notes="Firefox for DeskDroid (an unofficial build), from $(sed -n 1p native/firefox/source.txt) at $(sed -n 2p native/firefox/source.txt), by run ${{ github.run_id }} (${{ github.event.pull_request.head.sha || github.sha }}). The APK bundles it."
+          if gh release view firefox-build >/dev/null 2>&1; then
+            gh release edit firefox-build --notes "$notes" --prerelease --latest=false
           else
-            gh release create floorp-build --title "Floorp build for DeskDroid" --notes "$notes" --prerelease --latest=false
+            gh release create firefox-build --title "Firefox build for DeskDroid" --notes "$notes" --prerelease --latest=false
           fi
-          gh release view floorp-build --json assets -q '.assets[].name' | while read -r old; do gh release delete-asset floorp-build "$old" --yes; done
-          cp "$pkg" ~/floorp.tar.xz && gh release upload floorp-build ~/floorp.tar.xz --clobber
+          gh release view firefox-build --json assets -q '.assets[].name' | while read -r old; do gh release delete-asset firefox-build "$old" --yes; done
+          cp "$pkg" ~/firefox.tar.xz && gh release upload firefox-build ~/firefox.tar.xz --clobber
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: floorp
-          path: ~/floorp-out
+          name: firefox
+          path: ~/firefox-out
           retention-days: 7

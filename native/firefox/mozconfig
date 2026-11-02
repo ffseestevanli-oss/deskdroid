@@ -1,4 +1,4 @@
-# DeskDroid's Floorp: desktop Firefox for Android's libc, on GTK 3/Wayland.
+# DeskDroid's Firefox: desktop Firefox for Android's libc, on GTK 3/Wayland.
 # Like Termux's build (mozconfig.cfg there): an Android target treated as
 # Linux. build.sh fills in @NDK@, @PREFIX@, @LIBCLANG@ and @BRANDING@.
 ac_add_options --enable-application=browser
