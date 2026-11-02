@@ -601,6 +601,7 @@ build_kio() {
   sed -i 's|install(TARGETS kioworker DESTINATION ${KDE_INSTALL_LIBEXECDIR_KF})|install(TARGETS kioworker LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR})|' "$s/src/kioworker/CMakeLists.txt"
   grep -q "kioworker LIBRARY DESTINATION" "$s/src/kioworker/CMakeLists.txt"
   python3 "$HERE/patches/kio/preview-log.py" "$s"
+  python3 "$HERE/patches/kio/preview-plugins.py" "$s"
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DWITH_WAYLAND=ON
 }

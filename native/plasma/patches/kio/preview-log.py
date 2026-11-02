@@ -9,7 +9,7 @@ old = """        } else {
             Q_EMIT q->failed(fileItem);
         }"""
 new = """        } else {
-            qCWarning(KIO_GUI) << "DeskDroid: no thumbnailer for" << mimeType << "among" << plugins.size() << "plugins:" << fileItem.url();
+            qCWarning(KIO_GUI) << "DeskDroid: no thumbnailer for" << mimeType << "among" << plugins.size() << "plugins, enabled" << enabledPlugins << ":" << fileItem.url();
             Q_EMIT q->failed(fileItem);
         }"""
 assert t.count(old) == 1, "no-plugin branch"
