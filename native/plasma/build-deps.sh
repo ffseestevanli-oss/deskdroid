@@ -650,7 +650,7 @@ build_plasma5support() {
 # (org.kde.desktop, instead of Android's Material: white windows, big controls)
 # and the platform theme (colors, fonts, icons, KDE's file dialog). The theme's
 # X11 part is a do-nothing stand-in.
-build_qqc2_desktop_style() { kf qqc2-desktop-style; test -e "$PREFIX/qml/org/kde/desktop/qmldir"; }
+build_qqc2_desktop_style() { kf qqc2-desktop-style; test -e "$PREFIX/lib/qml/org/kde/desktop/qmldir"; }
 build_plasma_integration() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-integration-$PLASMA_VERSION.tar.xz" "plasma-integration-$PLASMA_VERSION.tar.xz")"
   local t="$s/qt6/src/platformtheme"

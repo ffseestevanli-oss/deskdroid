@@ -7,6 +7,7 @@
 
 #include "core/outputconfiguration.h"
 #include "compositor.h"
+#include "scene/workspacescene.h"
 #include "core/renderloop.h"
 #include "input.h"
 #include "deskdroid_ahb_server.h"
@@ -861,7 +862,7 @@ void NativeDeskBackend::readMessages()
                     for (int ms : {0, 150}) {
                         QTimer::singleShot(ms, this, [] {
                             if (Compositor::self()) {
-                                Compositor::self()->addRepaintFull();
+                                Compositor::self()->scene()->addRepaintFull();
                             }
                         });
                     }
