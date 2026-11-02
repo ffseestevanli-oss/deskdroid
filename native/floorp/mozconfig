@@ -20,5 +20,11 @@ ac_add_options --disable-dbus
 ac_add_options --disable-lto
 ac_add_options --with-ccache=sccache
 ac_add_options --with-branding=browser/branding/unofficial
+# The NDK's clang for the phone (Firefox wants clang 19 or newer), the
+# runner's clang 19 for build tools that run on the build machine.
+export CC=@NDK@/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
+export CXX=@NDK@/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++
+export HOST_CC=clang-19
+export HOST_CXX=clang++-19
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-deskdroid
 export PKG_CONFIG_LIBDIR=@PREFIX@/lib/pkgconfig:@PREFIX@/share/pkgconfig
