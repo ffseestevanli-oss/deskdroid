@@ -839,10 +839,17 @@ build_icu() {
       --disable-layoutex --enable-shared --disable-static)
   # Only the libraries: the data build wants an ICU data list the host
   # tools would make, and no data is shipped. stubdata is the empty libicudata.
+  mkdir -p "$s/_android/lib" "$s/_android/bin" # made by the top-level make, skipped here
   for d in stubdata common i18n; do make -C "$s/_android/$d" -j"$JOBS" || return 1; make -C "$s/_android/$d" install || return 1; done
   test -e "$PREFIX/lib/libicuuc.so"
 }
-build_kpty() { kf kpty -DCMAKE_DISABLE_FIND_PACKAGE_UTEMPTER=ON; }
+build_kpty() {
+  local s; s="$(kf_src kpty)"
+  # Bionic's utmp.h has no updwtmp or getutline, and Android keeps no login
+  # records: KPty's login() and logout() do nothing here.
+  perl -0pi -e 's/(\nvoid KPty::(?:login\(const char \*user, const char \*remotehost\)|logout\(\))\n\{\n)(.*?)(\n\}\n)/$1#ifndef __ANDROID__ \/\/ no utmp on Android\n$2\n#endif$3/sg; $n = () = /no utmp on Android/g; die "kpty utmp" unless $n == 2' "$s/src/kpty.cpp"
+  unandroid "$s"; kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DCMAKE_DISABLE_FIND_PACKAGE_UTEMPTER=ON
+}
 build_knotifyconfig() { kf knotifyconfig; }
 build_konsole() {
   local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/konsole-$GEAR_VERSION.tar.xz" "konsole-$GEAR_VERSION.tar.xz")"
