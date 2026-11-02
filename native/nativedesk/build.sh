@@ -79,7 +79,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Apps in DeskDroid's app store instead of the APK: packaged below.
     # The ones from other repositories (native/store/apps.json) are built into
     # the prefix by native/store/build-apps.sh first.
-    store_apps=(gwenview $(jq -r '.apps[].id' "$HERE/../store/apps.json" 2>/dev/null))
+    store_apps=(gwenview kate kcalc $(jq -r '.apps[].id' "$HERE/../store/apps.json" 2>/dev/null))
     for app in dolphin kioworker ksmserver-logout-greeter kwrite; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
