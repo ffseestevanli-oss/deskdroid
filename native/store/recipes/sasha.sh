@@ -32,7 +32,25 @@ print('static const unsigned char sashaQml[] = {')
 for i in range(0, len(qml), 24):
     print(''.join(f'{b},' for b in qml[i:i + 24]))
 print('};')
-print('static int sashaMain(int argc, char **argv) { return tn_host_main(argc, argv, reinterpret_cast<const char *>(sashaQml), sizeof sashaQml); }')
+print('''#include <cstdlib>
+#include <string>
+#include <unistd.h>
+static int sashaMain(int argc, char **argv)
+{
+    // Qt resolves the QML's inline components (Glyph) by loading its URL
+    // again, which fails for QML passed as data ("Type Glyph unavailable").
+    // The store installs main.qml into share/sasha, so the host loads it
+    // from there (host.cpp's SASHA_QML), and from data only as a fallback.
+    if (!getenv("SASHA_QML")) {
+        const char *data = getenv("XDG_DATA_HOME");
+        const char *home = getenv("HOME");
+        std::string qml = (data && *data) ? std::string(data) : std::string(home ? home : "") + "/.local/share";
+        qml += "/sasha/main.qml";
+        if (access(qml.c_str(), R_OK) == 0)
+            setenv("SASHA_QML", qml.c_str(), 0);
+    }
+    return tn_host_main(argc, argv, reinterpret_cast<const char *>(sashaQml), sizeof sashaQml);
+}''')
 PY
 entry="$(dirname "$0")/../../plasma/kwin-nativedesk/qthost_entry.cpp"
 sed -e 's/args.push_back("kwin_wayland")/args.push_back("sasha")/' -e 's/return kwinMain(/return sashaMain(/' "$entry" >> "$w/entry.cpp"
@@ -80,6 +98,8 @@ Keywords=music;player;audio;mp3;flac;opus;album;shuffle;
 StartupWMClass=sasha
 MimeType=audio/mpeg;audio/flac;audio/ogg;audio/x-vorbis+ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;audio/wav;audio/x-wav;audio/x-mpegurl;
 DESKTOP
+mkdir -p "$PREFIX/share/sasha"
+install -m 644 "$src/qml/main.qml" "$PREFIX/share/sasha/main.qml"
 install -m 644 "$src/assets/sasha.svg" "$PREFIX/share/icons/hicolor/scalable/apps/sasha.svg"
 rsvg-convert -w 128 -h 128 "$src/assets/sasha.svg" -o "$PREFIX/share/icons/hicolor/128x128/apps/sasha.png"
 cat > "$PREFIX/share/metainfo/sasha.metainfo.xml" <<XML
