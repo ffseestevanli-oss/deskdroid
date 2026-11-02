@@ -40,6 +40,10 @@ object Prefs {
     fun nativeScale(c: Context) = prefs(c).getFloat("native_scale", 0f)
     fun setNativeScale(c: Context, s: Float) = prefs(c).edit().putFloat("native_scale", s).apply()
 
+    /** Keep panels and maximized windows clear of the camera cutout and rounded corners. */
+    fun dodgeCutouts(c: Context) = prefs(c).getBoolean("dodge_cutouts", true)
+    fun setDodgeCutouts(c: Context, on: Boolean) = prefs(c).edit().putBoolean("dodge_cutouts", on).apply()
+
     fun setupDone(c: Context) = prefs(c).getBoolean("setup_done", false)
     fun setSetupDone(c: Context, on: Boolean) = prefs(c).edit().putBoolean("setup_done", on).apply()
 

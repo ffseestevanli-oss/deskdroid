@@ -39,6 +39,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <cmath>
 
 #include "protocol.h"
 
@@ -825,6 +826,15 @@ void NativeDeskBackend::setTextInputActive(bool active)
     send(m);
 }
 
+float deskdroidSafePx[4] = {};
+
+QMargins deskdroidSafeMargins(const Output *output)
+{
+    const qreal s = output ? output->scale() : 1;
+    return QMargins(std::ceil(deskdroidSafePx[0] / s), std::ceil(deskdroidSafePx[1] / s),
+                    std::ceil(deskdroidSafePx[2] / s), std::ceil(deskdroidSafePx[3] / s));
+}
+
 void NativeDeskBackend::readMessages()
 {
     ndesk_msg m;
@@ -873,6 +883,17 @@ void NativeDeskBackend::readMessages()
             if (m_output && m.scale.scale > 0) {
                 m_output->setUserScale(m.scale.scale);
                 Q_EMIT outputsQueried();
+            }
+            break;
+        case NDESK_SAFE:
+            // Where the cutout and rounded corners are: panels (layer shell)
+            // and maximized windows keep out of it, see add-to-kwin.py.
+            deskdroidSafePx[0] = m.safe.left;
+            deskdroidSafePx[1] = m.safe.top;
+            deskdroidSafePx[2] = m.safe.right;
+            deskdroidSafePx[3] = m.safe.bottom;
+            if (Workspace::self()) {
+                Workspace::self()->scheduleRearrange();
             }
             break;
         case NDESK_KEY:

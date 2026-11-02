@@ -32,6 +32,9 @@
  *     SCROLL     scroll by dx, dy pixels (wheel or two-finger drag), at the
  *                last POINTER position
  *     SCALE      desktops: the user picked a new scale (1.5 = 150%), for now
+ *     SAFE       desktops: screen pixels at each edge that the camera cutout or
+ *                rounded corners hide (0 when dodging is off); panels and
+ *                maximized windows keep out, the wallpaper still fills
  *
  * Buffers are GPU memory owned by the app (AHardwareBuffer), drawn by the app
  * with the phone's own GLES/Vulkan driver and sampled by the compositor with
@@ -59,6 +62,7 @@ enum ndesk_op {
     NDESK_KEY,
     NDESK_SCROLL,
     NDESK_SCALE,
+    NDESK_SAFE,
 };
 
 struct ndesk_msg {
@@ -75,6 +79,7 @@ struct ndesk_msg {
         struct { int32_t keycode, unicode; uint32_t down; } key;
         struct { float dx, dy; } scroll;
         struct { float scale; } scale;
+        struct { float left, top, right, bottom; } safe;
     };
 };
 

@@ -101,6 +101,8 @@ static struct {
     uint32_t screen_w, screen_h; /* the surface size the last frame was drawn at */
     bool resized;                /* set by nativeResized: draw a frame to pick up the new size */
     float new_scale;             /* set by nativeSetScale: for the desktops, then 0 */
+    float safe[4];               /* nativeSetSafeArea: left, top, right, bottom, screen pixels */
+    bool safe_changed;           /* send safe to the desktops */
     /* Swapping the window (the activity went to the background and came
      * back): nativeStart/nativeDetach ask, the loop does it under C.lock. */
     ANativeWindow *pending_window;
@@ -354,6 +356,12 @@ static bool read_client(int i)
         LOGI("window %u: %s, %ux%u", cl->window, cl->title, cl->w, cl->h);
         struct ndesk_msg r = { .op = NDESK_CONFIGURE, .configure = { cl->window, cl->w, cl->h } };
         send_msg(cl, &r);
+        if (cl->desktop) {
+            pthread_mutex_lock(&C.lock);
+            struct ndesk_msg s = { .op = NDESK_SAFE, .safe = { C.safe[0], C.safe[1], C.safe[2], C.safe[3] } };
+            pthread_mutex_unlock(&C.lock);
+            send_msg(cl, &s);
+        }
         break;
     }
     case NDESK_BUFFER: {
@@ -720,7 +728,14 @@ static void *loop(void *unused)
         pthread_mutex_lock(&C.lock);
         float scale = C.new_scale;
         C.new_scale = 0;
+        bool safe_changed = C.safe_changed;
+        C.safe_changed = false;
+        struct ndesk_msg safe = { .op = NDESK_SAFE, .safe = { C.safe[0], C.safe[1], C.safe[2], C.safe[3] } };
         pthread_mutex_unlock(&C.lock);
+        for (int i = 0; safe_changed && i < MAX_CLIENTS; i++) {
+            struct client *cl = C.clients[i];
+            if (cl && cl->desktop) send_msg(cl, &safe);
+        }
         for (int i = 0; scale > 0 && i < MAX_CLIENTS; i++) {
             struct client *cl = C.clients[i];
             if (!cl || !cl->desktop) continue;
@@ -919,6 +934,19 @@ Java_io_deskdroid_app_NativeDesk_nativeSetScale(JNIEnv *env, jclass cls, jfloat 
     (void)env; (void)cls;
     pthread_mutex_lock(&C.lock);
     C.new_scale = scale;
+    pthread_mutex_unlock(&C.lock);
+    wake();
+}
+
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeSetSafeArea(JNIEnv *env, jclass cls, jfloat l, jfloat t, jfloat r, jfloat b)
+{
+    (void)env; (void)cls;
+    pthread_mutex_lock(&C.lock);
+    if (C.safe[0] != l || C.safe[1] != t || C.safe[2] != r || C.safe[3] != b) {
+        C.safe[0] = l; C.safe[1] = t; C.safe[2] = r; C.safe[3] = b;
+        C.safe_changed = true;
+    }
     pthread_mutex_unlock(&C.lock);
     wake();
 }

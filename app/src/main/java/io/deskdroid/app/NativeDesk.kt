@@ -48,6 +48,7 @@ object NativeDesk {
     @JvmStatic external fun nativeResized()
     @JvmStatic external fun nativeDetach()
     @JvmStatic external fun nativeSetScale(scale: Float)
+    @JvmStatic external fun nativeSetSafeArea(left: Float, top: Float, right: Float, bottom: Float)
 
     /** Plasma's usual size on a phone (about twice the panel's pixels), or the menu's choice. */
     fun desktopScale(c: android.content.Context): Float =
@@ -203,6 +204,34 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private val apps get() = NativeDesk.apps
     private val main = Handler(Looper.getMainLooper())
     private var started = false
+    private var lastInsets: WindowInsets? = null
+
+    /**
+     * Screen pixels at each edge to keep panels and maximized windows out of:
+     * the cutout's safe inset, and enough of each rounded corner that a
+     * panel's ends stay visible (where the corner's curve crosses 45°).
+     */
+    fun sendSafeArea() {
+        val insets = lastInsets
+        val e = FloatArray(4) // left, top, right, bottom
+        if (insets != null && Prefs.dodgeCutouts(this)) {
+            insets.displayCutout?.let {
+                e[0] = it.safeInsetLeft.toFloat(); e[1] = it.safeInsetTop.toFloat()
+                e[2] = it.safeInsetRight.toFloat(); e[3] = it.safeInsetBottom.toFloat()
+            }
+            if (Build.VERSION.SDK_INT >= 31) {
+                fun r(p: Int) = insets.getRoundedCorner(p)?.radius?.toFloat() ?: 0f
+                val k = 0.2929f // 1 - 1/√2
+                val tl = r(android.view.RoundedCorner.POSITION_TOP_LEFT)
+                val tr = r(android.view.RoundedCorner.POSITION_TOP_RIGHT)
+                val bl = r(android.view.RoundedCorner.POSITION_BOTTOM_LEFT)
+                val br = r(android.view.RoundedCorner.POSITION_BOTTOM_RIGHT)
+                e[0] = maxOf(e[0], k * maxOf(tl, bl)); e[1] = maxOf(e[1], k * maxOf(tl, tr))
+                e[2] = maxOf(e[2], k * maxOf(tr, br)); e[3] = maxOf(e[3], k * maxOf(bl, br))
+            }
+        }
+        NativeDesk.nativeSetSafeArea(e[0], e[1], e[2], e[3])
+    }
     /** On a monitor (display out): the phone becomes its touchpad and keyboard. */
     private val external get() = (display?.displayId ?: android.view.Display.DEFAULT_DISPLAY) != android.view.Display.DEFAULT_DISPLAY
     // The Qt demo's last output lines, shown in the overlay so its errors are visible.
@@ -256,6 +285,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             addView(stats, FrameLayout.LayoutParams(-2, -2))
             addView(buildMenu(), FrameLayout.LayoutParams(-1, -1))
         })
+        // Dodge display cutouts: tell KWin which screen edges the camera cutout
+        // and rounded corners hide, again whenever they move (rotation).
+        window.decorView.setOnApplyWindowInsetsListener { v, insets ->
+            lastInsets = insets
+            sendSafeArea()
+            v.onApplyWindowInsets(insets)
+        }
         if (Build.VERSION.SDK_INT >= 30) {
             window.insetsController?.apply {
                 hide(WindowInsets.Type.systemBars())
@@ -1063,6 +1099,11 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 // Applied now: KWin lays the desktop out again at the new scale.
                 if (started) NativeDesk.nativeSetScale(NativeDesk.desktopScale(context))
             }
+            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Full screen", "Dodge cutouts"),
+                if (Prefs.dodgeCutouts(context)) 1 else 0) { i ->
+                Prefs.setDodgeCutouts(context, i == 1)
+                sendSafeArea()
+            }.view, LinearLayout.LayoutParams(-1, -2))
             val grid = listOf(
                 ui.tile("Keyboard", io.deskdroid.app.ui.Party.CYAN) { showMenu(false); toggleKeyboard() },
                 scaleTile,

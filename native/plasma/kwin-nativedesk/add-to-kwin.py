@@ -59,6 +59,23 @@ edit("src/waylandwindow.cpp",
      "        }\n")
 edit("src/waylandwindow.cpp", "#include \"waylandwindow.h\"\n", "#include \"waylandwindow.h\"\n#include <QFile>\n")
 
+# Dodge display cutouts: the backend learns which edges the camera cutout and
+# rounded corners hide (deskdroidSafeMargins); panels are laid out, and
+# maximized windows sized, inside what's left. The wallpaper (exclusive zone
+# -1) still covers the whole screen.
+decl = "#include <QMargins>\nnamespace KWin { class Output; QMargins deskdroidSafeMargins(const Output *output); }\n"
+ls = "src/layershellv1integration.cpp"
+edit(ls, '#include "layershellv1integration.h"\n', '#include "layershellv1integration.h"\n' + decl)
+edit(ls, "        QRect workArea = output->geometry();\n",
+     "        QRect workArea = output->geometry().marginsRemoved(deskdroidSafeMargins(output)); // DeskDroid\n")
+wsp = "src/workspace.cpp"
+edit(wsp, '#include "workspace.h"\n', '#include "workspace.h"\n' + decl)
+edit(wsp, "        workAreas[desktop] = m_geometry;\n\n        for (const Output *output : std::as_const(m_outputs)) {\n            screenAreas[desktop][output] = output->geometryF();\n        }\n",
+     "        workAreas[desktop] = m_outputs.size() == 1 ? QRectF(m_geometry).marginsRemoved(QMarginsF(deskdroidSafeMargins(m_outputs.first()))) : QRectF(m_geometry); // DeskDroid\n\n"
+     "        for (const Output *output : std::as_const(m_outputs)) {\n"
+     "            screenAreas[desktop][output] = output->geometryF().marginsRemoved(QMarginsF(deskdroidSafeMargins(output))); // DeskDroid\n"
+     "        }\n")
+
 edit("src/backends/CMakeLists.txt", "add_subdirectory(virtual)", "add_subdirectory(virtual)\nadd_subdirectory(nativedesk)")
 m = "src/main_wayland.cpp"
 edit(m, '#include "backends/virtual/virtual_backend.h"\n',
