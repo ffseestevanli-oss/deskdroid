@@ -809,6 +809,36 @@ build_kcalc() {
   test -e "$PREFIX/lib/libkcalc.so"
 }
 inputs_kcalc() { inputs_dolphin; }
+# Konsole: KDE's terminal, on KPty and KNotifyConfig. Its right-to-left text
+# uses ICU's C API (ubidi, ushape), whose tables are compiled in: ICU's data
+# is left out (the "archive" packaging with no archive shipped).
+build_icu() {
+  local s; s="$(unpack https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz icu4c-76_1-src.tgz)"
+  mkdir -p "$s/_host" "$s/_android"
+  # The data tools run on the build machine, from a host build.
+  (cd "$s/_host" && ../source/runConfigureICU Linux --disable-tests --disable-samples --disable-extras && make -j"$JOBS")
+  (cd "$s/_android" && CC="$CC" CXX="$CXX" AR="$BIN/llvm-ar" RANLIB="$BIN/llvm-ranlib" \
+    CXXFLAGS="-O2 -fPIC" LDFLAGS="-lc++_shared" \
+    ../source/configure --host=$TRIPLE --prefix="$PREFIX" --libdir="$PREFIX/lib" --with-cross-build="$s/_host" \
+      --with-data-packaging=archive --disable-tests --disable-samples --disable-extras --disable-tools --disable-icuio \
+      --disable-layoutex --enable-shared --disable-static && make -j"$JOBS" && make install)
+  test -e "$PREFIX/lib/libicuuc.so"
+}
+build_kpty() { kf kpty; }
+build_knotifyconfig() { kf knotifyconfig; }
+build_konsole() {
+  local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/konsole-$GEAR_VERSION.tar.xz" "konsole-$GEAR_VERSION.tar.xz")"
+  sed -i 's|^add_executable(konsole ${konsole_SRCS} ${ICONS_SOURCES})|add_executable(konsole)\ntarget_sources(konsole PRIVATE ${konsole_SRCS} ${ICONS_SOURCES})|' "$s/src/CMakeLists.txt"
+  python3 "$HERE/apps/as-library.py" "$s" src/CMakeLists.txt konsole src/main.cpp
+  # Android's shell, when $SHELL isn't set.
+  sed -i 's|QStringLiteral("/bin/sh")};|QStringLiteral("/system/bin/sh")};|' "$s/src/session/Session.cpp"
+  grep -q '"/system/bin/sh"' "$s/src/session/Session.cpp"
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DENABLE_PLUGIN_SSHMANAGER=OFF -DENABLE_PLUGIN_QUICKCOMMANDS=OFF \
+    -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
+  test -e "$PREFIX/lib/libkonsole.so"
+}
+inputs_konsole() { inputs_dolphin; }
 inputs_dolphin() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
 
 # ---- GTK 3 (for Floorp, stage 6) ----------------------------------------------
@@ -1003,7 +1033,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
      sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
-     syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc
+     syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
