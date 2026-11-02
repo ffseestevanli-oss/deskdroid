@@ -78,7 +78,7 @@ object AppLog {
         val events = cg?.let { p -> listOf("memory.events", "memory.max", "memory.peak").joinToString(", ") { n ->
             "$n=" + (runCatching { File("/sys/fs/cgroup$p/$n").readText().trim().replace("\n", " ") }.getOrNull() ?: "?")
         } }
-        "memory: ${mi.availMem shr 20} MB free of ${mi.totalMem shr 20} MB, low=${mi.lowMemory}; cgroup $cg: $events"
+        "memory: ${mi.availMem shr 20} MB free of ${mi.totalMem shr 20} MB, low=${mi.lowMemory}; child process limit: ${Checks.phantomProcesses(c)}; cgroup $cg: $events"
     } catch (e: Exception) {
         "memory: $e"
     }
