@@ -154,6 +154,16 @@ bool NativeDeskInputDevice::isLidSwitch() const { return false; }
 // keyboard focus, which here they don't always get: a press outside one, other
 // than on a panel (where Kickoff's button toggles it) or in one of its menus,
 // closes it too.
+// A plasmoid's popup (Kickoff, the calendar...). On this phone Plasma's popups
+// reach KWin as ordinary windows of plasmashell (build 232's log: type 0,
+// class org.kde.plasmashell), not with the applet-popup role, so those count.
+// The desktop and panels are plasmashell's too but have their own types.
+static bool isPlasmoidPopup(Window *w)
+{
+    return w->isAppletPopup()
+        || (w->resourceClass() == QLatin1String("org.kde.plasmashell") && w->windowType() == WindowType::Normal);
+}
+
 static void closeAppletPopups(const QPointF &pos)
 {
     if (!workspace() || !input()) {
@@ -162,7 +172,7 @@ static void closeAppletPopups(const QPointF &pos)
     QList<Window *> popups;
     const auto windows = workspace()->windows();
     for (Window *w : windows) {
-        if (w->isAppletPopup() && !w->isDeleted() && !w->isHidden()) {
+        if (isPlasmoidPopup(w) && !w->isDeleted() && !w->isHidden()) {
             popups << w;
         }
     }
@@ -187,7 +197,7 @@ static void closeAppletPopups(const QPointF &pos)
     Window *target = input()->findToplevel(pos);
     // A press inside a popup (or its menus), or on the panel, whose buttons
     // open and close popups themselves, leaves them.
-    if (target && (target->isAppletPopup() || target->isDock() || target->isPopupWindow())) {
+    if (target && (popups.contains(target) || target->isDock() || target->isPopupWindow())) {
         return;
     }
     qInfo("nativedesk: press outside %lld plasmoid popup(s), on %s; closing them", qlonglong(popups.size()),
@@ -214,8 +224,8 @@ static void focusAppletPopupsWhenShown()
     connected = true;
     QObject::connect(workspace(), &Workspace::windowAdded, workspace(), [](Window *w) {
         qInfo("nativedesk: window opened: %s [type %d]%s", qPrintable(w->resourceClass()), int(w->windowType()),
-              w->isAppletPopup() ? " plasmoid popup, focusing it" : "");
-        if (w->isAppletPopup()) {
+              isPlasmoidPopup(w) ? " plasmoid popup, focusing it" : "");
+        if (isPlasmoidPopup(w)) {
             workspace()->activateWindow(w, true);
         }
     });
