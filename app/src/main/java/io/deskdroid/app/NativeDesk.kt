@@ -476,7 +476,9 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         demoStarted = true
                         // plasmashell when the build has it, else the Qt demo.
                         val shell = File(libs, "libplasmashell.so").exists()
-                        main.postDelayed({ if (started) { if (shell) startPlasmaShell(runtime) else startQtApp(runtime) } }, 1500)
+                        // Even if the window left the screen meanwhile (it did in build 225,
+                        // and Plasma never came): the desktop keeps running in the background.
+                        main.postDelayed({ if (NativeDesk.running) { if (shell) startPlasmaShell(runtime) else startQtApp(runtime) } }, 1500)
                     }
                     overlay("kwin: $it")
                 }
