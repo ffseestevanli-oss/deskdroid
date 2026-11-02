@@ -1,29 +1,44 @@
 # DeskDroid's Floorp: desktop Firefox for Android's libc, on GTK 3/Wayland.
-# build.sh fills in @NDK@, @PREFIX@ and @LIBCLANG@.
+# Like Termux's build (mozconfig.cfg there): an Android target treated as
+# Linux. build.sh fills in @NDK@, @PREFIX@, @LIBCLANG@ and @BRANDING@.
 ac_add_options --enable-application=browser
 ac_add_options --target=aarch64-linux-android
-ac_add_options --with-android-ndk=@NDK@
-ac_add_options --with-android-version=29
+ac_add_options --custom-rust-target-triple=aarch64-linux-android
 ac_add_options --enable-default-toolkit=cairo-gtk3-wayland-only
 ac_add_options --with-libclang-path=@LIBCLANG@
+ac_add_options --with-branding=@BRANDING@
 ac_add_options --disable-bootstrap
 ac_add_options --without-wasm-sandboxed-libraries
 ac_add_options --enable-optimize
 ac_add_options --disable-debug
 ac_add_options --disable-tests
-ac_add_options --disable-crashreporter
-ac_add_options --disable-updater
-ac_add_options --disable-sandbox
-ac_add_options --disable-webrtc
-ac_add_options --disable-dbus
 ac_add_options --disable-lto
 ac_add_options --with-ccache=sccache
-ac_add_options --with-branding=browser/branding/unofficial
-# The NDK's clang for the phone (Firefox wants clang 19 or newer), the
-# runner's clang 19 for build tools that run on the build machine.
-export CC=@NDK@/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
-export CXX=@NDK@/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++
+# As Termux has them.
+ac_add_options --disable-jemalloc
+ac_add_options --disable-updater
+ac_add_options --disable-sandbox
+ac_add_options --disable-accessibility
+ac_add_options --disable-crashreporter
+ac_add_options --disable-dbus
+ac_add_options --disable-necko-wifi
+ac_add_options --disable-hardening
+ac_add_options --disable-parental-controls
+ac_add_options --disable-webspeech
+ac_add_options --disable-synth-speechd
+ac_add_options --disable-elf-hack
+ac_add_options --disable-webrtc
+# The NDK's clang for the phone (API 29, Android 10), the runner's clang 19
+# for build tools that run on the build machine. __ANDROID__ off for C++ and
+# __TERMUX__ on, as in Termux: Bionic, but Linux everywhere else.
+export CC="@NDK@/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=aarch64-linux-android29"
+export CXX="@NDK@/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=aarch64-linux-android29"
+export CFLAGS="-D__TERMUX__"
+export CXXFLAGS="-D__TERMUX__ -U__ANDROID__ -D_LIBCPP_HAS_NO_C11_ALIGNED_ALLOC"
+export LDFLAGS="-llog"
 export HOST_CC=clang-19
 export HOST_CXX=clang++-19
+export BINDGEN_CFLAGS="--target=aarch64-linux-android29 --sysroot=@NDK@/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="$BINDGEN_CFLAGS"
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-deskdroid
 export PKG_CONFIG_LIBDIR=@PREFIX@/lib/pkgconfig:@PREFIX@/share/pkgconfig

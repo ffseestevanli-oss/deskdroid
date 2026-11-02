@@ -5,18 +5,39 @@
 #
 #   native/floorp/build.sh <deps prefix> <ndk dir> <source dir> <out dir>
 #
+# Any Firefox-based source works (vanilla Firefox too): the source tree is an
+# argument, the branding is BRANDING (default: unofficial).
+#
+# Like Termux's Firefox, the build treats Android as Linux (termux-patches/):
+# desktop Gecko with Bionic, without GeckoView's Java-backed Android parts.
+#
 # Leaves the packaged browser (a tarball) in <out dir>. Logs go there too.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PREFIX="$(cd "$1" && pwd)"; NDK="$2"; SRC="$(cd "$3" && pwd)"; OUT="$(mkdir -p "$4" && cd "$4" && pwd)"
+BRANDING="${BRANDING:-browser/branding/unofficial}"
+# Where the browser finds its files on the phone (Termux's @TERMUX_PREFIX@).
+DESKDROID_PREFIX=/data/data/io.deskdroid.app/files/usr
 
-python3 "$HERE/port.py" "$SRC"
+# Termux's patches. One that doesn't apply (Floorp's runtime differs from
+# Firefox in places) is reported, not fatal: the build shows if it mattered.
+cd "$SRC"
+failed=()
+for p in "$HERE"/termux-patches/*.patch; do
+  if sed "s|@TERMUX_PREFIX@|$DESKDROID_PREFIX|g" "$p" | patch -p1 --forward --fuzz=2 -s --no-backup-if-mismatch -r - >/dev/null 2>&1; then
+    echo "   patch: $(basename "$p")"
+  else
+    failed+=("$(basename "$p")")
+    sed "s|@TERMUX_PREFIX@|$DESKDROID_PREFIX|g" "$p" | patch -p1 --forward --fuzz=2 --dry-run 2>&1 | sed 's/^/     /' | head -10 || true
+  fi
+done
+[ ${#failed[@]} -eq 0 ] || echo "== patches that didn't apply: ${failed[*]}"
 
 LIBCLANG="$(dirname "$(ls /usr/lib/llvm-*/lib/libclang.so* | sort -V | tail -1)")"
-sed -e "s|@NDK@|$NDK|g" -e "s|@PREFIX@|$PREFIX|g" -e "s|@LIBCLANG@|$LIBCLANG|g" "$HERE/mozconfig" > "$SRC/mozconfig"
+sed -e "s|@NDK@|$NDK|g" -e "s|@PREFIX@|$PREFIX|g" -e "s|@LIBCLANG@|$LIBCLANG|g" -e "s|@BRANDING@|$BRANDING|g" \
+  "$HERE/mozconfig" > "$SRC/mozconfig"
 cat "$SRC/mozconfig"
 
-cd "$SRC"
 export MOZBUILD_STATE_PATH="$HOME/.mozbuild" MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=pip
 # Options this configuration doesn't offer come out of the mozconfig (and
 # out of the log) instead of costing a whole run each.
@@ -39,9 +60,10 @@ rc=$?
 set -e
 if [ $rc -ne 0 ]; then
   echo "-- distinct errors:"
-  grep -E "(error|Error)(\[E[0-9]+\])?:" "$OUT/build.log" | sed 's|^.*/obj-deskdroid/||; s|^.*'"$SRC"'/||' | sort -u | head -150 || true
+  grep -E "(error|Error)(\[E[0-9]+\])?:" "$OUT/build.log" | grep -v "version script assignment" \
+    | sed 's|^.*/obj-deskdroid/||; s|^.*'"$SRC"'/||; s|^ *[0-9:.]* E ||' | sort -u | head -200 || true
   echo "-- last lines:"
-  tail -60 "$OUT/build.log"
+  tail -40 "$OUT/build.log"
   echo "== build FAILED"
   exit 1
 fi
