@@ -8,12 +8,21 @@
 #include "core/outputconfiguration.h"
 #include "core/renderloop.h"
 #include "input.h"
+#include "opengl/eglcontext.h"
+#include "opengl/egldisplay.h"
+#include "opengl/eglimagetexture.h"
+#include "opengl/eglnativefence.h"
+#include "opengl/glframebuffer.h"
+#include "opengl/glrendertimequery.h"
+#include "opengl/glutils.h"
 #include "window.h"
 #include "workspace.h"
 
 #include <QSocketNotifier>
 
 #include <android/hardware_buffer.h>
+#include <epoxy/egl.h>
+#include <epoxy/gl.h>
 #include <linux/input-event-codes.h>
 #include <poll.h>
 #include <stddef.h>
@@ -466,6 +475,198 @@ bool NativeDeskQPainterBackend::present(Output *output, const std::shared_ptr<Ou
     return true;
 }
 
+// ---- rendering (OpenGL ES on the phone's GPU) -------------------------------------
+
+static_assert(NativeDeskBackend::BufferCount == 3, "NativeDeskEglLayer::m_targets");
+
+// EGL_ANDROID_get_native_client_buffer, looked up at run time.
+using GetNativeClientBuffer = EGLClientBuffer (*)(const AHardwareBuffer *);
+static GetNativeClientBuffer getNativeClientBuffer()
+{
+    static auto fn = reinterpret_cast<GetNativeClientBuffer>(eglGetProcAddress("eglGetNativeClientBufferANDROID"));
+    return fn;
+}
+
+NativeDeskEglLayer::NativeDeskEglLayer(NativeDeskOutput *output, NativeDeskEglBackend *backend)
+    : OutputLayer(output)
+    , m_backend(backend)
+{
+}
+
+NativeDeskEglLayer::~NativeDeskEglLayer()
+{
+    m_backend->openglContext()->makeCurrent();
+    freeTargets();
+}
+
+void NativeDeskEglLayer::freeTargets()
+{
+    for (Target &t : m_targets) {
+        t.framebuffer.reset();
+        t.texture.reset(); // destroys its EGLImage
+        t.ahb = nullptr;
+    }
+    m_current = -1;
+}
+
+bool NativeDeskEglLayer::prepareTarget(int id)
+{
+    AHardwareBuffer *ahb = m_backend->backend()->buffer(id);
+    Target &t = m_targets[id];
+    if (t.ahb == ahb && t.framebuffer) {
+        return true;
+    }
+    t.framebuffer.reset();
+    t.texture.reset();
+    t.ahb = ahb;
+    AHardwareBuffer_Desc d;
+    AHardwareBuffer_describe(ahb, &d);
+    EglDisplay *display = m_backend->eglDisplayObject();
+    const EGLint attribs[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
+    EGLImageKHR image = eglCreateImageKHR(display->handle(), EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, getNativeClientBuffer()(ahb), attribs);
+    if (image == EGL_NO_IMAGE_KHR) {
+        qWarning("nativedesk: can't make an EGLImage of buffer %d (0x%x)", id, eglGetError());
+        return false;
+    }
+    t.texture = EGLImageTexture::create(display, image, GL_RGBA8, QSize(d.width, d.height), false);
+    if (!t.texture) {
+        qWarning("nativedesk: can't make a texture of buffer %d", id);
+        return false;
+    }
+    t.texture->setFilter(GL_LINEAR);
+    t.texture->setWrapMode(GL_CLAMP_TO_EDGE);
+    t.framebuffer = std::make_unique<GLFramebuffer>(t.texture.get());
+    if (!t.framebuffer->valid()) {
+        qWarning("nativedesk: buffer %d can't be drawn into", id);
+        t.framebuffer.reset();
+        return false;
+    }
+    return true;
+}
+
+std::optional<OutputLayerBeginFrameInfo> NativeDeskEglLayer::doBeginFrame()
+{
+    if (!m_backend->openglContext()->makeCurrent()) {
+        return std::nullopt;
+    }
+    NativeDeskBackend *nd = m_backend->backend();
+    const QSize size = m_output->modeSize();
+    const quint64 generation = nd->bufferGeneration();
+    if (!nd->ensureBuffers(size, true)) {
+        return std::nullopt;
+    }
+    if (nd->bufferGeneration() != generation) {
+        freeTargets(); // new buffers: their old images go
+    }
+    m_current = nd->acquire();
+    if (!prepareTarget(m_current)) {
+        return std::nullopt;
+    }
+    m_query = std::make_unique<GLRenderTimeQuery>(m_backend->openglContextRef());
+    m_query->begin();
+    // The whole frame every time (no buffer age to go by).
+    return OutputLayerBeginFrameInfo{
+        .renderTarget = RenderTarget(m_targets[m_current].framebuffer.get()),
+        .repaint = infiniteRegion(),
+    };
+}
+
+bool NativeDeskEglLayer::doEndFrame(const QRegion &renderedRegion, const QRegion &damagedRegion, OutputFrame *frame)
+{
+    m_query->end();
+    frame->addRenderTimeQuery(std::move(m_query));
+    // The compositor's GPU waits on this fence instead of KWin waiting here.
+    EGLNativeFence fence(m_backend->eglDisplayObject());
+    int fd = -1;
+    if (fence.isValid() && fence.fileDescriptor().isValid()) {
+        fd = fence.takeFileDescriptor().take();
+    } else {
+        glFinish();
+    }
+    m_backend->backend()->commit(m_current, fd);
+    if (fd >= 0) {
+        ::close(fd);
+    }
+    return true;
+}
+
+DrmDevice *NativeDeskEglLayer::scanoutDevice() const
+{
+    return nullptr;
+}
+
+QHash<uint32_t, QList<uint64_t>> NativeDeskEglLayer::supportedDrmFormats() const
+{
+    return {};
+}
+
+std::shared_ptr<GLTexture> NativeDeskEglLayer::texture() const
+{
+    return m_current >= 0 ? m_targets[m_current].texture : nullptr;
+}
+
+NativeDeskEglBackend::NativeDeskEglBackend(NativeDeskBackend *backend)
+    : m_backend(backend)
+{
+}
+
+NativeDeskEglBackend::~NativeDeskEglBackend()
+{
+    m_layer.reset();
+    cleanup();
+}
+
+void NativeDeskEglBackend::init()
+{
+    initClientExtensions();
+    if (!m_backend->sceneEglDisplayObject()) {
+        m_backend->setEglDisplay(EglDisplay::create(eglGetDisplay(EGL_DEFAULT_DISPLAY)));
+    }
+    EglDisplay *display = m_backend->sceneEglDisplayObject();
+    if (!display) {
+        setFailed(QStringLiteral("nativedesk: no EGL display"));
+        return;
+    }
+    setEglDisplay(display);
+    for (const QByteArray &ext : {QByteArrayLiteral("EGL_ANDROID_get_native_client_buffer"), QByteArrayLiteral("EGL_ANDROID_image_native_buffer"), QByteArrayLiteral("EGL_KHR_image_base")}) {
+        if (!hasExtension(ext)) {
+            setFailed(QStringLiteral("nativedesk: EGL lacks ") + QString::fromLatin1(ext));
+            return;
+        }
+    }
+    if (!getNativeClientBuffer()) {
+        setFailed(QStringLiteral("nativedesk: no eglGetNativeClientBufferANDROID"));
+        return;
+    }
+    if (!createContext(EGL_NO_CONFIG_KHR) || !openglContext()->makeCurrent()) {
+        setFailed(QStringLiteral("nativedesk: can't make an OpenGL ES context"));
+        return;
+    }
+    if (!openglContext()->hasOpenglExtension(QByteArrayLiteral("GL_OES_EGL_image"))) {
+        setFailed(QStringLiteral("nativedesk: GLES lacks GL_OES_EGL_image"));
+        return;
+    }
+    qInfo("nativedesk: compositing on the GPU: %s, %s", glGetString(GL_RENDERER), glGetString(GL_VERSION));
+    initWayland();
+    m_layer = std::make_unique<NativeDeskEglLayer>(m_backend->output(), this);
+}
+
+OutputLayer *NativeDeskEglBackend::primaryLayer(Output *output)
+{
+    return m_layer.get();
+}
+
+bool NativeDeskEglBackend::present(Output *output, const std::shared_ptr<OutputFrame> &frame)
+{
+    static_cast<NativeDeskOutput *>(output)->present(frame);
+    return true;
+}
+
+std::pair<std::shared_ptr<GLTexture>, ColorDescription> NativeDeskEglBackend::textureForOutput(Output *output) const
+{
+    return {m_layer ? m_layer->texture() : nullptr, ColorDescription::sRGB};
+}
+
 // ---- backend: the connection to the compositor ----------------------------------
 
 NativeDeskBackend::NativeDeskBackend(const QSize &size, qreal scale)
@@ -538,14 +739,26 @@ std::unique_ptr<QPainterBackend> NativeDeskBackend::createQPainterBackend()
     return std::make_unique<NativeDeskQPainterBackend>(this);
 }
 
+std::unique_ptr<EglBackend> NativeDeskBackend::createOpenGLBackend()
+{
+    return std::make_unique<NativeDeskEglBackend>(this);
+}
+
 EglDisplay *NativeDeskBackend::sceneEglDisplayObject() const
 {
-    return nullptr;
+    return m_eglDisplay.get();
+}
+
+void NativeDeskBackend::setEglDisplay(std::unique_ptr<EglDisplay> &&display)
+{
+    m_eglDisplay = std::move(display);
 }
 
 QList<CompositingType> NativeDeskBackend::supportedCompositors() const
 {
-    return {QPainterCompositing};
+    // The GPU first; KWin falls back to the CPU (QPainter) if it can't start.
+    // KWIN_COMPOSE picks one: O2ES for the GPU, Q for the CPU.
+    return {OpenGLCompositing, QPainterCompositing};
 }
 
 Outputs NativeDeskBackend::outputs() const
@@ -670,20 +883,23 @@ int NativeDeskBackend::acquire()
     return 0;
 }
 
-bool NativeDeskBackend::ensureBuffers(const QSize &size)
+bool NativeDeskBackend::ensureBuffers(const QSize &size, bool gpu)
 {
-    if (m_buffers[0].ahb && size == m_bufferSize) {
+    if (m_buffers[0].ahb && size == m_bufferSize && gpu == m_gpuBuffers) {
         return true;
     }
     freeBuffers();
     m_bufferSize = size;
+    m_gpuBuffers = gpu;
+    m_generation++;
     for (int i = 0; i < BufferCount; i++) {
         AHardwareBuffer_Desc d = {};
         d.width = size.width();
         d.height = size.height();
         d.layers = 1;
         d.format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
-        d.usage = AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE | AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;
+        d.usage = AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE
+            | (gpu ? AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER : AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN);
         if (AHardwareBuffer_allocate(&d, &m_buffers[i].ahb) != 0) {
             qWarning("nativedesk: can't allocate a %dx%d buffer", size.width(), size.height());
             return false;
@@ -709,7 +925,7 @@ void NativeDeskBackend::freeBuffers()
 
 void NativeDeskBackend::submit(const QImage &image)
 {
-    if (m_fd < 0 || !ensureBuffers(image.size())) {
+    if (m_fd < 0 || !ensureBuffers(image.size(), false)) {
         return;
     }
     const int id = acquire();
@@ -726,17 +942,21 @@ void NativeDeskBackend::submit(const QImage &image)
     }
     int fence = -1;
     AHardwareBuffer_unlock(b.ahb, &fence);
+    commit(id, fence);
+    if (fence >= 0) {
+        ::close(fence);
+    }
+}
 
+void NativeDeskBackend::commit(int id, int fence)
+{
     ndesk_msg m = {};
     m.op = NDESK_COMMIT;
     m.commit.id = id;
     m.commit.has_fence = fence >= 0;
     m.commit.y_invert = 0;
     send(m, fence);
-    if (fence >= 0) {
-        ::close(fence);
-    }
-    b.busy = true;
+    m_buffers[id].busy = true;
 }
 
 } // namespace KWin
