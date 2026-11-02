@@ -35,4 +35,14 @@ edit("build/moz.configure/android-ndk.configure",
      "    if NDK_VERSION != human:\n",
      "    if int(major) < 29:  # DeskDroid: the app's NDK\n")
 
+# pkg-config: Firefox doesn't use it for Android (nothing there to find); here
+# GTK and friends come from the Plasma prefix, through our PKG_CONFIG_LIBDIR
+# (not the NDK sysroot's folders, which have no .pc files).
+edit("build/moz.configure/pkg.configure",
+     '    return compile_environment and target.os not in ("WINNT", "OSX", "Android")\n',
+     '    return compile_environment and target.os not in ("WINNT", "OSX")  # DeskDroid\n')
+edit("build/moz.configure/pkg.configure",
+     '    if sysroot_path and target.kernel != "Darwin":\n',
+     '    if sysroot_path and target.kernel != "Darwin" and target.os != "Android":  # DeskDroid\n')
+
 print("floorp port: applied")
