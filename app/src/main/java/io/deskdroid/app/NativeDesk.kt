@@ -309,7 +309,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 .redirectErrorStream(true).start()
             apps += p
             Thread {
-                p.inputStream.bufferedReader().forEachLine { AppLog.i("[nativedesk] $it") }
+                p.inputStream.bufferedReader().outputLines { AppLog.i("[nativedesk] $it") }
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
             AppLog.i("Native desktop test: couldn't start $title: $e")
@@ -365,7 +365,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             apps += p
             if (kwinRuntime == null) qtStatus = "Qt demo: running"
             Thread {
-                p.inputStream.bufferedReader().forEachLine {
+                p.inputStream.bufferedReader().outputLines {
                     AppLog.i("[nativedesk-qt] $it")
                     overlay(if (kwinRuntime != null) "demo: $it" else it)
                 }
@@ -469,7 +469,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             qtStatus = "KWin: running"
             Thread {
                 var demoStarted = false
-                p.inputStream.bufferedReader().forEachLine {
+                p.inputStream.bufferedReader().outputLines {
                     AppLog.i("[kwin] $it")
                     // KWin is ready for clients: a first window inside it.
                     if (!demoStarted && it.contains("Accepting client connections")) {
@@ -562,7 +562,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             }.start()
             apps += p
             Thread {
-                p.inputStream.bufferedReader().forEachLine {
+                p.inputStream.bufferedReader().outputLines {
                     AppLog.i("[plasmashell] $it")
                     overlay("shell: $it")
                 }
@@ -874,7 +874,7 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 }.start()
             apps += p
             Thread {
-                p.inputStream.bufferedReader().forEachLine {
+                p.inputStream.bufferedReader().outputLines {
                     AppLog.i("[dbus] $it")
                     overlay("dbus: $it")
                 }
@@ -1165,5 +1165,18 @@ class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (isFinishing) NativeDesk.stop(this, "window closed")
         if (NativeDesk.activity?.get() === this) NativeDesk.activity = null
         super.onDestroy()
+    }
+}
+
+/**
+ * A desktop process's output, line by line, until it ends. Stopping the desktop
+ * closes the stream under the reader; that ends the loop instead of crashing the app.
+ */
+internal inline fun java.io.BufferedReader.outputLines(action: (String) -> Unit) {
+    try {
+        while (true) action(readLine() ?: break)
+    } catch (e: java.io.IOException) {
+    } finally {
+        runCatching { close() }
     }
 }

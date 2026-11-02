@@ -19,6 +19,14 @@ object QtHost {
     @JvmStatic
     fun main(args: Array<String>) {
         val libs = args[0]
+        // A Java exception here would end the process with signal 9 (Android's own
+        // handler kills it) and its stack trace would only reach logcat: print it
+        // to DeskDroid's log instead.
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            println("QtHost: CRASH in ${t.name}: ${android.util.Log.getStackTraceString(e).take(6000)}")
+            System.out.flush()
+            Runtime.getRuntime().halt(70)
+        }
         giveQtClassLoader()
         // Core first: only the library passed to System.load gets JNI_OnLoad.
         load(File(libs, "libc++_shared.so"))
@@ -28,6 +36,7 @@ object QtHost {
         // own libraries next to it; the rest come from the APK.
         loadWithDependencies(File(args[1]).takeIf { it.isAbsolute } ?: File(libs, args[1]), libs)
         println("QtHost: libraries loaded, starting ${args[1]}")
+        System.out.flush()
         System.exit(run(args.copyOfRange(2, args.size)))
     }
 
@@ -52,6 +61,7 @@ object QtHost {
     /** Loads one library, saying so first: a crash while loading prints nothing else. */
     private fun load(lib: File) {
         println("QtHost: loading ${lib.name}")
+        System.out.flush()
         System.load(lib.path)
     }
 
