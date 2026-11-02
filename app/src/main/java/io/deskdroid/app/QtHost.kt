@@ -34,6 +34,11 @@ object QtHost {
             android.os.Looper.prepareMainLooper()
         }
         giveQtClassLoader()
+        // Apps (not KWin or plasmashell) get an Android Context: Qt Multimedia's
+        // Android backend plays through Android's MediaPlayer and AudioManager,
+        // which need one. QtCore reads it from QtNative when it loads, so first.
+        val app = File(args[1]).isAbsolute || args[1].startsWith("libdd_")
+        if (app) giveQtContext()
         // Core first: only the library passed to System.load gets JNI_OnLoad.
         load(File(libs, "libc++_shared.so"))
         load(File(libs, "libQt6Core_arm64-v8a.so"))
@@ -41,6 +46,13 @@ object QtHost {
         // An app from DeskDroid's app store comes as a full path (qtapp.sh), its
         // own libraries next to it; the rest come from the APK.
         loadWithDependencies(File(args[1]).takeIf { it.isAbsolute } ?: File(libs, args[1]), libs)
+        // Qt loads its plugins with dlopen, which skips JNI_OnLoad. The Android
+        // multimedia plugin's registers the natives its Java side calls back
+        // (QtAndroidMediaPlayer.onStateChangedNative...), so load it here first;
+        // Qt's own dlopen of the same file later gets this copy.
+        if (app) File(libs, "libplugins_multimedia_androidmediaplugin_arm64-v8a.so").takeIf { it.exists() }?.let {
+            try { load(it) } catch (e: UnsatisfiedLinkError) { println("QtHost: ${it.name}: ${e.message?.take(200)}") }
+        }
         println("QtHost: libraries loaded, starting ${args[1]}")
         System.out.flush()
         System.exit(run(args.copyOfRange(2, args.size)))
@@ -97,6 +109,38 @@ object QtHost {
                 return
             }
             left = failed
+        }
+    }
+
+    private var service: android.app.Service? = null
+
+    /** Stands in for the Service Qt for Android normally runs in, wrapping our Context. */
+    private class HostService(base: android.content.Context) : android.app.Service() {
+        init { attachBaseContext(base) }
+        override fun onBind(intent: android.content.Intent?): android.os.IBinder? = null
+    }
+
+    /**
+     * An app_process has no Context. This one is made like a system process
+     * makes its own (ActivityThread's system context), then narrowed to
+     * DeskDroid's package, and handed to Qt as its Service (QtNative.setService).
+     */
+    private fun giveQtContext() {
+        try {
+            val threadClass = Class.forName("android.app.ActivityThread")
+            val thread = threadClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
+            threadClass.getDeclaredField("sCurrentActivityThread").apply { isAccessible = true }.set(null, thread)
+            val system = threadClass.getDeclaredMethod("getSystemContext").apply { isAccessible = true }
+                .invoke(thread) as android.content.Context
+            val context = system.createPackageContext(BuildConfig.APPLICATION_ID, android.content.Context.CONTEXT_IGNORE_SECURITY)
+            val native = Class.forName("org.qtproject.qt.android.QtNative")
+            // QtNative keeps only a weak reference.
+            service = HostService(context)
+            native.getDeclaredMethod("setService", android.app.Service::class.java).apply { isAccessible = true }
+                .invoke(null, service)
+            println("QtHost: gave Qt an Android Context")
+        } catch (e: Throwable) {
+            println("QtHost: no Android Context for Qt (${e.cause ?: e})")
         }
     }
 
