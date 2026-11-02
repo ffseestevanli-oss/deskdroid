@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Builds Floorp's runtime (Firefox, from Floorp-Projects/Floorp-Runtime) for
+# Builds Firefox (vanilla, from mozilla-firefox/firefox at source.txt) for
 # the native desktop: desktop Firefox on GTK 3/Wayland, for Android's libc,
 # against the GTK stack native/plasma/build-deps.sh builds.
 #
-#   native/floorp/build.sh <deps prefix> <ndk dir> <source dir> <out dir>
+#   native/firefox/build.sh <deps prefix> <ndk dir> <source dir> <out dir>
 #
-# Any Firefox-based source works (vanilla Firefox too): the source tree is an
+# Any Firefox-based source works (Floorp's runtime too): the source tree is an
 # argument, the branding is BRANDING (default: unofficial).
 #
 # Like Termux's Firefox, the build treats Android as Linux (termux-patches/):
@@ -19,8 +19,8 @@ BRANDING="${BRANDING:-browser/branding/unofficial}"
 # Where the browser finds its files on the phone (Termux's @TERMUX_PREFIX@).
 DESKDROID_PREFIX=/data/data/io.deskdroid.app/files/usr
 
-# Termux's patches. One that doesn't apply (Floorp's runtime differs from
-# Firefox in places) is reported, not fatal: the build shows if it mattered.
+# Termux's patches. One that doesn't apply (another Firefox-based source
+# may differ in places) is reported, not fatal: the build shows if it mattered.
 cd "$SRC"
 failed=()
 for p in "$HERE"/termux-patches/*.patch; do
@@ -36,7 +36,7 @@ python3 "$HERE/deskdroid.py" "$SRC"
 
 # glibc's libpthread and librt are part of Bionic's libc: empty stand-ins
 # for the build files that still ask for them (Termux ships the same).
-STUBLIBS="$HOME/floorp-stublibs"; mkdir -p "$STUBLIBS"
+STUBLIBS="$HOME/firefox-stublibs"; mkdir -p "$STUBLIBS"
 for l in pthread rt; do "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" rc "$STUBLIBS/lib$l.a"; done
 
 LIBCLANG="$(dirname "$(ls /usr/lib/llvm-*/lib/libclang.so* | sort -V | tail -1)")"

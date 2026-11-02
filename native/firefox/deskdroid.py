@@ -54,10 +54,10 @@ edit(R + "nsRemoteService.cpp",
      '#  else\n  mRemoteServer = MakeUnique<nsGTKRemoteServer>();\n#  endif',
      '#  elif defined(MOZ_X11)\n  mRemoteServer = MakeUnique<nsGTKRemoteServer>();\n#  else\n  return;\n#  endif')
 
-# Android runs programs only from the APK's library folder, so Floorp's
+# Android runs programs only from the APK's library folder, so Firefox's
 # program is a link in its own folder to a file there, and /proc/self/exe
-# names the library folder. bin/floorp (native/nativedesk/floorp.sh) says
-# where the link is; Floorp finds its files next to it, and starts its child
+# names the library folder. bin/firefox (native/nativedesk/firefox.sh) says
+# where the link is; Firefox finds its files next to it, and starts its child
 # processes through it.
 edit("xpcom/build/BinaryPath.h",
      "#elif defined(XP_UNIX)\n#  include <stdlib.h>\n",

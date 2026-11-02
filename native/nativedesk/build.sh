@@ -86,7 +86,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       bundled+=("$OUT/libdd_$app.so"); apps+=("$app")
     done
     printf '%s\n' "${apps[@]}" > "$WORK/apps.txt"
-    # Stage 6: GTK programs (towards Floorp), plain executables named like
+    # Stage 6: GTK programs (towards Firefox), plain executables named like
     # libraries (the APK's library folder is where Android lets apps run
     # programs from), started as bin/<name> (gtkapps.txt).
     : > "$WORK/gtkapps.txt"
@@ -163,16 +163,16 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       done
       echo "   $qmlplugins QML plugins"
     fi
-    # Floorp (native/floorp, published by floorp.yml): its programs and
+    # Firefox (native/firefox, published by firefox.yml): its programs and
     # libraries go in the library folder like everything else (Android runs
     # programs only from there), its other files (omni.ja...) in the data;
-    # the app links the first into data/floorp next to the second, where
-    # Floorp looks for them (floorp.txt), and bin/floorp starts it (floorp.sh).
-    : > "$WORK/floorp.txt"
-    if [ -n "${DESKDROID_FLOORP:-}" ] && [ -e "$DESKDROID_FLOORP" ]; then
-      rm -rf "$WORK/ff" && mkdir -p "$WORK/ff" && tar xf "$DESKDROID_FLOORP" -C "$WORK/ff"
+    # the app links the first into data/firefox next to the second, where
+    # Firefox looks for them (firefox.txt), and bin/firefox starts it (firefox.sh).
+    : > "$WORK/firefox.txt"
+    if [ -n "${DESKDROID_FIREFOX:-}" ] && [ -e "$DESKDROID_FIREFOX" ]; then
+      rm -rf "$WORK/ff" && mkdir -p "$WORK/ff" && tar xf "$DESKDROID_FIREFOX" -C "$WORK/ff"
       ffroot="$(ls "$WORK/ff" | head -1)"
-      mkdir -p "$WORK/ffdata/floorp"
+      mkdir -p "$WORK/ffdata/firefox"
       while IFS= read -r rel; do
         f="$WORK/ff/$ffroot/$rel"
         if [ "$(head -c 4 "$f" | od -An -c | tr -d ' ')" = '177ELF' ]; then
@@ -185,17 +185,17 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
             *) name="libdd_ff_$rel.so" ;;
           esac
           install -m 755 "$f" "$OUT/$name"; bundled+=("$OUT/$name")
-          printf '%s\t%s\n' "$name" "$rel" >> "$WORK/floorp.txt"
+          printf '%s\t%s\n' "$name" "$rel" >> "$WORK/firefox.txt"
         else
-          mkdir -p "$WORK/ffdata/floorp/$(dirname "$rel")" && cp -p "$f" "$WORK/ffdata/floorp/$rel"
+          mkdir -p "$WORK/ffdata/firefox/$(dirname "$rel")" && cp -p "$f" "$WORK/ffdata/firefox/$rel"
         fi
       done < <(cd "$WORK/ff/$ffroot" && find . -type f | sed 's|^\./||' | sort)
-      echo "$ffroot" > "$WORK/ffdata/floorp/program.txt"
-      install -m 755 "$HERE/floorp.sh" "$OUT/libdd_floorp-run.so"
+      echo "$ffroot" > "$WORK/ffdata/firefox/program.txt"
+      install -m 755 "$HERE/firefox.sh" "$OUT/libdd_firefox-run.so"
       mkdir -p "$WORK/ffdata/share/applications"
-      printf '[Desktop Entry]\nType=Application\nName=Floorp\nGenericName=Web Browser\nComment=Browse the web\nIcon=internet-web-browser\nExec=floorp %%u\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\n' \
-        > "$WORK/ffdata/share/applications/org.deskdroid.floorp.desktop"
-      echo "   floorp: $ffroot, $(wc -l < "$WORK/floorp.txt") programs and libraries"
+      printf '[Desktop Entry]\nType=Application\nName=Firefox\nGenericName=Web Browser\nComment=Browse the web (an unofficial build of Firefox)\nIcon=internet-web-browser\nExec=firefox %%u\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\n' \
+        > "$WORK/ffdata/share/applications/org.deskdroid.firefox.desktop"
+      echo "   firefox: $ffroot, $(wc -l < "$WORK/firefox.txt") programs and libraries"
     fi
     todo=("${bundled[@]}")
     while [ ${#todo[@]} -gt 0 ]; do
@@ -300,8 +300,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
           | grep -Ev "^qml/${qmlskip#^}" | zip -q -X "$OUT/libkwin_data.so" -@)
       done
-      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt gtkapps.txt floorp.txt)
-      [ -d "$WORK/ffdata" ] && (cd "$WORK/ffdata" && zip -qr -X "$OUT/libkwin_data.so" floorp share)
+      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt gtkapps.txt firefox.txt)
+      [ -d "$WORK/ffdata" ] && (cd "$WORK/ffdata" && zip -qr -X "$OUT/libkwin_data.so" firefox share)
       [ -d "$WORK/gtkshare" ] && (cd "$WORK/gtkshare" && zip -qr -X "$OUT/libkwin_data.so" share)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
