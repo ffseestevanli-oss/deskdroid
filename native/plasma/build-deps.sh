@@ -751,10 +751,15 @@ build_kwrite() {
   local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/kate-$GEAR_VERSION.tar.xz" "kate-$GEAR_VERSION.tar.xz")"
   sed -i 's|^add_executable(kwrite main.cpp data/kwrite.qrc)|add_executable(kwrite)\ntarget_sources(kwrite PRIVATE main.cpp data/kwrite.qrc)|' "$s/apps/kwrite/CMakeLists.txt"
   python3 "$HERE/apps/as-library.py" "$s" apps/kwrite/CMakeLists.txt kwrite apps/kwrite/main.cpp
+  # Kate too (for the app store), without its plugins: same library, tabs,
+  # sessions and split views. Its target is kate-bin, named kate.
+  perl -0pi -e 's/^add_executable\(kate-bin\n/add_executable(kate-bin)\ntarget_sources(kate-bin PRIVATE\n/m or die "kate-bin"' "$s/apps/kate/CMakeLists.txt"
+  python3 "$HERE/apps/as-library.py" "$s" apps/kate/CMakeLists.txt kate-bin apps/kate/main.cpp
   unandroid "$s"
-  KEEP_GOING=1 kde_cmake "$s" -DBUILD_addons=OFF -DBUILD_kate=OFF -DBUILD_doc=OFF -DENABLE_PCH=OFF -DUSE_DBUS=ON \
+  KEEP_GOING=1 kde_cmake "$s" -DBUILD_addons=OFF -DBUILD_doc=OFF -DENABLE_PCH=OFF -DUSE_DBUS=ON \
     -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
   test -e "$PREFIX/lib/libkwrite.so"
+  test -e "$PREFIX/lib/libkate.so"
 }
 inputs_kwrite() { inputs_dolphin; }
 # Gwenview: KDE's image viewer, with the image libraries it reads
@@ -783,6 +788,27 @@ build_gwenview() {
   test -e "$PREFIX/lib/libgwenview.so"
 }
 inputs_gwenview() { inputs_dolphin; }
+# KCalc: KDE's calculator, on GMP, MPFR and MPC for its arbitrary precision.
+build_gmp() {
+  local s; s="$(unpack https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz gmp-6.3.0.tar.xz)"
+  autotools_cross "$s" --disable-static --enable-shared --enable-cxx=no
+}
+build_mpfr() {
+  local s; s="$(unpack https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.xz mpfr-4.2.2.tar.xz)"
+  autotools_cross "$s" --disable-static --enable-shared --with-gmp="$PREFIX"
+}
+build_mpc() {
+  local s; s="$(unpack https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz mpc-1.3.1.tar.gz)"
+  autotools_cross "$s" --disable-static --enable-shared --with-gmp="$PREFIX" --with-mpfr="$PREFIX"
+}
+build_kcalc() {
+  local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/kcalc-$GEAR_VERSION.tar.xz" "kcalc-$GEAR_VERSION.tar.xz")"
+  python3 "$HERE/apps/as-library.py" "$s" CMakeLists.txt kcalc kcalc.cpp
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
+  test -e "$PREFIX/lib/libkcalc.so"
+}
+inputs_kcalc() { inputs_dolphin; }
 inputs_dolphin() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
 
 # ---- GTK 3 (for Floorp, stage 6) ----------------------------------------------
@@ -977,7 +1003,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
      sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
-     syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview
+     syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
