@@ -159,15 +159,31 @@ static void closeAppletPopups(const QPointF &pos)
     if (!workspace() || !input()) {
         return;
     }
-    Window *target = input()->findToplevel(pos);
-    if (target && (target->isAppletPopup() || target->isDock() || target->isPopupWindow())) {
-        return;
-    }
+    QList<Window *> popups;
     const auto windows = workspace()->windows();
     for (Window *w : windows) {
         if (w->isAppletPopup() && !w->isDeleted() && !w->isHidden()) {
-            w->closeWindow();
+            popups << w;
         }
+    }
+    if (popups.isEmpty()) {
+        return;
+    }
+    Window *target = input()->findToplevel(pos);
+    // A press inside a popup (or its menus), or on the panel, whose buttons
+    // open and close popups themselves, leaves them.
+    if (target && (target->isAppletPopup() || target->isDock() || target->isPopupWindow())) {
+        return;
+    }
+    qInfo("nativedesk: press outside %lld plasmoid popup(s), on %s; closing them", qlonglong(popups.size()),
+          target ? qPrintable(target->resourceClass() + QLatin1Char(' ') + target->caption()) : "nothing");
+    for (Window *w : popups) {
+        w->closeWindow();
+    }
+    // Plasma also hides its popups when they lose focus: give focus to what
+    // was pressed (the desktop, a window), as a desktop session would.
+    if (target && target->wantsInput()) {
+        workspace()->activateWindow(target, true);
     }
 }
 
