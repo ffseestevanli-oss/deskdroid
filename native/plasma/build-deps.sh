@@ -737,6 +737,19 @@ build_dolphin() {
   KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
   test -e "$PREFIX/lib/libdolphin.so"
 }
+# Thumbnails (Dolphin, the wallpaper picker): kio-extras' thumbnail worker
+# and its thumbnailers only; the rest of kio-extras isn't needed.
+build_kio_extras() {
+  local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/kio-extras-$GEAR_VERSION.tar.xz" "kio-extras-$GEAR_VERSION.tar.xz")"
+  perl -0pi -e 's/\n    DNSSD\n/\n/ or die "dnssd"; s/find_package\(QCoro6 REQUIRED COMPONENTS Core\)\nqcoro_enable_coroutines\(\)\n// or die "qcoro"; s/^add_subdirectory\(kcms\)\n.*?(?=^if\(BUILD_DOC\)\n    add_subdirectory\(doc\))/add_subdirectory(thumbnail)\n\n/ms or die "subdirs"' "$s/CMakeLists.txt"
+  # The worker draws offscreen, a Qt platform this build leaves out on
+  # Android: it keeps the app's Wayland one (it makes no windows).
+  perl -0pi -e 's/^(    qputenv\("QT_QPA_PLATFORM", "offscreen"\);)$/#ifndef Q_OS_ANDROID\n$1\n#endif/m or die "offscreen"' "$s/thumbnail/thumbnail.cpp"
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DWITHOUT_X11=ON -DBUILD_DOC=OFF -DUSE_DBUS=ON -DBUILD_ACTIVITIES=OFF
+  test -e "$PREFIX/plugins/kf6/kio/thumbnail.so"
+  test -e "$PREFIX/plugins/kf6/thumbcreator/imagethumbnail.so"
+}
 # KWrite: KDE's text editor, from Kate's sources without Kate and its
 # plugins. KSyntaxHighlighting builds its indexer for the host itself.
 build_syntax_highlighting() {
@@ -1033,7 +1046,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
      sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
-     syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
+     syntax_highlighting kio_extras ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
