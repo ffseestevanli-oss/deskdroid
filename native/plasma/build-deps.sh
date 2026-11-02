@@ -745,6 +745,8 @@ build_kio_extras() {
   # The worker draws offscreen, a Qt platform this build leaves out on
   # Android: it keeps the app's Wayland one (it makes no windows).
   perl -0pi -e 's/^(    qputenv\("QT_QPA_PLATFORM", "offscreen"\);)$/#ifndef Q_OS_ANDROID\n$1\n#endif/m or die "offscreen"' "$s/thumbnail/thumbnail.cpp"
+  # Comic books need KArchive's 7-Zip, built without here.
+  perl -0pi -e 's/^add_library\(comicbookthumbnail .*?^install\(TARGETS comicbookthumbnail [^\n]*\n//ms or die "comic"' "$s/thumbnail/CMakeLists.txt"
   unandroid "$s"
   KEEP_GOING=1 kde_cmake "$s" -DWITHOUT_X11=ON -DBUILD_DOC=OFF -DUSE_DBUS=ON -DBUILD_ACTIVITIES=OFF
   test -e "$PREFIX/plugins/kf6/kio/thumbnail.so"
