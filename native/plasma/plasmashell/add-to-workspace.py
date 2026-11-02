@@ -60,6 +60,14 @@ assert "icu" not in t and "m_tzNames" not in t
 edit("libtaskmanager/virtualdesktopinfo.cpp",
      "return qGuiApp->nativeInterface<QNativeInterface::QX11Application>()->connection();", "return nullptr;")
 
+# Add Widgets listed the applets' C++ plugins (Icon, Panel Spacer) as
+# "Unsupported Widget" next to their packages: on Android KDE finds plugins
+# by library name, and these carry no metadata of their own. Nameless
+# entries stay out of the list.
+edit("components/shellprivate/plasmaappletitemmodel.cpp",
+     'if (!plugin.isValid() || plugin.rawData().value(u"NoDisplay").toBool()',
+     'if (!plugin.isValid() || plugin.name().isEmpty() /* DeskDroid */ || plugin.rawData().value(u"NoDisplay").toBool()')
+
 # MPRIS for the task manager, without its KDED module (no kded here).
 edit("libkmpris/CMakeLists.txt", "add_subdirectory(kded)", "# add_subdirectory(kded)")
 
