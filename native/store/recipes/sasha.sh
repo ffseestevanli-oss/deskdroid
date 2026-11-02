@@ -54,7 +54,7 @@ static int sashaMain(int argc, char **argv)
 PY
 entry="$(dirname "$0")/../../plasma/kwin-nativedesk/qthost_entry.cpp"
 sed -e 's/args.push_back("kwin_wayland")/args.push_back("sasha")/' -e 's/return kwinMain(/return sashaMain(/' "$entry" >> "$w/entry.cpp"
-! grep -q -e kwinMain -e '"kwin_wayland"' "$w/entry.cpp"
+if grep -q -e kwinMain -e '"kwin_wayland"' "$w/entry.cpp"; then echo "::error::QtHost entry not adapted"; exit 1; fi
 
 cat > "$w/CMakeLists.txt" <<CMAKE
 cmake_minimum_required(VERSION 3.21)
