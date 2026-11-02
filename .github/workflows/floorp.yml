@@ -43,7 +43,10 @@ jobs:
       - name: GTK and friends (Plasma deps cache)
         uses: actions/cache/restore@v4
         with:
-          path: ~/plasma-prefix
+          # The same paths as plasma.yml saves: they're part of the cache's identity.
+          path: |
+            ~/plasma-prefix
+            ~/.cache/deskdroid/plasma
           key: plasma-deps-none
           restore-keys: plasma-deps-
       - uses: actions/cache/restore@v4
