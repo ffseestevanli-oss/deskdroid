@@ -11,12 +11,37 @@ on:
       - .github/workflows/floorp.yml
   workflow_dispatch:
 
-concurrency:
-  group: floorp-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
+  # A pull request's paths filter looks at the whole PR, so every push starts
+  # this workflow: build only when the push itself changes Floorp's files (or
+  # it's the PR's first run), and never cancel a build for an unrelated push.
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      floorp: ${{ steps.diff.outputs.floorp }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || [ "$ACTION" != synchronize ] || [ -z "$BEFORE" ] \
+             || ! git cat-file -e "$BEFORE" 2>/dev/null \
+             || git diff --name-only "$BEFORE" HEAD | grep -qE '^(native/floorp/|\.github/workflows/floorp\.yml$)'; then
+            echo floorp=true >> "$GITHUB_OUTPUT"
+          else
+            echo floorp=false >> "$GITHUB_OUTPUT"
+          fi
   floorp:
+    needs: changes
+    if: needs.changes.outputs.floorp == 'true'
+    concurrency:
+      group: floorp-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
