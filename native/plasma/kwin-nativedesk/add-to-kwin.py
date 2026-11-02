@@ -115,6 +115,13 @@ edit(si, "void OpenGLSurfaceTexture::update(const QRegion &region)\n{\n",
      "        return;\n"
      "    }\n")
 
+# No DRM device here (the GPU is reached through Android's EGL): KWin's GL
+# path asks the render backend's DRM device about sync objects and PCI ids.
+edit("src/wayland_server.cpp", "    if (backend->drmDevice()->supportsSyncObjTimelines()) {",
+     "    if (backend->drmDevice() && backend->drmDevice()->supportsSyncObjTimelines()) {")
+edit("src/compositor.cpp", "    if (const auto pciInfo = backend->drmDevice()->pciDeviceInfo()) {",
+     "    if (const auto pciInfo = backend->drmDevice() ? backend->drmDevice()->pciDeviceInfo() : std::optional<drmPciDeviceInfo>()) {")
+
 # kwin_wayland as a library with a JNI entry point, since Qt for Android needs
 # a Java VM: QtHost loads it into an app_process and calls QtHost.run().
 edit("src/CMakeLists.txt", "add_executable(kwin_wayland main_wayland.cpp)",

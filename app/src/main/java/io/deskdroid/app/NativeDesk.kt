@@ -493,6 +493,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     // KWin composites on the phone's GPU (OpenGL ES), falling back to the CPU (QPainter) by itself.
                     // A file named kwin-cpu in the app's files folder forces the CPU, to compare.
                     if (File(filesDir, "kwin-cpu").exists()) put("KWIN_COMPOSE", "Q")
+                    // KWin's own Qt Quick windows (OSDs, effects) would draw with GL through
+                    // a DRM device, which there isn't here: Qt's software renderer for those.
+                    put("QT_QUICK_BACKEND", "software")
                     put("KDE_DEBUG", "1")
                     put("QT_LOGGING_RULES", "js=true;kde.plasma.activitiesstats=false;qt.sql.qsqldatabase=false") // no KCrash handler: our own prints where a crash happened
                     put("KWIN_FORCE_OWN_QPA", "1") // KWin only takes its own Qt platform plugin when the program is named kwin_wayland; ours is app_process
