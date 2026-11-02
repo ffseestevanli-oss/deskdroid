@@ -594,10 +594,11 @@ build_kio() {
   python3 "$HERE/apps/as-library.py" "$s" src/kioworker/CMakeLists.txt kioworker src/kioworker/kioworker.cpp
   sed -i 's|install(TARGETS kioworker DESTINATION ${KDE_INSTALL_LIBEXECDIR_KF})|install(TARGETS kioworker LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR})|' "$s/src/kioworker/CMakeLists.txt"
   grep -q "kioworker LIBRARY DESTINATION" "$s/src/kioworker/CMakeLists.txt"
+  python3 "$HERE/patches/kio/preview-log.py" "$s"
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DWITH_WAYLAND=ON
 }
-inputs_kio() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
+inputs_kio() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/patches/kio/*; }
 build_kxmlgui() { kf kxmlgui; }
 build_kstatusnotifieritem() { kf kstatusnotifieritem; }
 # The library only: its QML imports need Boost, which isn't here yet.
