@@ -20,11 +20,10 @@ How the native desktop is built: [docs/native-plasma.md](docs/native-plasma.md).
 
 ## Installing software
 
-1. **The DeskDroid store (main way).** KDE and other apps we build for Android, installed from the App Store in the desktop menu or Kickoff. They run at native speed with the phone's GPU.
-2. **Debian apt (fallback).** For Linux software that isn't in the store yet, through the Debian container, with its windows on the native desktop. Slower, and without GPU acceleration.
-3. **No Flatpak.** It needs glibc and a sandbox feature Android doesn't allow for apps.
-
-Android apps are already in Kickoff's Android Apps folder.
+- **The DeskDroid store.** KDE and other apps we build for Android, installed from the App Store in the desktop menu or Kickoff. They run at native speed with the phone's GPU.
+- **Android apps** are in Kickoff's Android Apps folder.
+- **No Flatpak.** It needs glibc and a sandbox feature Android doesn't allow for apps.
+- **No Debian apt for now.** The Debian container that could have run other Linux software has been removed with the old desktop (see below).
 
 ## Roadmap
 
@@ -32,20 +31,19 @@ Android apps are already in Kickoff's Android Apps folder.
 - **FEX-Emu and Steam:** FEX built natively and shipped through the store, running x86 programs such as Steam from a one-time x86 system download, without proot. Getting games onto the phone's GPU through Vulkan is the hard part.
 - More apps in the store, Private Space and Work profile apps in Kickoff, and full external monitor support.
 
-## Legacy: the Debian (proot) desktop
+## Removed for now: the Debian (proot) desktop
 
-The earlier desktop, Plasma on a Debian trixie system under proot shown through Termux:X11, is still in the app under **Settings → Legacy: Debian desktop settings**. It downloads its system image on first use, and includes Firefox, Steam (ARM64 client with FEX-Emu for x86) and Flatpak apps. Its docs: [docs/plan.md](docs/plan.md), [docs/steam-checklist.md](docs/steam-checklist.md) and [docs/gpu-venus-checklist.md](docs/gpu-venus-checklist.md).
+The earlier desktop, Plasma on a Debian trixie system under proot shown through Termux:X11, has been removed from the app for now, along with all of its legacy settings, to keep DeskDroid fast and focused on the native desktop. That includes the Debian container and apt. Its old docs are still here for reference: [docs/plan.md](docs/plan.md), [docs/steam-checklist.md](docs/steam-checklist.md) and [docs/gpu-venus-checklist.md](docs/gpu-venus-checklist.md).
 
 ## Repository layout
 
-- `app/`: the Android app (Kotlin, plain views): setup and Home screens, the native desktop (`NativeDesk.kt`, `QtHost.kt`), the store, and the legacy session and installer services.
+- `app/`: the Android app (Kotlin, plain views): setup and Home screens, the native desktop (`NativeDesk.kt`, `QtHost.kt`), and the store.
 - `native/nativedesk/`: the native compositor, KWin's DeskDroid backend glue and the store package builder.
 - `native/plasma/`: builds Qt 6, KDE Frameworks, KWin, plasmashell and the KDE apps for Android with the NDK.
-- `native/`: proot, talloc and `ddtool` (zstd + minisign) for the legacy desktop. Everything is compiled from source during the build, with no prebuilt binaries, as F-Droid requires. See [native/README.md](native/README.md).
-- `external/termux-x11/`: Termux:X11 as a git submodule (legacy desktop's X server).
-- `rootfs/`: builds the legacy Debian images with `mmdebstrap`.
-- `fex/`: builds FEX-Emu.
-- `.github/workflows/`: CI that builds the KDE stack and the APK, and publishes the store, the APK and the legacy images as releases.
+- `fex/`: builds FEX-Emu (for the FEX and Steam roadmap item).
+- `.github/workflows/`: CI that builds the KDE stack and the APK, and publishes the store and the APK as releases.
+
+Everything is compiled from source during the build, with no prebuilt binaries, as F-Droid requires. Code left over from the removed Debian desktop (proot, Termux:X11, the rootfs images) is being taken out.
 
 ## Build
 
@@ -60,13 +58,3 @@ Needs JDK 17, the Android SDK, the NDK version pinned in `app/build.gradle.kts`,
     ./gradlew assembleDebug
 
 CI does the same on every push (Actions → Android APK, artifact `deskdroid-debug-apk`). Pushes to main publish the APK as `apk-latest` and the store as `store-latest`; pull requests get `apk-pr-N` and `store-pr-N` test releases.
-
-Legacy system images: Actions → **Rootfs images** → Run workflow. Publishes them to the `rootfs-latest` release.
-
-## Signing key for legacy system images
-
-The app only installs Debian images signed with DeskDroid's minisign key (debug builds without a key fall back to SHA-256).
-
-1. `minisign -G -W -p deskdroid.pub -s deskdroid.key` (no password; the key lives only in GitHub's encrypted secrets).
-2. Repo Settings → Secrets → Actions: `MINISIGN_SECRET_KEY` = contents of `deskdroid.key`.
-3. Repo Settings → Variables → Actions: `MINISIGN_PUBLIC_KEY` = the second line of `deskdroid.pub`. The APK workflow bakes it in; for local builds set `deskdroidImagePublicKey` in `gradle.properties`.
