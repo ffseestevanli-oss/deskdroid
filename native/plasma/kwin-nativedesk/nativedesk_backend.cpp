@@ -202,8 +202,31 @@ static void closeAppletPopups(const QPointF &pos)
     }
 }
 
+// Plasma hides a plasmoid's popup (Kickoff, the calendar...) when the popup
+// loses focus, which is the cue a press elsewhere gives. That needs the popup
+// to have had focus: give it focus when it opens, and log it.
+static void focusAppletPopupsWhenShown()
+{
+    static bool connected = false;
+    if (connected || !workspace()) {
+        return;
+    }
+    connected = true;
+    QObject::connect(workspace(), &Workspace::windowAdded, workspace(), [](Window *w) {
+        qInfo("nativedesk: window opened: %s [type %d]%s", qPrintable(w->resourceClass()), int(w->windowType()),
+              w->isAppletPopup() ? " plasmoid popup, focusing it" : "");
+        if (w->isAppletPopup()) {
+            workspace()->activateWindow(w, true);
+        }
+    });
+    QObject::connect(workspace(), &Workspace::windowActivated, workspace(), [](Window *w) {
+        qInfo("nativedesk: focus on %s", w ? qPrintable(w->resourceClass() + QStringLiteral(" [type %1]").arg(int(w->windowType()))) : "nothing");
+    });
+}
+
 void NativeDeskInputDevice::pointer(const QPointF &pos, uint32_t buttons)
 {
+    focusAppletPopupsWhenShown();
     const auto time = now();
     Q_EMIT pointerMotionAbsolute(pos, time, this);
     static const struct { uint32_t bit, button; } map[] = {{1, BTN_LEFT}, {2, BTN_RIGHT}, {4, BTN_MIDDLE}};
