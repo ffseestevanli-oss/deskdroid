@@ -923,7 +923,7 @@ build_plasma_desktop_taskmanager() {
   cp -r "$s/applets/icontasks" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.icontasks"
   grep -q '"X-Plasma-RootPath": "org.kde.plasma.taskmanager"' "$PREFIX/share/plasma/plasmoids/org.kde.plasma.icontasks/metadata.json"
 }
-inputs_plasma_desktop_taskmanager() { cat "$HERE"/taskmanager/* "$HERE"/taskmanager/stubs/*; }
+inputs_plasma_desktop_taskmanager() { cat "$HERE"/taskmanager/CMakeLists.txt "$HERE"/taskmanager/patch.py "$HERE"/taskmanager/stubs/*; }
 # KDE's app database needs share/mime/<type>/<subtype>.xml to know MIME
 # types (Qt has its own); made from the build machine's shared-mime-info.
 build_mime_stubs() {
