@@ -176,11 +176,12 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       while IFS= read -r rel; do
         f="$WORK/ff/$ffroot/$rel"
         if [ "$(head -c 4 "$f" | od -An -c | tr -d ' ')" = '177ELF' ]; then
-          # Its own libraries by the name the others ask for (libxul.so as
-          # libdd_xul.so, as for any library here), the rest by their path.
+          # Its own libraries under their own names (NSS opens libsoftokn3.so
+          # and libfreeblpriv3.so by name, next to itself), its programs and
+          # the libraries in subfolders by their path.
           case "$rel" in
             */*) name="libdd_ff_$(echo "${rel%.so}" | tr '/' '_').so" ;;
-            *.so) name="$(bundlename "$rel")" ;;
+            *.so) name="$rel" ;;
             *) name="libdd_ff_$rel.so" ;;
           esac
           install -m 755 "$f" "$OUT/$name"; bundled+=("$OUT/$name")
@@ -304,7 +305,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       [ -d "$WORK/gtkshare" ] && (cd "$WORK/gtkshare" && zip -qr -X "$OUT/libkwin_data.so" share)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
-        $(ls -d share/applications share/mime share/kxmlgui5 share/config.kcfg share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
+        $(ls -d share/applications share/mime share/kxmlgui5 share/config.kcfg share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
         -x $(for a in "${store_apps[@]}"; do echo "share/applications/*$a*"; done))
     fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"

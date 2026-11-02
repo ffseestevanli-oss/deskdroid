@@ -829,7 +829,20 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             globals.appendText("\n[UiSettings]\nColorScheme=Breeze Dark\n")
         File(config, "plasmarc").takeUnless { it.exists() && it.readText().contains("[Theme]") }
             ?.appendText("\n[Theme]\nname=breeze-dark\n")
+        // GTK programs (Floorp): Breeze for GTK (breeze-gtk), light or dark as
+        // Plasma's colour scheme is, at every start. A settings.ini without
+        // DeskDroid's first line is the user's own and is kept.
+        val gtk = File(config, "gtk-3.0/settings.ini")
+        if (!gtk.exists() || gtk.readLines().firstOrNull() == GTK_MARK) {
+            val scheme = Regex("(?m)^ColorScheme=(.*)$").find(globals.readText())?.groupValues?.get(1).orEmpty()
+            val light = scheme.contains("Light", ignoreCase = true) || scheme == "Breeze"
+            gtk.parentFile?.mkdirs()
+            gtk.writeText("$GTK_MARK\n[Settings]\ngtk-theme-name=${if (light) "Breeze" else "Breeze-Dark"}\n" +
+                "gtk-icon-theme-name=${if (light) "breeze" else "breeze-dark"}\n" +
+                "gtk-application-prefer-dark-theme=${!light}\ngtk-cursor-theme-name=breeze_cursors\n")
+        }
     }
+    private val GTK_MARK = "# Written by DeskDroid to match Plasma's colors; delete this line to keep your own."
 
     /**
      * The home folder stays in app storage (KDE's config, caches and sockets need a real

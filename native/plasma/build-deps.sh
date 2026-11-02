@@ -683,6 +683,20 @@ build_kfilemetadata() { kf kfilemetadata; }
 # the light ones by its generate-symbolic-dark, built here for the host; icons
 # it doesn't recolor come from Breeze, which Breeze Dark inherits (instead of
 # copies of them all).
+# Breeze for GTK programs (Floorp...): CSS and images only, made on the
+# build machine from the prefix's Plasma color schemes.
+build_breeze_gtk() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/breeze-gtk-$PLASMA_VERSION.tar.xz" "breeze-gtk-$PLASMA_VERSION.tar.xz")"
+  command -v sassc >/dev/null && python3 -c "import cairo" 2>/dev/null || sudo apt-get install -y -q sassc python3-cairo >/dev/null
+  sed 's|@Python3_EXECUTABLE@|python3|g' "$s/src/build_theme.sh.cmake" > "$s/src/build_theme.sh"
+  rm -rf "$PREFIX/share/themes/Breeze" "$PREFIX/share/themes/Breeze-Dark"
+  (cd "$s/src" && sh build_theme.sh -c BreezeDark -t "$PREFIX/share/themes/Breeze-Dark" -r "$PREFIX/share/color-schemes" \
+    && sh build_theme.sh -c BreezeLight -t "$PREFIX/share/themes/Breeze" -r "$PREFIX/share/color-schemes")
+  cp "$s/src/gtk-dark-3.0.css" "$PREFIX/share/themes/Breeze/gtk-3.0/gtk-dark.css"
+  cp "$s/src/settings.ini" "$PREFIX/share/themes/Breeze/settings.ini"
+  cp "$s/src/settings.ini" "$PREFIX/share/themes/Breeze-Dark/settings.ini"
+  test -s "$PREFIX/share/themes/Breeze-Dark/gtk-3.0/gtk.css"
+}
 build_breeze_icons() {
   local s d; s="$(kf_src breeze-icons)"; d="$(mktemp -d)"
   sed -i -E 's/^add_subdirectory\((autotests|src)\)/# &/' "$s/CMakeLists.txt"
@@ -1073,7 +1087,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
      sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
      syntax_highlighting kio_extras ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
-     pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3)
+     pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/*.* "$HERE"/kwin-nativedesk/CMakeLists.txt "$HERE/../nativedesk/protocol.h" "$HERE/ahb/deskdroid_ahb.h"; }
