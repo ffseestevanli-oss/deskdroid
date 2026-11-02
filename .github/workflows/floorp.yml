@@ -1,0 +1,73 @@
+name: Floorp
+
+# The web browser: Floorp's runtime (Firefox) ported to the native desktop,
+# desktop Firefox on GTK 3/Wayland for Android's libc (native/floorp). Built
+# against the GTK stack from the Plasma deps cache; a compiler cache keeps
+# later runs short.
+on:
+  pull_request:
+    paths:
+      - native/floorp/**
+      - .github/workflows/floorp.yml
+  workflow_dispatch:
+
+concurrency:
+  group: floorp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  floorp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v5
+      - name: Make room (Firefox needs ~25 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/node_modules /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /usr/share/swift
+          df -h /
+      - name: Install build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libclang-dev clang llvm pkg-config unzip zip m4 nasm
+          rustup target add aarch64-linux-android
+          cargo install cbindgen --locked
+          curl -sSfL https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz | tar xz
+          sudo install sccache-*/sccache /usr/local/bin/
+          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> "$GITHUB_ENV"
+          echo "SCCACHE_CACHE_SIZE=8G" >> "$GITHUB_ENV"
+      - name: Install the pinned NDK
+        run: >
+          yes | "$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin | sort -V | tail -1)/sdkmanager" --install
+          "ndk;$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)"
+          && echo "NDK=$ANDROID_HOME/ndk/$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)" >> "$GITHUB_ENV"
+      - name: GTK and friends (Plasma deps cache)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/plasma-prefix
+          key: plasma-deps-none
+          restore-keys: plasma-deps-
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/sccache
+          key: floorp-sccache-${{ github.run_id }}
+          restore-keys: floorp-sccache-
+      - name: Fetch Floorp's runtime source
+        run: |
+          mkdir ~/floorp-src && cd ~/floorp-src
+          git init -q && git remote add origin https://github.com/Floorp-Projects/Floorp-Runtime
+          git fetch -q --depth 1 origin "$(cat "$GITHUB_WORKSPACE/native/floorp/runtime-commit.txt")"
+          git checkout -q FETCH_HEAD
+          du -sh . && df -h /
+      - name: Build
+        run: native/floorp/build.sh ~/plasma-prefix "$NDK" ~/floorp-src ~/floorp-out
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~/.cache/sccache
+          key: floorp-sccache-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: floorp
+          path: ~/floorp-out
+          retention-days: 7

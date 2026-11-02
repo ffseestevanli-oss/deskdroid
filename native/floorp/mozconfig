@@ -1,0 +1,24 @@
+# DeskDroid's Floorp: desktop Firefox for Android's libc, on GTK 3/Wayland.
+# build.sh fills in @NDK@, @PREFIX@ and @LIBCLANG@.
+ac_add_options --enable-application=browser
+ac_add_options --target=aarch64-linux-android
+ac_add_options --with-android-ndk=@NDK@
+ac_add_options --with-android-version=29
+ac_add_options --enable-default-toolkit=cairo-gtk3-wayland-only
+ac_add_options --with-libclang-path=@LIBCLANG@
+ac_add_options --disable-bootstrap
+ac_add_options --without-wasm-sandboxed-libraries
+ac_add_options --enable-optimize
+ac_add_options --disable-debug
+ac_add_options --disable-tests
+ac_add_options --disable-crashreporter
+ac_add_options --disable-updater
+ac_add_options --disable-sandbox
+ac_add_options --disable-webrtc
+ac_add_options --disable-eme
+ac_add_options --disable-dbus
+ac_add_options --disable-lto
+ac_add_options --with-ccache=sccache
+ac_add_options --with-branding=browser/branding/unofficial
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-deskdroid
+export PKG_CONFIG_LIBDIR=@PREFIX@/lib/pkgconfig:@PREFIX@/share/pkgconfig
