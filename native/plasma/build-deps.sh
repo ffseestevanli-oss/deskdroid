@@ -807,21 +807,21 @@ build_cairo() {
   test -e "$PREFIX/lib/pkgconfig/cairo-gobject.pc"
 }
 build_pango() {
-  : against GNU libintl # (rebuilt when GLib stopped bringing its own)
+  : against GNU libintl, 2 # (rebuilt when GLib stopped bringing its own)
   local s; s="$(unpack https://download.gnome.org/sources/pango/1.56/pango-1.56.3.tar.xz pango-1.56.3.tar.xz)"
   meson_cross "$s" -Dintrospection=disabled -Dbuild-testsuite=false -Dbuild-examples=false -Dxft=disabled \
     -Dfontconfig=enabled -Dfreetype=enabled -Dcairo=enabled -Dlibthai=disabled -Dsysprof=disabled -Ddocumentation=false
   test -e "$PREFIX/lib/pkgconfig/pangoft2.pc"
 }
 build_gdk_pixbuf() {
-  : against GNU libintl # (rebuilt when GLib stopped bringing its own)
+  : against GNU libintl, 2 # (rebuilt when GLib stopped bringing its own)
   local s; s="$(unpack https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz gdk-pixbuf-2.42.12.tar.xz)"
   meson_cross "$s" -Dpng=enabled -Djpeg=enabled -Dtiff=disabled -Dothers=disabled -Dbuiltin_loaders=png,jpeg \
     -Dintrospection=disabled -Dman=false -Dgtk_doc=false -Dtests=false -Dinstalled_tests=false
 }
 # ATK only (GTK 3 needs it; the D-Bus accessibility bus is for X11).
 build_atk() {
-  : against GNU libintl # (rebuilt when GLib stopped bringing its own)
+  : against GNU libintl, 2 # (rebuilt when GLib stopped bringing its own)
   local s; s="$(unpack https://download.gnome.org/sources/at-spi2-core/2.56/at-spi2-core-2.56.0.tar.xz at-spi2-core-2.56.0.tar.xz)"
   # libxml2 is for the accessibility bus's tools, not ATK.
   sed -i "s/^libxml_dep = dependency('libxml-2.0', version: libxml_req_version)$/libxml_dep = dependency('libxml-2.0', version: libxml_req_version, required: not get_option('atk_only'))/" "$s/meson.build"
@@ -831,7 +831,7 @@ build_atk() {
 }
 # GTK's resources need gdk-pixbuf-pixdata on the build machine (CI installs it).
 build_gtk3() {
-  : against GNU libintl # (rebuilt when GLib stopped bringing its own)
+  : against GNU libintl, 2 # (rebuilt when GLib stopped bringing its own)
   command -v gdk-pixbuf-pixdata >/dev/null
   local s; s="$(unpack https://download.gnome.org/sources/gtk/3.24/gtk-3.24.49.tar.xz gtk-3.24.49.tar.xz)"
   # No shm_open in Android's libc: Wayland buffers use memfd_create, which
