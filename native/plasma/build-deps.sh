@@ -908,6 +908,22 @@ build_plasma_desktop_folder() {
   cp -r "$s/containments/folder" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.folder"
   grep -q '"X-Plasma-RootPath": "org.kde.desktopcontainment"' "$PREFIX/share/plasma/plasmoids/org.kde.plasma.folder/metadata.json"
 }
+# The task manager: plasma-desktop's applet ("Icons-and-Text Task
+# Manager") with its C++ plugin, and the icons-only one, which is the same
+# applet under another name (plasma-desktop's applets/icontasks).
+build_plasma_desktop_taskmanager() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-desktop-$PLASMA_VERSION.tar.xz" "plasma-desktop-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  python3 "$HERE/taskmanager/patch.py" "$s"
+  rm -rf "$s/_taskmanager" && cp -r "$HERE/taskmanager" "$s/_taskmanager"
+  rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.taskmanager"
+  kde_cmake "$s/_taskmanager" -DDESKTOP_SRC="$s"
+  test -e "$PREFIX/share/plasma/plasmoids/org.kde.plasma.taskmanager/contents/ui/main.qml"
+  rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.icontasks"
+  cp -r "$s/applets/icontasks" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.icontasks"
+  grep -q '"X-Plasma-RootPath": "org.kde.plasma.taskmanager"' "$PREFIX/share/plasma/plasmoids/org.kde.plasma.icontasks/metadata.json"
+}
+inputs_plasma_desktop_taskmanager() { cat "$HERE"/taskmanager/* "$HERE"/taskmanager/stubs/*; }
 # KDE's app database needs share/mime/<type>/<subtype>.xml to know MIME
 # types (Qt has its own); made from the build machine's shared-mime-info.
 build_mime_stubs() {
@@ -930,7 +946,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
-     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
+     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
      syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3)
 

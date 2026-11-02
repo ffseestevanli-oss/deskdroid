@@ -60,6 +60,9 @@ assert "icu" not in t and "m_tzNames" not in t
 edit("libtaskmanager/virtualdesktopinfo.cpp",
      "return qGuiApp->nativeInterface<QNativeInterface::QX11Application>()->connection();", "return nullptr;")
 
+# MPRIS for the task manager, without its KDED module (no kded here).
+edit("libkmpris/CMakeLists.txt", "add_subdirectory(kded)", "# add_subdirectory(kded)")
+
 entry = (here.parent / "kwin-nativedesk" / "qthost_entry.cpp").read_text()
 entry = entry.replace("KWin's main_wayland.cpp: on Android kwin_wayland", "plasmashell's main.cpp: on Android plasmashell")
 entry = entry.replace('args.push_back("kwin_wayland")', 'args.push_back("plasmashell")')

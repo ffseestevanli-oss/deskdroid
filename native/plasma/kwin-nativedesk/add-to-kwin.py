@@ -24,6 +24,20 @@ def edit(path, old, new):
     p.write_text(s.replace(old, new))
 
 
+# Every app here is /system/bin/app_process, so KWin can't tell plasmashell
+# by its program for the interfaces only Plasma may use (the task manager's
+# window list): plasmashell is the process QtHost started with its library.
+ws = "src/wayland_server.cpp"
+edit(ws, '#include "wayland_server.h"\n', '#include "wayland_server.h"\n#include <QFile>\n')
+edit(ws, "        static bool permissionCheckDisabled = ",
+     "        { // DeskDroid\n"
+     "            QFile cmdline(QStringLiteral(\"/proc/%1/cmdline\").arg(client->processId()));\n"
+     "            if (cmdline.open(QIODevice::ReadOnly) && cmdline.readAll().split('\\0').contains(QByteArrayLiteral(\"libplasmashell.so\"))) {\n"
+     "                return true;\n"
+     "            }\n"
+     "        }\n"
+     "        static bool permissionCheckDisabled = ")
+
 edit("src/backends/CMakeLists.txt", "add_subdirectory(virtual)", "add_subdirectory(virtual)\nadd_subdirectory(nativedesk)")
 m = "src/main_wayland.cpp"
 edit(m, '#include "backends/virtual/virtual_backend.h"\n',
