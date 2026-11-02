@@ -34,4 +34,26 @@ old = """        thumbRoot = QStandardPaths::writableLocation(QStandardPaths::Ge
 assert t.count(old) == 1, "thumbRoot"
 t = t.replace(old, old + """        QDir().mkpath(thumbRoot);
 """)
+# The thumbnail worker sends width, height, format and pixel ratio ahead of
+# the image even when it isn't using shared memory (which Android hasn't
+# got); PreviewJob read the image straight from the start without shared
+# memory, so every thumbnail came back empty. Read past those first.
+old = """    if (thumb.isNull()) {
+        // fallback a raw QImage
+        str >> thumb;
+    }
+"""
+assert t.count(old) == 1, "slotThumbData"
+t = t.replace(old, """#if !WITH_SHM
+    {
+        int width;
+        int height;
+        QImage::Format format;
+        qreal imgDevicePixelRatio;
+        str >> width >> height >> format >> imgDevicePixelRatio;
+        str >> thumb;
+        thumb.setDevicePixelRatio(imgDevicePixelRatio);
+    }
+#endif
+""" + old)
 open(p, "w").write(t)
