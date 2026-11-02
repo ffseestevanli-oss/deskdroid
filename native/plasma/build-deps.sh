@@ -665,6 +665,11 @@ build_plasma_integration() {
   perl -0pi -e 's/find_package\(X11\)\s*set_package_properties\(X11 [^)]*\)/set(X11_FOUND OFF)/' "$t/CMakeLists.txt"
   grep -q "set(X11_FOUND OFF)" "$t/CMakeLists.txt"
   cp "$HERE/patches/plasma-integration/x11integration.cpp" "$t/x11integration.cpp"
+  # "Open With" asks xdg-desktop-portal-kde for its app chooser over D-Bus;
+  # there's no portal here, so the dialog never appeared. Without that
+  # handler KIO shows its own Open With dialog in the app.
+  sed -i 's/KIO::JobUiDelegate(flags, window, {new KIOOpenWith(window, nullptr)})/KIO::JobUiDelegate(flags, window, {})/' "$t/kiodelegate.cpp"
+  grep -q "KIO::JobUiDelegate(flags, window, {})" "$t/kiodelegate.cpp"
   unandroid "$s"
   kde_cmake "$s" -DBUILD_QT5=OFF -DBUILD_QT6=ON
   test -e "$PREFIX/plugins/platformthemes/KDEPlasmaPlatformTheme6.so" || ls "$PREFIX"/plugins/platformthemes/ | grep -q KDEPlasma
