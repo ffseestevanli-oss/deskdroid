@@ -381,6 +381,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         put("QT_PLUGIN_PATH", pluginPath(libs, File(filesDir, "kwin"))) // Qt's Wayland plugins, flat in the library folder
                         put("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1") // KWin draws the borders (Breeze, soon)
                         if (appsOnGpu()) put("QT_WAYLAND_CLIENT_BUFFER_INTEGRATION", "deskdroid-ahb") else put("QT_QUICK_BACKEND", "software")
+                        put("QT_DISABLE_SHADER_DISK_CACHE", "1") // see startPlasmaShell
                         // KWin's keymaps and fonts setup: a Wayland client compiles the keymap
                         // KWin sends, and Qt crashes when xkbcommon finds no layouts.
                         val data = File(filesDir, "kwin")
@@ -544,6 +545,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // app's files folder forces the CPU, to compare); else Qt's software renderer
         // through Wayland shm. KDE reads its choice of renderer from kdeglobals.
         val gpu = appsOnGpu()
+        // Shader binaries build 247 cached: loading them back draws garbage.
+        File(filesDir, ".cache").walkTopDown().maxDepth(2).filter { it.isDirectory && it.name.startsWith("qtshadercache") }
+            .toList().forEach { it.deleteRecursively() }
         File(config, "kdeglobals").let { g ->
             val t = if (g.exists()) g.readText() else ""
             val section = "[QtQuickRendererSettings]\nSceneGraphBackend=" + (if (gpu) "rhi" else "software") + "\n"
@@ -597,6 +601,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("QT_PLUGIN_PATH", pluginPath(libs, data))
                     put("QML_IMPORT_PATH", File(data, "qml").path)
                     if (gpu) put("QT_WAYLAND_CLIENT_BUFFER_INTEGRATION", "deskdroid-ahb") else put("QT_QUICK_BACKEND", "software")
+                    // No compiled-shader cache: the PowerVR driver takes cached program
+                    // binaries back and draws garbage with them (build 247's second start).
+                    put("QT_DISABLE_SHADER_DISK_CACHE", "1")
                     put("KDE_DEBUG", "1")
                     put("QT_LOGGING_RULES", "kf.service.*=true;js=true") // why the app database comes up empty
                     // GTK programs: Wayland, and settings kept in memory (no dconf here).
