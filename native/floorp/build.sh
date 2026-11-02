@@ -18,10 +18,18 @@ cat "$SRC/mozconfig"
 
 cd "$SRC"
 export MOZBUILD_STATE_PATH="$HOME/.mozbuild" MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=pip
-set +e
-./mach --no-interactive configure > "$OUT/configure.log" 2>&1
-rc=$?
-set -e
+# Options this configuration doesn't offer come out of the mozconfig (and
+# out of the log) instead of costing a whole run each.
+for try in 1 2 3 4 5 6 7 8; do
+  set +e
+  ./mach --no-interactive configure > "$OUT/configure.log" 2>&1
+  rc=$?
+  set -e
+  bad="$(sed -n 's/.*InvalidOptionError: \(--[a-z0-9-]*\) is not available in this configuration.*/\1/p' "$OUT/configure.log" | head -1)"
+  [ $rc -ne 0 ] && [ -n "$bad" ] || break
+  echo "== dropping $bad (not available here)"
+  sed -i "/ac_add_options $bad\$/d" mozconfig
+done
 tail -60 "$OUT/configure.log"
 [ $rc -eq 0 ] || { echo "== configure FAILED"; exit 1; }
 

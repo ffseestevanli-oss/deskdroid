@@ -15,7 +15,6 @@ ac_add_options --disable-crashreporter
 ac_add_options --disable-updater
 ac_add_options --disable-sandbox
 ac_add_options --disable-webrtc
-ac_add_options --disable-eme
 ac_add_options --disable-dbus
 ac_add_options --disable-lto
 ac_add_options --with-ccache=sccache
