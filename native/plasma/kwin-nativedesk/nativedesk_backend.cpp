@@ -6,6 +6,7 @@
 #include "nativedesk_backend.h"
 
 #include "core/outputconfiguration.h"
+#include "compositor.h"
 #include "core/renderloop.h"
 #include "input.h"
 #include "deskdroid_ahb_server.h"
@@ -22,6 +23,7 @@
 #include "workspace.h"
 
 #include <QSocketNotifier>
+#include <QTimer>
 
 #include <android/hardware_buffer.h>
 #include <epoxy/egl.h>
@@ -854,6 +856,15 @@ void NativeDeskBackend::readMessages()
                     // As KWin's nested Wayland backend does on a resize: the
                     // workspace lays out panels, windows and screen edges again.
                     Q_EMIT outputsQueried();
+                    // Draw the new layout now, not at the next mouse move: once the
+                    // workspace has moved things, and again when panels have followed.
+                    for (int ms : {0, 150}) {
+                        QTimer::singleShot(ms, this, [] {
+                            if (Compositor::self()) {
+                                Compositor::self()->addRepaintFull();
+                            }
+                        });
+                    }
                 }
             }
             break;
