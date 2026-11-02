@@ -1,0 +1,10 @@
+{
+  "apps": [
+    {
+      "id": "sasha",
+      "repo": "https://github.com/ffseestevanli-oss/sasha",
+      "branch": "main",
+      "recipe": "sasha"
+    }
+  ]
+}

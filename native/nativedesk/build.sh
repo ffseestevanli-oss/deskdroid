@@ -77,7 +77,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # each started by its command bin/<app>, a link to libdd_qtapp.so (qtapp.sh).
     apps=()
     # Apps in DeskDroid's app store instead of the APK: packaged below.
-    store_apps=(gwenview)
+    # The ones from other repositories (native/store/apps.json) are built into
+    # the prefix by native/store/build-apps.sh first.
+    store_apps=(gwenview $(jq -r '.apps[].id' "$HERE/../store/apps.json" 2>/dev/null))
     for app in dolphin kioworker ksmserver-logout-greeter kwrite; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
@@ -236,8 +238,14 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       rm -f "$STORE_OUT/$app.zip"; (cd "$pkg" && zip -qr -X "$STORE_OUT/$app.zip" .)
       size="$(stat -c %s "$STORE_OUT/$app.zip")"; sha="$(sha256sum "$STORE_OUT/$app.zip" | cut -d' ' -f1)"
       cp "$(ls "$pkg"/share/icons/hicolor/128x128/apps/"$app".png "$pkg"/share/icons/hicolor/*/apps/"$app".png 2>/dev/null | head -1)" "$STORE_OUT/$app.png" 2>/dev/null || true
-      store_entries+=("$(printf '{"id":"%s","name":"%s","summary":"%s","version":"%s","size":%s,"sha256":"%s","file":"%s.zip","icon":"%s.png"}' \
-        "$app" "${title:-$app}" "$summary" "${version:-}" "$size" "$sha" "$app" "$app")")
+      # Built from another repository: which commit (store-watch.yml compares it with upstream).
+      source=""
+      if [ -s "$DESKDROID_QT_ANDROID/share/deskdroid-store/$app.source" ]; then
+        read -r srcrepo srcsha < "$DESKDROID_QT_ANDROID/share/deskdroid-store/$app.source"
+        source="$(printf ',"repo":"%s","commit":"%s"' "$srcrepo" "$srcsha")"
+      fi
+      store_entries+=("$(printf '{"id":"%s","name":"%s","summary":"%s","version":"%s","size":%s,"sha256":"%s","file":"%s.zip","icon":"%s.png"%s}' \
+        "$app" "${title:-$app}" "$summary" "${version:-}" "$size" "$sha" "$app" "$app" "$source")")
       echo "   store: $app ($(du -h "$STORE_OUT/$app.zip" | cut -f1), ${#own[@]} libraries)"
     done
     (IFS=,; echo "{\"version\":1,\"apps\":[${store_entries[*]}]}") > "$STORE_OUT/index.json"

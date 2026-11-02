@@ -65,6 +65,16 @@ jobs:
           else
             echo "No KWin build in the cache yet: Qt's prebuilt libraries, no KWin"
           fi
+      # The app store's apps from other repositories (native/store/apps.json),
+      # each from the newest commit of its branch, built into that Qt prefix;
+      # build.sh packages them for the store. One failing doesn't fail the APK.
+      - name: Build the app store's apps
+        continue-on-error: true
+        run: |
+          if [ "$DESKDROID_QT_ANDROID" != "$HOME/plasma-prefix" ]; then echo "No DeskDroid Qt prefix: no store apps"; exit 0; fi
+          sudo apt-get install -y -q librsvg2-bin
+          ndk="$ANDROID_HOME/ndk/$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)"
+          QT_HOST_PATH="$DESKDROID_QT_HOST" native/store/build-apps.sh ~/plasma-prefix "$ndk"
       - uses: actions/cache@v4
         with:
           path: |
