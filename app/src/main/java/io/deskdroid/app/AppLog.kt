@@ -34,6 +34,7 @@ object AppLog {
             try { i("CRASH in ${t.name}: ${Log.getStackTraceString(e).take(4000)}") } catch (_: Throwable) {}
             android?.uncaughtException(t, e)
         }
+        watchMainThread()
         try {
             if (lines.isEmpty() && f.exists()) {
                 lines.addLast("== Log from before the app last restarted ==")
@@ -61,10 +62,41 @@ object AppLog {
             )
             "Previous process ended: ${reasons[e.reason] ?: "reason ${e.reason}"} (status ${e.status}, " +
                 "importance ${e.importance}, ${(e.pss / 1024)} MB) ${e.description ?: ""} at " +
-                java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date(e.timestamp))
+                java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date(e.timestamp)) +
+                (if (e.reason == 6) anrMainThread(e) else "")
         } catch (e: Exception) {
             null
         }
+    }
+
+    // "Not responding": where the main thread was, from Android's own trace.
+    @android.annotation.TargetApi(30)
+    private fun anrMainThread(e: android.app.ApplicationExitInfo): String = try {
+        val trace = e.traceInputStream?.bufferedReader()?.readLines().orEmpty()
+        val start = trace.indexOfFirst { it.startsWith("\"main\"") }
+        if (start < 0) "" else "\nMain thread when Android gave up on it:\n" +
+            trace.drop(start).takeWhile { it.isNotBlank() }.take(60).joinToString("\n")
+    } catch (x: Exception) {
+        ""
+    }
+
+    /**
+     * A main thread that doesn't answer for 3 seconds gets its stack in the log,
+     * before Android reports the app as not responding (at 5).
+     */
+    fun watchMainThread() {
+        Thread {
+            val looper = Looper.getMainLooper()
+            while (true) {
+                val answered = java.util.concurrent.atomic.AtomicBoolean(false)
+                main.post { answered.set(true) }
+                Thread.sleep(3000)
+                if (!answered.get()) {
+                    i("Main thread busy for 3 s, at:\n" + looper.thread.stackTrace.take(40).joinToString("\n") { "  at $it" })
+                    while (!answered.get()) Thread.sleep(500)
+                }
+            }
+        }.apply { isDaemon = true; name = "main-watch" }.start()
     }
 
     /**

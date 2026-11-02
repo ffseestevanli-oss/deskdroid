@@ -605,7 +605,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     // binaries back and draws garbage with them (build 247's second start).
                     put("QT_DISABLE_SHADER_DISK_CACHE", "1")
                     put("KDE_DEBUG", "1")
-                    put("QT_LOGGING_RULES", "kf.service.*=true;js=true") // why the app database comes up empty
+                    put("QT_LOGGING_RULES", "js=true;kf.service.*=false;kde.plasma.activitiesstats=false;qt.sql.qsqldatabase=false;org.kde.plasma.kicker=false") // a flood of lines keeps the app busy
                     // GTK programs: Wayland, and settings kept in memory (no dconf here).
                     put("GDK_BACKEND", "wayland")
                     put("GSETTINGS_BACKEND", "memory")
