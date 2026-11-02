@@ -167,6 +167,21 @@ static void closeAppletPopups(const QPointF &pos)
         }
     }
     if (popups.isEmpty()) {
+        // What is on screen instead (a popup Plasma didn't mark as one?), once
+        // per set of windows, to find out what stays open.
+        QStringList seen;
+        for (Window *w : windows) {
+            if (!w->isDeleted() && !w->isHidden() && !w->isDesktop()) {
+                seen << QStringLiteral("%1[type %2%3]").arg(w->resourceClass()).arg(int(w->windowType()))
+                            .arg(w->isPopupWindow() ? QStringLiteral(" popup") : QString());
+            }
+        }
+        static QString last;
+        const QString line = seen.join(QStringLiteral(", "));
+        if (line != last) {
+            last = line;
+            qInfo("nativedesk: press with no plasmoid popup; windows: %s", qPrintable(line));
+        }
         return;
     }
     Window *target = input()->findToplevel(pos);
