@@ -746,6 +746,19 @@ build_kio_extras() {
   # The worker draws offscreen, a Qt platform this build leaves out on
   # Android: it keeps the app's Wayland one (it makes no windows).
   perl -0pi -e 's/^(    qputenv\("QT_QPA_PLATFORM", "offscreen"\);)$/#ifndef Q_OS_ANDROID\n$1\n#endif/m or die "offscreen"' "$s/thumbnail/thumbnail.cpp"
+  # Thumbnailers are asked for by ID (imagethumbnail...); without one in
+  # their metadata, KDE takes the file name, which on Android is the APK's
+  # flat libplugins_kf6_thumbcreator_<name>. Each gets its ID written in.
+  python3 - "$s/thumbnail" <<'PY'
+import json, pathlib, sys
+for f in pathlib.Path(sys.argv[1]).glob("*thumbnail.json"):
+    if f.name == "thumbnail.json":
+        continue
+    d = json.loads(f.read_text())
+    d.setdefault("KPlugin", {})["Id"] = f.stem
+    f.write_text(json.dumps(d, indent=4) + "\n")
+PY
+  grep -q '"Id": "imagethumbnail"' "$s/thumbnail/imagethumbnail.json"
   # Comic books need KArchive's 7-Zip, built without here.
   perl -0pi -e 's/^add_library\(comicbookthumbnail .*?^install\(TARGETS comicbookthumbnail [^\n]*\n//ms or die "comic"' "$s/thumbnail/CMakeLists.txt"
   unandroid "$s"

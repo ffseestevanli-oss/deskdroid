@@ -22,4 +22,15 @@ new = old + """
     }"""
 assert t.count(old) == 1, "slotResult"
 t = t.replace(old, new)
+old = """        bool pluginIsEnabled = enabledPlugins.contains(plugin.pluginId());"""
+new = old + """
+        {
+            static int told = 0;
+            if (told++ < 40) {
+                qCWarning(KIO_GUI) << "DeskDroid: thumbnailer" << plugin.pluginId() << plugin.fileName() << "types" << plugin.mimeTypes().size()
+                                   << "enabled" << pluginIsEnabled << "of" << enabledPlugins;
+            }
+        }"""
+assert t.count(old) == 1, "plugin loop"
+t = t.replace(old, new)
 open(p, "w").write(t)
