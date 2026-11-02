@@ -1,28 +1,22 @@
 name: App store watcher
 
-# Keeps the app store's apps from other repositories (native/store/apps.json)
-# up to date: every few hours, when one of their branches has a new commit,
-# starts the APK build of main, which builds them and publishes the store
-# (store-latest). Changes to apps.json itself rebuild on push like any change.
+# The app store ships fixed releases, twice a year like Debian and Ubuntu:
+# native/store/apps.json pins each app to a commit, and only a change to it
+# changes the store (the APK build on main rebuilds and publishes it). Once a
+# week this lists, in the run's summary, the apps whose branch has moved past
+# their pin, ready for the next release. It never changes the store.
 on:
   schedule:
-    - cron: '23 */3 * * *'
+    - cron: '23 6 * * 1'
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: read
-
-concurrency:
-  group: store-watch
 
 jobs:
   watch:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - name: Compare the apps' branches with the published store
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+      - name: List apps with commits newer than this release
         run: native/store/watch.sh

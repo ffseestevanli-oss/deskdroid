@@ -1,9 +1,11 @@
 {
+  "release": "2026.11",
   "apps": [
     {
       "id": "sasha",
       "repo": "https://github.com/ffseestevanli-oss/sasha",
       "branch": "main",
+      "commit": "bfb3faa247b912f1bba67ddf42f978c8f746c56c",
       "recipe": "sasha"
     }
   ]
