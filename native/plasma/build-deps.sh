@@ -780,6 +780,7 @@ build_glib() {
   # GNU gettext's libintl (build_libintl), found with its header's folder. Without
   # it GLib builds its own stand-in, installed over it as libintl.so with other
   # symbols, and KDE's i18n no longer loads (KWin died at start in build 210).
+  build_libintl # gettext's again, in case an earlier GLib build replaced it
   meson_cross "$s" "${opts[@]}" -Dc_args="-ffile-prefix-map=$WORK=. -I$PREFIX/include"
   grep -i -E "intl|ngettext|Checking for function|Library .* found|Header" "$s/_android/meson-logs/meson-log.txt" | grep -i -E "intl|ngettext" | tail -38 >&2 || true
   test -e "$PREFIX/lib/libgio-2.0.so" && test -x "$HOSTPREFIX/bin/glib-compile-resources"
