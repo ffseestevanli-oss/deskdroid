@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the app store's apps from other repositories (apps.json) into
-# DeskDroid's Qt prefix for Android, each from the newest commit of its branch.
+# DeskDroid's Qt prefix for Android, each from the commit apps.json pins it
+# to (or, for an entry with no commit, the newest commit of its branch).
 # native/nativedesk/build.sh packages them for the store afterwards.
 #
 #   native/store/build-apps.sh <prefix> <ndk-dir> [id...]
@@ -28,7 +29,8 @@ for id in "${ids[@]}"; do
   entry="$(jq -c --arg id "$id" '.apps[] | select(.id == $id)' "$HERE/apps.json")"
   [ -n "$entry" ] || { echo "== $id: not in apps.json"; failed+=("$id"); continue; }
   repo="$(jq -r .repo <<<"$entry")"; branch="$(jq -r '.branch // "main"' <<<"$entry")"; recipe="$(jq -r .recipe <<<"$entry")"
-  sha="$(git ls-remote "$repo" "refs/heads/$branch" | cut -f1)"
+  sha="$(jq -r '.commit // empty' <<<"$entry")"
+  [ -n "$sha" ] || sha="$(git ls-remote "$repo" "refs/heads/$branch" | cut -f1)"
   if [ -z "$sha" ]; then echo "== $id: no branch $branch in $repo"; failed+=("$id"); continue; fi
   echo "== $id: $repo $branch at $sha"
   src="$WORK/$id/src"; mkdir -p "$src" "$WORK/$id/work"

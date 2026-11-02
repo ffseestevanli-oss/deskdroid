@@ -7,23 +7,26 @@ repositories. Each entry has:
 |---|---|
 | `id` | the app's command and package name (`bin/<id>`, `<id>.zip` in the store) |
 | `repo` | the git repository to build from |
-| `branch` | the branch to follow; every new commit on it is a new store version |
+| `branch` | the app's development branch, which the watcher compares the pin with |
+| `commit` | the commit this store release ships (without one, the newest on `branch`) |
 | `recipe` | `recipes/<recipe>.sh`, how to build it for Android |
 
-How it stays up to date:
+Releases: the store ships fixed releases, twice a year (like Debian and
+Ubuntu). `release` in `apps.json` names the current one, and each app's
+`commit` is what it ships; a new release bumps them.
 
 - Every APK build (`.github/workflows/android.yml`) runs `build-apps.sh`, which
-  builds the newest commit of each listed app into DeskDroid's Qt prefix.
+  builds each listed app at its pinned commit into DeskDroid's Qt prefix.
   `native/nativedesk/build.sh` then packages them for the store like Gwenview,
   and the catalog (`index.json`) records the commit each package came from.
   Changing `apps.json` or a recipe on `main` therefore rebuilds the store.
-- `.github/workflows/store-watch.yml` checks every few hours whether a listed
-  branch has moved past the commit in the published catalog (`store-latest`),
-  and if so starts a new build of `main`, which publishes the new version.
+- `.github/workflows/store-watch.yml` runs weekly and lists, in its run
+  summary, the apps whose branch has moved past their pin, for the next
+  release. It never changes the store.
 
 ## Adding an app
 
-1. Add an entry to `apps.json`.
+1. Add an entry to `apps.json`, pinned to the commit to ship.
 2. Write `recipes/<recipe>.sh`. It runs with these variables set:
    `STORE_ID`, `STORE_SRC` (the checked-out repository), `STORE_SHA` (its
    commit), `STORE_WORK` (an empty scratch folder), `PREFIX` (DeskDroid's Qt

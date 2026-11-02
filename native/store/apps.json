@@ -1,10 +1,26 @@
 {
+  "release": "2026.11",
   "apps": [
     {
       "id": "sasha",
       "repo": "https://github.com/ffseestevanli-oss/sasha",
       "branch": "main",
+      "commit": "bfb3faa247b912f1bba67ddf42f978c8f746c56c",
       "recipe": "sasha"
+    },
+    {
+      "id": "bonk",
+      "repo": "https://github.com/ffseestevanli-oss/bonk",
+      "branch": "main",
+      "commit": "619a9e02babf78344cdcb85e811b14d83bf1ad8f",
+      "recipe": "bonk"
+    },
+    {
+      "id": "smart-ass",
+      "repo": "https://github.com/ffseestevanli-oss/smart-ass",
+      "branch": "main",
+      "commit": "d45a947b6f043c6d913b0caa58d1e6033078b6ef",
+      "recipe": "smart-ass"
     }
   ]
 }
