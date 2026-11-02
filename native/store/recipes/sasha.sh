@@ -46,6 +46,8 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick Multimedia DBus)
 add_library(sasha SHARED "$src/cpp/host.cpp" "$src/cpp/player.cpp" "$src/cpp/player.h" entry.cpp)
 set_target_properties(sasha PROPERTIES CXX_VISIBILITY_PRESET default SUFFIX ".so")
+# 16 KB pages (newer phones) need 16 KB-aligned segments, like the APK's libraries.
+target_link_options(sasha PRIVATE "-Wl,-z,max-page-size=16384")
 target_include_directories(sasha PRIVATE "$src/cpp")
 target_compile_definitions(sasha PRIVATE TN_VERSION="$version" TN_ASSET_DIR="/nonexistent")
 target_link_libraries(sasha PRIVATE "$w/libsasha_core.a" Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Multimedia Qt6::DBus log dl)
