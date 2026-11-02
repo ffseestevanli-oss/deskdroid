@@ -831,8 +831,8 @@ float deskdroidSafePx[4] = {};
 QMargins deskdroidSafeMargins(const Output *output)
 {
     const qreal s = output ? output->scale() : 1;
-    return QMargins(std::ceil(deskdroidSafePx[0] / s), std::ceil(deskdroidSafePx[1] / s),
-                    std::ceil(deskdroidSafePx[2] / s), std::ceil(deskdroidSafePx[3] / s));
+    // Sideways only: panels may still touch the top and bottom edges.
+    return QMargins(std::ceil(deskdroidSafePx[0] / s), 0, std::ceil(deskdroidSafePx[2] / s), 0);
 }
 
 void NativeDeskBackend::readMessages()
