@@ -430,6 +430,12 @@ build_kcoreaddons() {
   local s; s="$(kf_src kcoreaddons)"
   sed -i '0,/^#include <unordered_map>/s//#include <unordered_map>\n#undef Q_OS_ANDROID/' "$s/src/lib/plugin/kpluginmetadata.cpp"
   grep -q "^#undef Q_OS_ANDROID" "$s/src/lib/plugin/kpluginmetadata.cpp"
+  # A plugin's ID comes from its file name, but QPluginLoader follows the link
+  # to the APK's flat file (libplugins_kf6_thumbcreator_imagethumbnail.so), so
+  # every plugin found by folder got that as its ID and nothing asked for by
+  # name (thumbnailers...) matched. The ID comes from the link's name instead.
+  perl -0pi -e 's/(if \(!d->m_fileName\.isEmpty\(\)\) \{\n\s*d->m_pluginId = QFileInfo\()d->m_fileName(\)\.completeBaseName\(\);)/$1pluginFile.startsWith(QLatin1Char(\x27\/\x27)) ? pluginFile : d->m_fileName$2/' "$s/src/lib/plugin/kpluginmetadata.cpp"
+  grep -q "QFileInfo(pluginFile.startsWith" "$s/src/lib/plugin/kpluginmetadata.cpp"
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON
   # kcoreaddons_add_plugin: plugins in their namespace folders, as on Linux
