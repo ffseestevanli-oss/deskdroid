@@ -646,6 +646,23 @@ build_plasma5support() {
   test -e "$PREFIX/lib/cmake/Plasma5Support/Plasma5SupportConfig.cmake"
 }
 
+# KDE's look for Qt apps and Plasma's dialogs: the Qt Quick Controls style
+# (org.kde.desktop, instead of Android's Material: white windows, big controls)
+# and the platform theme (colors, fonts, icons, KDE's file dialog). The theme's
+# X11 part is a do-nothing stand-in.
+build_qqc2_desktop_style() { kf qqc2-desktop-style; test -e "$PREFIX/qml/org/kde/desktop/qmldir"; }
+build_plasma_integration() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-integration-$PLASMA_VERSION.tar.xz" "plasma-integration-$PLASMA_VERSION.tar.xz")"
+  local t="$s/qt6/src/platformtheme"
+  perl -0pi -e 's/find_package\(X11\)\s*set_package_properties\(X11 [^)]*\)/set(X11_FOUND OFF)/' "$t/CMakeLists.txt"
+  grep -q "set(X11_FOUND OFF)" "$t/CMakeLists.txt"
+  cp "$HERE/patches/plasma-integration/x11integration.cpp" "$t/x11integration.cpp"
+  unandroid "$s"
+  kde_cmake "$s" -DBUILD_QT5=OFF -DBUILD_QT6=ON
+  test -e "$PREFIX/plugins/platformthemes/KDEPlasmaPlatformTheme6.so" || ls "$PREFIX"/plugins/platformthemes/ | grep -q KDEPlasma
+}
+inputs_plasma_integration() { cat "$HERE"/patches/plasma-integration/*; }
+
 # ---- Apps' frameworks (stage 5) ----------------------------------------------
 
 # Spell checking: no dictionaries backend yet (Hunspell comes later); the
@@ -959,7 +976,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
-     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
+     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
      syntax_highlighting ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3)
 

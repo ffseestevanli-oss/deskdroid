@@ -600,6 +600,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("WAYLAND_DISPLAY", "wayland-0")
                     put("QT_PLUGIN_PATH", pluginPath(libs, data))
                     put("QML_IMPORT_PATH", File(data, "qml").path)
+                    // KDE's look instead of Android's (Qt picks Material there: white
+                    // windows, big controls): Plasma's platform theme (colors, fonts,
+                    // icons, file dialogs) and KDE's Qt Quick Controls style. A file
+                    // named android-style in the app's files folder turns it off.
+                    if (!File(filesDir, "android-style").exists()) {
+                        put("QT_QPA_PLATFORMTHEME", "kde")
+                        put("QT_QUICK_CONTROLS_STYLE", "org.kde.desktop")
+                    }
                     if (gpu) put("QT_WAYLAND_CLIENT_BUFFER_INTEGRATION", "deskdroid-ahb") else put("QT_QUICK_BACKEND", "software")
                     // No compiled-shader cache: the PowerVR driver takes cached program
                     // binaries back and draws garbage with them (build 247's second start).
