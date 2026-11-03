@@ -992,6 +992,171 @@ build_gtk3() {
   test -e "$PREFIX/lib/libgtk-3.so" && test -e "$PREFIX/lib/pkgconfig/gtk+-wayland-3.0.pc"
 }
 
+# ---- GIMP (for the app store) -------------------------------------------------
+# GIMP 3 and what it needs on top of the GTK stack: GEGL and babl (its image
+# engine), libmypaint (brushes), librsvg (icons), Poppler (PDF import),
+# AppStream (its extensions' metadata) and GObject Introspection's library
+# (Script-Fu). Packaged for the store by native/nativedesk/build.sh.
+
+build_xz() {
+  local s; s="$(unpack https://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1.tar.xz xz-5.8.1.tar.xz)"
+  autotools_cross "$s" --disable-static --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo \
+    --disable-lzma-links --disable-scripts --disable-doc --disable-nls
+  test -e "$PREFIX/lib/liblzma.so"
+}
+build_libtiff() {
+  local s; s="$(unpack https://download.osgeo.org/libtiff/tiff-4.7.0.tar.xz tiff-4.7.0.tar.xz)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -Dtiff-tools=OFF -Dtiff-tests=OFF -Dtiff-contrib=OFF -Dtiff-docs=OFF \
+    -Dwebp=OFF -Dzstd=OFF -Djbig=OFF -Dlerc=OFF -Dlibdeflate=OFF -Dlzma=ON -Djpeg=ON -Dzlib=ON
+  test -e "$PREFIX/lib/pkgconfig/libtiff-4.pc"
+}
+build_libxml2() {
+  local s; s="$(unpack https://download.gnome.org/sources/libxml2/2.13/libxml2-2.13.8.tar.xz libxml2-2.13.8.tar.xz)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -DLIBXML2_WITH_PYTHON=OFF -DLIBXML2_WITH_LZMA=OFF -DLIBXML2_WITH_ICU=OFF \
+    -DLIBXML2_WITH_TESTS=OFF -DLIBXML2_WITH_PROGRAMS=OFF -DLIBXML2_WITH_ICONV=ON
+  test -e "$PREFIX/lib/pkgconfig/libxml-2.0.pc"
+}
+build_json_glib() {
+  local s; s="$(unpack https://download.gnome.org/sources/json-glib/1.10/json-glib-1.10.6.tar.xz json-glib-1.10.6.tar.xz)"
+  meson_cross "$s" -Dintrospection=disabled -Ddocumentation=disabled -Dman=false -Dtests=false -Dconformance=false \
+    -Dnls=disabled -Dinstalled_tests=false
+  test -e "$PREFIX/lib/pkgconfig/json-glib-1.0.pc"
+}
+build_babl() {
+  local s; s="$(unpack https://download.gimp.org/babl/0.1/babl-0.1.124.tar.xz babl-0.1.124.tar.xz)"
+  meson_cross "$s" -Denable-gir=false -Dwith-docs=false -Denable-vapi=false -Dgi-docgen=disabled -Dwith-lcms=enabled \
+    -Drelocatable=disabled
+  test -e "$PREFIX/lib/pkgconfig/babl-0.1.pc"
+}
+build_gegl() {
+  local s; s="$(unpack https://download.gimp.org/gegl/0.4/gegl-0.4.70.tar.xz gegl-0.4.70.tar.xz)"
+  # Only what GIMP uses: everything optional off, then Cairo, Pango, LCMS,
+  # gdk-pixbuf and libtiff back on.
+  NINJA_KEEP_GOING=1 meson_cross "$s" -Dauto_features=disabled -Ddocs=false -Dgtk-doc=false -Dworkshop=false \
+    -Dintrospection=false -Dvapigen=disabled -Dgi-docgen=disabled -Drelocatable-bundle=no \
+    -Dcairo=enabled -Dpango=enabled -Dpangocairo=enabled -Dlcms=enabled -Dgdk-pixbuf=enabled -Dlibtiff=enabled
+  test -e "$PREFIX/lib/pkgconfig/gegl-0.4.pc"
+}
+build_gexiv2() {
+  local s; s="$(unpack https://download.gnome.org/sources/gexiv2/0.14/gexiv2-0.14.6.tar.xz gexiv2-0.14.6.tar.xz)"
+  meson_cross "$s" -Dintrospection=false -Dvapi=false -Dtools=false -Dpython3=false -Dtests=false -Dgtk_doc=false
+  test -e "$PREFIX/lib/pkgconfig/gexiv2.pc"
+}
+build_json_c() {
+  local s; s="$(unpack https://s3.amazonaws.com/json-c_releases/releases/json-c-0.18.tar.gz json-c-0.18.tar.gz)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF -DBUILD_TESTING=OFF -DBUILD_APPS=OFF -DDISABLE_EXTRA_LIBS=ON
+  test -e "$PREFIX/lib/pkgconfig/json-c.pc"
+}
+build_libmypaint() {
+  local s; s="$(unpack https://github.com/mypaint/libmypaint/releases/download/v1.6.1/libmypaint-1.6.1.tar.xz libmypaint-1.6.1.tar.xz)"
+  autotools_cross "$s" --disable-static --disable-introspection --disable-gegl --disable-i18n --disable-docs \
+    --disable-openmp --with-glib
+  test -e "$PREFIX/lib/pkgconfig/libmypaint.pc"
+}
+build_mypaint_brushes() {
+  local s; s="$(unpack https://github.com/mypaint/mypaint-brushes/releases/download/v2.0.2/mypaint-brushes-2.0.2.tar.xz mypaint-brushes-2.0.2.tar.xz)"
+  autotools_cross "$s"
+  test -e "$PREFIX/share/pkgconfig/mypaint-brushes-2.0.pc"
+}
+# librsvg's last C version (Rust from 2.41 on): GIMP needs 2.40.6 or later.
+build_libcroco() {
+  local s; s="$(unpack https://download.gnome.org/sources/libcroco/0.6/libcroco-0.6.13.tar.xz libcroco-0.6.13.tar.xz)"
+  autotools_cross "$s" --disable-static --disable-gtk-doc
+  test -e "$PREFIX/lib/pkgconfig/libcroco-0.6.pc"
+}
+build_librsvg() {
+  local s; s="$(unpack https://download.gnome.org/sources/librsvg/2.40/librsvg-2.40.21.tar.xz librsvg-2.40.21.tar.xz)"
+  autotools_cross "$s" --disable-static --disable-introspection --disable-vala --disable-tools \
+    --disable-pixbuf-loader --disable-gtk-doc
+  test -e "$PREFIX/lib/pkgconfig/librsvg-2.0.pc"
+}
+build_libarchive() {
+  local s; s="$(unpack https://github.com/libarchive/libarchive/releases/download/v3.8.1/libarchive-3.8.1.tar.xz libarchive-3.8.1.tar.xz)"
+  cmake_cross "$s" -DENABLE_TEST=OFF -DENABLE_TAR=OFF -DENABLE_CPIO=OFF -DENABLE_CAT=OFF -DENABLE_UNZIP=OFF \
+    -DENABLE_OPENSSL=OFF -DENABLE_MBEDTLS=OFF -DENABLE_NETTLE=OFF -DENABLE_ACL=OFF -DENABLE_XATTR=OFF \
+    -DENABLE_LIBB2=OFF -DENABLE_LZ4=OFF -DENABLE_ZSTD=OFF -DENABLE_EXPAT=OFF -DENABLE_LIBXML2=OFF \
+    -DENABLE_BZip2=OFF -DENABLE_ICONV=OFF -DENABLE_LZMA=ON -DENABLE_ZLIB=ON
+  test -e "$PREFIX/lib/pkgconfig/libarchive.pc"
+}
+build_curl() {
+  local s; s="$(unpack https://curl.se/download/curl-8.14.1.tar.xz curl-8.14.1.tar.xz)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF -DBUILD_CURL_EXE=OFF -DBUILD_TESTING=OFF \
+    -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF -DCURL_USE_OPENSSL=ON \
+    -DCURL_USE_LIBPSL=OFF -DUSE_LIBIDN2=OFF -DCURL_USE_LIBSSH2=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF \
+    -DUSE_NGHTTP2=OFF -DCURL_CA_PATH=/system/etc/security/cacerts
+  test -e "$PREFIX/lib/pkgconfig/libcurl.pc"
+}
+build_libfyaml() {
+  local s; s="$(unpack https://github.com/pantoniou/libfyaml/releases/download/v0.9/libfyaml-0.9.tar.gz libfyaml-0.9.tar.gz)"
+  autotools_cross "$s" --disable-static --disable-network
+  test -e "$PREFIX/lib/pkgconfig/libfyaml.pc"
+}
+build_libxmlb() {
+  local s; s="$(unpack https://github.com/hughsie/libxmlb/releases/download/0.3.24/libxmlb-0.3.24.tar.xz libxmlb-0.3.24.tar.xz)"
+  meson_cross "$s" -Dgtkdoc=false -Dintrospection=false -Dtests=false -Dcli=false -Dlzma=disabled -Dzstd=disabled
+  test -e "$PREFIX/lib/pkgconfig/xmlb.pc"
+}
+build_appstream() {
+  local s; s="$(unpack https://www.freedesktop.org/software/appstream/releases/AppStream-1.2.2.tar.xz AppStream-1.2.2.tar.xz)"
+  NINJA_KEEP_GOING=1 meson_cross "$s" -Dstemming=false -Dsystemd=false -Dvapi=false -Dqt=false -Dcompose=false \
+    -Dapt-support=false -Dgir=false -Dtools=false -Dzstd-support=false -Dblake3-support=false
+    -Ddisplay-detection=none -Ddocs=false -Dapidocs=false \
+    -Dinstall-docs=false -Dman=false -Dbash-completion=false
+  test -e "$PREFIX/lib/pkgconfig/appstream.pc"
+}
+# The library only (Script-Fu calls GIMP through it); no typelibs, which
+# would mean running Android programs on the build machine.
+build_gobject_introspection() {
+  local s; s="$(unpack https://download.gnome.org/sources/gobject-introspection/1.84/gobject-introspection-1.84.0.tar.xz gobject-introspection-1.84.0.tar.xz)"
+  meson_cross "$s" -Dgi_cross_use_prebuilt_gi=true -Dbuild_introspection_data=false -Dtests=false \
+    -Ddoctool=disabled -Dcairo=disabled -Dgtk_doc=false
+  test -e "$PREFIX/lib/pkgconfig/gobject-introspection-1.0.pc"
+}
+build_poppler() {
+  local s; s="$(unpack https://poppler.freedesktop.org/poppler-25.07.0.tar.xz poppler-25.07.0.tar.xz)"
+  cmake_cross "$s" -DENABLE_QT5=OFF -DENABLE_QT6=OFF -DENABLE_CPP=OFF -DENABLE_GLIB=ON -DENABLE_UTILS=OFF \
+    -DENABLE_BOOST=OFF -DENABLE_LIBOPENJPEG=none -DENABLE_NSS3=OFF -DENABLE_GPGME=OFF -DENABLE_LIBCURL=OFF \
+    -DENABLE_GOBJECT_INTROSPECTION=OFF -DENABLE_LCMS=ON -DENABLE_DCTDECODER=libjpeg -DBUILD_GTK_TESTS=OFF \
+    -DBUILD_CPP_TESTS=OFF -DBUILD_MANUAL_TESTS=OFF -DENABLE_GTK_DOC=OFF -DTESTDATADIR="$s"
+  test -e "$PREFIX/lib/pkgconfig/poppler-glib.pc"
+}
+build_poppler_data() {
+  local s; s="$(unpack https://poppler.freedesktop.org/poppler-data-0.4.12.tar.gz poppler-data-0.4.12.tar.gz)"
+  make -C "$s" install prefix="$PREFIX"
+  test -e "$PREFIX/share/pkgconfig/poppler-data.pc"
+}
+# GIMP itself. Its build normally runs GIMP to render the splash image; a
+# cross build can't run it, so that image is left out (GIMP starts without
+# a splash) and a stand-in answers its check for a GIMP on the build machine.
+# Its few build tools are built for the build machine against the runner's
+# GLib and librsvg.
+build_gimp() {
+  local s; s="$(unpack https://download.gimp.org/gimp/v3.2/gimp-3.2.6.tar.xz gimp-3.2.6.tar.xz)"
+  python3 - "$s/gimp-data/images/meson.build" <<'EOF'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+n = len(s)
+s = re.sub(r"\nsplash = custom_target\('gimp-splash.png',.*?install: true\)\n", "\n# DeskDroid: no splash (rendered by running GIMP)\n", s, count=1, flags=re.S)
+assert len(s) < n, "splash target not found"
+open(p, "w").write(s)
+EOF
+  local stub="$WORK/gimp-stub"; mkdir -p "$stub"
+  for n in gimp-console-3.2 gimp-3.2; do printf '#!/bin/sh\nexit 0\n' > "$stub/$n"; chmod +x "$stub/$n"; done
+  cat > "$WORK/gimp-native.ini" <<EOF
+[built-in options]
+pkg_config_path = '/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig'
+EOF
+  rm -rf "$s/_android"
+  PATH="$stub:$PATH" meson setup "$s/_android" "$s" --cross-file "$WORK/cross.ini" --native-file "$WORK/gimp-native.ini" \
+    --prefix="$PREFIX" --libdir=lib --buildtype=release -Ddefault_library=shared -Dauto_features=disabled \
+    -Dshmem-type=none -Dcheck-update=no -Denable-console-bin=false -Dcan-crosscompile-gir=false -Dvala=disabled \
+    -Djavascript=disabled -Dlua=false -Dlinux-input=disabled -Dheadless-tests=disabled -Dgi-docgen=disabled \
+    -Dappdata-test=disabled -Dlibunwind=false -Dlibbacktrace=false -Drelocatable-bundle=no \
+    -Dprint=true -Dcairo-pdf=enabled -Dwebkit-unmaintained=false
+  PATH="$stub:$PATH" ninja -C "$s/_android" -k 0 install
+  test -e "$PREFIX/bin/gimp-3.2"
+}
+
 # ---- plasmashell (stage 4b) ---------------------------------------------------
 
 build_plasmashell() {
@@ -1099,7 +1264,9 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
      sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
      syntax_highlighting kio_extras ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
-     pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk)
+     pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
+     xz libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
+     curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/*.* "$HERE"/kwin-nativedesk/CMakeLists.txt "$HERE/../nativedesk/protocol.h" "$HERE/ahb/deskdroid_ahb.h"; }
