@@ -998,6 +998,15 @@ build_gtk3() {
 # AppStream (its extensions' metadata) and GObject Introspection's library
 # (Script-Fu). Packaged for the store by native/nativedesk/build.sh.
 
+# pkg-config files for libraries without one: the NDK's zlib (exiv2.pc
+# asks for it) and libpng's unversioned name (its CMake build installs
+# libpng16.pc only).
+gimp_pc() {
+  mkdir -p "$PREFIX/lib/pkgconfig"
+  [ -e "$PREFIX/lib/pkgconfig/zlib.pc" ] || printf 'Name: zlib\nDescription: zlib (the NDK'"'"'s)\nVersion: 1.3.0\nLibs: -lz\nCflags:\n' \
+    > "$PREFIX/lib/pkgconfig/zlib.pc"
+  [ -e "$PREFIX/lib/pkgconfig/libpng.pc" ] || ln -s libpng16.pc "$PREFIX/lib/pkgconfig/libpng.pc"
+}
 build_xz() {
   local s; s="$(unpack https://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1.tar.xz xz-5.8.1.tar.xz)"
   autotools_cross "$s" --disable-static --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo \
@@ -1032,6 +1041,7 @@ build_gegl() {
   local s; s="$(unpack https://download.gimp.org/gegl/0.4/gegl-0.4.70.tar.xz gegl-0.4.70.tar.xz)"
   # Only what GIMP uses: everything optional off, then Cairo, Pango, LCMS,
   # gdk-pixbuf and libtiff back on.
+  gimp_pc
   NINJA_KEEP_GOING=1 meson_cross "$s" -Dauto_features=disabled -Ddocs=false -Dgtk-doc=false -Dworkshop=false \
     -Dintrospection=false -Dvapigen=disabled -Dgi-docgen=disabled -Drelocatable-bundle=no \
     -Dcairo=enabled -Dpango=enabled -Dpangocairo=enabled -Dlcms=enabled -Dgdk-pixbuf=enabled -Dlibtiff=enabled
@@ -1039,6 +1049,7 @@ build_gegl() {
 }
 build_gexiv2() {
   local s; s="$(unpack https://download.gnome.org/sources/gexiv2/0.14/gexiv2-0.14.6.tar.xz gexiv2-0.14.6.tar.xz)"
+  gimp_pc
   meson_cross "$s" -Dintrospection=false -Dvapi=false -Dtools=false -Dpython3=false -Dtests=false -Dgtk_doc=false
   test -e "$PREFIX/lib/pkgconfig/gexiv2.pc"
 }
@@ -1066,7 +1077,8 @@ build_libcroco() {
 }
 build_librsvg() {
   local s; s="$(unpack https://download.gnome.org/sources/librsvg/2.40/librsvg-2.40.21.tar.xz librsvg-2.40.21.tar.xz)"
-  autotools_cross "$s" --disable-static --disable-introspection --disable-vala --disable-tools \
+  # Written for libxml2 before 2.12, whose error callbacks took a non-const error.
+  CFLAGS="-O2 -Wno-error=incompatible-function-pointer-types" autotools_cross "$s" --disable-static --disable-introspection --disable-vala --disable-tools \
     --disable-pixbuf-loader --disable-gtk-doc
   test -e "$PREFIX/lib/pkgconfig/librsvg-2.0.pc"
 }
@@ -1088,7 +1100,7 @@ build_curl() {
 }
 build_libfyaml() {
   local s; s="$(unpack https://github.com/pantoniou/libfyaml/releases/download/v0.9/libfyaml-0.9.tar.gz libfyaml-0.9.tar.gz)"
-  autotools_cross "$s" --disable-static --disable-network
+  LDFLAGS="-L$PREFIX/lib" autotools_cross "$s" --disable-static --disable-network
   test -e "$PREFIX/lib/pkgconfig/libfyaml.pc"
 }
 build_libxmlb() {
@@ -1098,6 +1110,8 @@ build_libxmlb() {
 }
 build_appstream() {
   local s; s="$(unpack https://www.freedesktop.org/software/appstream/releases/AppStream-1.2.2.tar.xz AppStream-1.2.2.tar.xz)"
+  # Its tarball has one more folder level.
+  [ -e "$s/meson.build" ] || s="$(dirname "$(ls "$s"/*/meson.build | head -1)")"
   NINJA_KEEP_GOING=1 meson_cross "$s" -Dstemming=false -Dsystemd=false -Dvapi=false -Dqt=false -Dcompose=false \
     -Dapt-support=false -Dgir=false -Dtools=false -Dzstd-support=false -Dblake3-support=false
     -Ddisplay-detection=none -Ddocs=false -Dapidocs=false \
@@ -1108,6 +1122,9 @@ build_appstream() {
 # would mean running Android programs on the build machine.
 build_gobject_introspection() {
   local s; s="$(unpack https://download.gnome.org/sources/gobject-introspection/1.84/gobject-introspection-1.84.0.tar.xz gobject-introspection-1.84.0.tar.xz)"
+  # Without the scanner, a Python module that would need Android's Python headers.
+  sed -i -e "/^cc.check_header('Python.h'/d" -e "/^subdir('giscanner')$/d" "$s/meson.build"
+  if grep -q "^subdir('giscanner')" "$s/meson.build"; then return 1; fi
   meson_cross "$s" -Dgi_cross_use_prebuilt_gi=true -Dbuild_introspection_data=false -Dtests=false \
     -Ddoctool=disabled -Dcairo=disabled -Dgtk_doc=false
   test -e "$PREFIX/lib/pkgconfig/gobject-introspection-1.0.pc"
@@ -1132,6 +1149,7 @@ build_poppler_data() {
 # GLib and librsvg.
 build_gimp() {
   local s; s="$(unpack https://download.gimp.org/gimp/v3.2/gimp-3.2.6.tar.xz gimp-3.2.6.tar.xz)"
+  gimp_pc
   python3 - "$s/gimp-data/images/meson.build" <<'EOF'
 import re, sys
 p = sys.argv[1]; s = open(p).read()
