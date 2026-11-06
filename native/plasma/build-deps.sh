@@ -1363,9 +1363,9 @@ inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HE
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
      qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtmultimedia qtspeech qtwayland qttools deskdroid_ahb
-     ecm kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
+     ecm plasma_wayland_protocols kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
-     plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
+     kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
      sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
