@@ -22,4 +22,8 @@ if [ -e "$dir/program.env" ]; then
     export "$(printf '%s' "$line" | sed "s|@PROGRAM@|$P|g")"
   done < "$dir/program.env"
 fi
+# With ddmask preloaded (the desktop's apps have it), exec it plainly: ddmask
+# goes through the linker too, and the program keeps its own name, argv[0]
+# and /proc/self/exe.
+case "$LD_PRELOAD" in *libddmask.so*) exec "$P/$main" "$@" ;; esac
 exec /system/bin/linker64 "$P/$main" "$@"
