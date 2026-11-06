@@ -1,0 +1,79 @@
+# DeskDroid's default apps for the native desktop, shipped as
+# share/applications/mimeapps.list in KWin's data (XDG_DATA_DIRS).
+#
+# KDE 6 ignores InitialPreference, so without this file a type that several
+# apps claim goes to whichever one KDE's app database read first: folders to
+# Gwenview or Kate instead of Dolphin, text files to Kate instead of KWrite.
+#
+# Each entry is a list: the first app that is installed wins (Gwenview, Kate
+# and the others from DeskDroid's app store may not be). The Android app entry
+# (org.deskdroid.android-open.desktop) hands the file to Android's app chooser.
+# Types inherit from their parents (text/x-python from text/plain, every
+# image/* type is listed on its own: they share no parent but
+# application/octet-stream).
+#
+# The user's own choices (Open With, "Remember application association")
+# go to config/mimeapps.list, which KDE reads first, so they win over these.
+
+[Default Applications]
+# Folders
+inode/directory=org.kde.dolphin.desktop;
+
+# Text and code (their subtypes inherit text/plain)
+text/plain=org.kde.kwrite.desktop;org.kde.kate.desktop;
+text/markdown=org.kde.kwrite.desktop;org.kde.kate.desktop;
+text/x-log=org.kde.kwrite.desktop;org.kde.kate.desktop;
+text/csv=org.kde.kwrite.desktop;org.kde.kate.desktop;
+application/json=org.kde.kwrite.desktop;org.kde.kate.desktop;
+application/xml=org.kde.kwrite.desktop;org.kde.kate.desktop;
+application/x-shellscript=org.kde.kwrite.desktop;org.kde.kate.desktop;
+
+# Web pages and links
+text/html=org.deskdroid.firefox.desktop;
+application/xhtml+xml=org.deskdroid.firefox.desktop;
+x-scheme-handler/http=org.deskdroid.firefox.desktop;
+x-scheme-handler/https=org.deskdroid.firefox.desktop;
+
+# PDFs: Etherium's built-in viewer, else an Android app
+application/pdf=org.deskdroid.firefox.desktop;org.deskdroid.android-open.desktop;
+
+# Images: Gwenview (app store), else an Android app (not GIMP, which also
+# claims them but is an editor)
+image/png=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+image/jpeg=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+image/gif=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+image/webp=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+image/bmp=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+image/tiff=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+image/svg+xml=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+image/avif=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+image/heif=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+image/vnd.microsoft.icon=org.kde.gwenview.desktop;org.deskdroid.android-open.desktop;
+
+# Audio and video: the phone's own players (hardware decoding)
+audio/mpeg=org.deskdroid.android-open.desktop;
+audio/mp4=org.deskdroid.android-open.desktop;
+audio/ogg=org.deskdroid.android-open.desktop;
+audio/flac=org.deskdroid.android-open.desktop;
+audio/vnd.wave=org.deskdroid.android-open.desktop;
+audio/aac=org.deskdroid.android-open.desktop;
+audio/x-opus+ogg=org.deskdroid.android-open.desktop;
+video/mp4=org.deskdroid.android-open.desktop;
+video/webm=org.deskdroid.android-open.desktop;
+video/x-matroska=org.deskdroid.android-open.desktop;
+video/quicktime=org.deskdroid.android-open.desktop;
+video/vnd.avi=org.deskdroid.android-open.desktop;
+video/3gpp=org.deskdroid.android-open.desktop;
+
+# Documents, archives and Android packages: an Android app
+application/vnd.openxmlformats-officedocument.wordprocessingml.document=org.deskdroid.android-open.desktop;
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet=org.deskdroid.android-open.desktop;
+application/vnd.openxmlformats-officedocument.presentationml.presentation=org.deskdroid.android-open.desktop;
+application/msword=org.deskdroid.android-open.desktop;
+application/vnd.ms-excel=org.deskdroid.android-open.desktop;
+application/vnd.ms-powerpoint=org.deskdroid.android-open.desktop;
+application/vnd.oasis.opendocument.text=org.deskdroid.android-open.desktop;
+application/vnd.oasis.opendocument.spreadsheet=org.deskdroid.android-open.desktop;
+application/vnd.oasis.opendocument.presentation=org.deskdroid.android-open.desktop;
+application/zip=org.deskdroid.android-open.desktop;
+application/vnd.android.package-archive=org.deskdroid.android-open.desktop;
