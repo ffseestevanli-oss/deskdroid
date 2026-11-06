@@ -24,7 +24,7 @@ the folders Android allows, it runs:
 | an ARM64 musl program (Alpine's) | DeskDroid's musl, `libdd_ld-musl.so --argv0 <argv[0]> <program> <args>` (`/lib/ld-musl-aarch64.so.1` maps to it; see `../musl/README.md`) |
 | a static ARM64 program (Go, Rust, static musl or glibc) | ddmask's own loader, `libdd_static.so <program> <argv[0]> <args>` (`ddload.c`, below) |
 | an AppImage | `libdd_appimage.so <appimage> <argv[0]> <args>` (`appimage.sh`, below) |
-| anything else (x86) | refused with `EACCES` for now (Box64 later: `DDMASK_X86_64`) |
+| an x86-64 or i386 program | FEX-Emu, `$DDMASK_X86_64 <program> <args>` (`$DDMASK_I386` for i386), once the app has downloaded it (`X86.kt`; refused with `EACCES` before). FEX is a glibc program, so it starts by the glibc rule; see "x86 programs" below |
 
 A program started through the linker still sees its own `argv[0]`, has its
 own process name, and reads its own path from `/proc/self/exe`. Every exec
@@ -68,6 +68,21 @@ own `--appimage-extract`, into `$DDMASK_APPIMAGE_CACHE` (default
 (an ARM64 AppImage's programs are usually glibc ones). `DDMASK_APPIMAGE_RAW=1`
 makes ddmask run an AppImage as a plain program.
 
+## x86 programs: FEX-Emu
+
+x86 Linux programs (Steam, its games) run under FEX-Emu, which the app
+downloads the first time Steam starts (`X86.kt`, `docs/steam-checklist.md`):
+FEX into `files/x86/fex`, and the x86 system the programs see as `/` (FEX's
+Ubuntu 24.04 image with Xwayland, `fex/rootfs.sh`) into `files/x86/rootfs`.
+FEX is an ARM64 glibc program, built by `fex/build.sh` with its own
+`libstdc++` and `libgcc_s` next to it (found through `RPATH`), so it runs on
+DeskDroid's glibc. Its patch (`fex/patches`) makes its own execs (an x86
+program starting another, or FEX starting itself again) call the C library's
+`execveat`, which ddmask wraps, instead of the raw system call, and starts FEX
+by its real path rather than `/proc/self/exe` (the glibc loader). It also
+drops the Android `LD_PRELOAD` and `LD_LIBRARY_PATH` before the x86 program
+sees them.
+
 ## Settings
 
 All optional; the defaults are right for DeskDroid.
@@ -77,7 +92,8 @@ All optional; the defaults are right for DeskDroid.
 | `DDMASK_ALLOW` | Folders exec works in, `:`-separated. Default on Android: the system's folders and `libddmask.so`'s own folder. Elsewhere: everything (ddmask does nothing). |
 | `DDMASK_MAP` | Interpreters to replace, `from=to:from=to`, for `#!` lines and `PT_INTERP`. |
 | `DDMASK_DEBUG=1` | Logs each decision to stderr. |
-| `DDMASK_X86_64`, `DDMASK_I386`, `DDMASK_FALLBACK` | Hooks for an emulator (Box64, FEX) or proot to run what the linker can't. Unused for now. |
+| `DDMASK_X86_64`, `DDMASK_I386` | The emulator for x86-64 and i386 programs. The app sets both to FEX's `FEXInterpreter` once it's installed. |
+| `DDMASK_FALLBACK` | A last resort (proot...) for anything else the linker can't run. Unused. |
 
 ## Testing
 

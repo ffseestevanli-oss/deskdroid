@@ -1,12 +1,14 @@
 name: FEX-Emu
 
-# Builds FEX-Emu for the rootfs (fex/build.sh). Pull requests only build it;
-# main and manual runs publish it as the fex-latest release, which the
-# deskdroid-fex script downloads the first time Steam or an x86 app starts.
+# Builds FEX-Emu (fex/build.sh) and the x86 system it runs programs in on the
+# native desktop (fex/rootfs.sh). Pull requests only build them; main, the
+# native desktop's branch and manual runs publish them as the fex-latest
+# release, which the app (X86.kt) and the proot desktop's deskdroid-fex script
+# download the first time Steam or an x86 app starts.
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, claude/project-thread-99adt8]
     paths: ['fex/**', '.github/workflows/fex.yml']
   pull_request:
     paths: ['fex/**', '.github/workflows/fex.yml']
@@ -28,20 +30,33 @@ jobs:
           path: out/*
           compression-level: 0
 
+  rootfs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build the x86 system
+        run: sudo fex/rootfs.sh "$PWD/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deskdroid-x86-rootfs
+          path: out/*
+          compression-level: 0
+
   publish:
-    needs: build
+    needs: [build, rootfs]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: deskdroid-fex
           path: out
+          merge-multiple: true
       - name: Publish as the fex-latest release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          ls -lh out
           gh release delete fex-latest --yes --cleanup-tag || true
           gh release create fex-latest out/* \
-            --title "FEX-Emu (latest)" --notes "$(cat out/deskdroid-fex-arm64.version) for Debian trixie arm64, built from ${{ github.sha }}" --prerelease --latest=false
+            --title "FEX-Emu (latest)" --notes "$(cat out/deskdroid-fex-arm64.version) for Debian trixie arm64 and DeskDroid's native desktop, with the x86 system of $(cat out/deskdroid-x86-rootfs.version), built from ${{ github.sha }}" --prerelease --latest=false
