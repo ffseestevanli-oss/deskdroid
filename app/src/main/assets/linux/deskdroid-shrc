@@ -1,0 +1,90 @@
+# DeskDroid's terminal setup: Konsole's DeskDroid profile starts Android's
+# shell (/system/bin/sh, mksh) with ENV pointing here. Written by the app at
+# every start; your own additions go in ~/.shrc, which is read at the end.
+
+# Android's own setup first (aliases, the default prompt).
+[ -r /system/etc/mkshrc ] && . /system/etc/mkshrc
+
+# The prompt: deskdroid:~/Documents $
+_deskdroid_pwd() {
+	case $PWD in
+	"$HOME") DESKDROID_PWD="~" ;;
+	"$HOME"/*) DESKDROID_PWD="~${PWD#"$HOME"}" ;;
+	*) DESKDROID_PWD=$PWD ;;
+	esac
+}
+cd() { command cd "$@" && _deskdroid_pwd; }
+_deskdroid_pwd
+PS1='deskdroid:$DESKDROID_PWD $ '
+
+# help: the commands that work here, each listed only when this phone has it.
+_deskdroid_list() {
+	_title=$1
+	shift
+	_found=
+	for _c in "$@"; do
+		_name=${_c%%|*}
+		command -v "$_name" >/dev/null 2>&1 || continue
+		[ -n "$_found" ] || printf '\n\033[1m%s\033[0m\n' "$_title"
+		_found=1
+		printf '  %-14s %s\n' "$_name" "${_c#*|}"
+	done
+}
+
+help() {
+	printf '\033[1mCommands that work in DeskDroid'"'"'s terminal\033[0m\n'
+	_deskdroid_list "Files and folders" \
+		"ls|list files" "cd|change folder" "pwd|show the current folder" \
+		"cp|copy" "mv|move or rename" "rm|delete" "mkdir|make a folder" \
+		"rmdir|remove an empty folder" "touch|make an empty file" "ln|make a link" \
+		"find|search for files" "stat|file details" "chmod|change permissions" \
+		"du|folder sizes" "df|free space"
+	_deskdroid_list "Text" \
+		"cat|show a file" "more|show a file a page at a time" "head|first lines" \
+		"tail|last lines" "grep|search text" "sed|edit text" "awk|process text" \
+		"sort|sort lines" "uniq|drop repeated lines" "wc|count lines and words" \
+		"cut|pick columns" "tr|replace characters" "diff|compare files" \
+		"vi|text editor" "echo|print text"
+	_deskdroid_list "Archives" \
+		"tar|tar archives" "gzip|compress" "gunzip|decompress" "zcat|show a .gz file" \
+		"unzip|extract a .zip" "xzcat|show a .xz file" \
+		"md5sum|checksum" "sha256sum|checksum"
+	_deskdroid_list "System" \
+		"ps|running programs" "top|live list of programs" "kill|stop a program" \
+		"free|memory" "uptime|time since boot" "date|date and time" "cal|calendar" \
+		"uname|system name" "id|your user" "env|environment variables" \
+		"getprop|Android properties" "which|where a command is"
+	_deskdroid_list "Network" \
+		"ping|check a host answers" "nc|raw network connections"
+	_deskdroid_list "DeskDroid" \
+		"android-open|open a file or link in an Android app" \
+		"clear|clear the screen" "exit|close this terminal" "help|this list"
+	if [ -n "$DESKDROID_BIN" ] && [ -d "$DESKDROID_BIN" ]; then
+		_line=
+		for _f in "$DESKDROID_BIN"/*; do
+			_n=${_f##*/}
+			[ -e "$_f" ] && [ "$_n" != android-open ] || continue
+			if [ -z "$_line" ]; then
+				printf '\n\033[1m%s\033[0m\n' "Desktop apps (type a name to open it)"
+				_line="  $_n"
+			elif [ $((${#_line} + ${#_n} + 1)) -gt 76 ]; then
+				printf '%s\n' "$_line"
+				_line="  $_n"
+			else
+				_line="$_line $_n"
+			fi
+		done
+		[ -z "$_line" ] || printf '%s\n' "$_line"
+	fi
+	printf '\nAndroid runs this shell as an app, so commands that need root or\n'
+	printf 'system access (mount, su, apt, systemctl...) are not available.\n'
+}
+
+# The welcome, once per terminal (not again in a shell started from this one).
+if [ -z "$DESKDROID_WELCOMED" ]; then
+	export DESKDROID_WELCOMED=1
+	printf '\033[1mWelcome to Deskdroid! Your computer in your pocket!\033[0m\n'
+	printf 'CLI is limited for most functions due to Android'"'"'s locked down nature. Many tools will still work. Type "help" for a list of supported commands\n\n'
+fi
+
+[ -r "$HOME/.shrc" ] && . "$HOME/.shrc"
