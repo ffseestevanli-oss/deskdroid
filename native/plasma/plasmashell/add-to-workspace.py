@@ -68,14 +68,32 @@ edit("components/shellprivate/plasmaappletitemmodel.cpp",
      'if (!plugin.isValid() || plugin.rawData().value(u"NoDisplay").toBool()',
      'if (!plugin.isValid() || plugin.name().isEmpty() /* DeskDroid */ || plugin.rawData().value(u"NoDisplay").toBool()')
 
-# Add Widgets → Get New Widgets → Install Widget From Local File: after
-# showing its file dialog it emits shouldClose, which closes Add Widgets and
-# deletes the menu whose click handler is still running; Qt then aborts
+# Add Widgets → Get New Widgets → Install Widget From Local File: its file
+# dialog runs nested event loops while it opens (KIO checks its folder with
+# a synchronous job), and shouldClose, queued or not, then closes Add Widgets
+# and deletes the menu whose click handler is still running; Qt aborts
 # plasmashell ("destroyed while one of its QML signal handlers is in
-# progress"). Close it once the click is over.
+# progress"). The whole thing waits until the click is over, and the dialog
+# starts in the home folder (on Android its last folder can be one the app
+# can't read).
+edit("components/shellprivate/widgetexplorer.cpp",
+     "void WidgetExplorer::openWidgetFile()\n{\n    QFileDialog *dialog = new QFileDialog;",
+     "void WidgetExplorer::openWidgetFile()\n{\n"
+     "    // DeskDroid: after the menu's click handler has returned.\n"
+     "    QMetaObject::invokeMethod(this, &WidgetExplorer::openWidgetFileNow, Qt::QueuedConnection);\n"
+     "}\n\n"
+     "void WidgetExplorer::openWidgetFileNow()\n{\n"
+     "    QFileDialog *dialog = new QFileDialog;\n"
+     "    dialog->setDirectory(QDir::homePath());")
 edit("components/shellprivate/widgetexplorer.cpp",
      "    dialog->show();\n\n    Q_EMIT shouldClose();",
-     "    dialog->show();\n\n    QMetaObject::invokeMethod(this, &WidgetExplorer::shouldClose, Qt::QueuedConnection); // DeskDroid")
+     "    dialog->show();\n\n    Q_EMIT shouldClose(); // DeskDroid: a queued call, no QML handler on the stack")
+edit("components/shellprivate/widgetexplorer.h",
+     "    void openWidgetFile();\n    void downloadWidgets();",
+     "    void openWidgetFile();\n    void openWidgetFileNow(); // DeskDroid\n    void downloadWidgets();")
+edit("components/shellprivate/widgetexplorer.cpp",
+     "#include <QFileDialog>\n",
+     "#include <QDir>\n#include <QFileDialog>\n")
 
 # MPRIS for the task manager, without its KDED module (no kded here).
 edit("libkmpris/CMakeLists.txt", "add_subdirectory(kded)", "# add_subdirectory(kded)")
