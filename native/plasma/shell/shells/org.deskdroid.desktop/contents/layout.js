@@ -1,4 +1,4 @@
-// The first start's layout: the phone's wallpaper (or a gradient) on every desktop, and
+// The first start's layout: the phone's wallpaper (or DeskDroid's) on every desktop, and
 // Plasma's own panel at the bottom: the application menu, the task manager
 // (icons only, Dolphin pinned), and the digital clock on the right.
 var desktops = desktopsForActivity(currentActivity());
@@ -11,11 +11,13 @@ for (var i = 0; i < desktops.length; i++) {
         // Plasma's Image wallpaper, so Configure Desktop and Wallpaper can change it.
         desktops[i].wallpaperPlugin = "org.kde.image";
         desktops[i].currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
+        desktops[i].writeConfig("Image", "file://" + phoneWallpaper);
     } else {
-        desktops[i].wallpaperPlugin = "org.deskdroid.gradient";
-        desktops[i].currentConfigGroup = ["Wallpaper", "org.deskdroid.gradient", "General"];
+        // DeskDroid's own wallpaper (the one the Debian desktop had).
+        desktops[i].wallpaperPlugin = "org.kde.image";
+        desktops[i].currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
+        desktops[i].writeConfig("Image", "file://" + files + "/kwin/share/wallpapers/DeskDroid/");
     }
-    desktops[i].writeConfig("Image", "file://" + phoneWallpaper);
     // Plasma's folder view shows the Desktop folder (files/Desktop) directly:
     // its usual desktop:/ address needs a KIO worker not built yet.
     desktops[i].currentConfigGroup = ["General"];

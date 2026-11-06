@@ -379,6 +379,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" $(ls -d share/plasma share/kf6 2>/dev/null))
       rm -rf "$WORK/shell" && mkdir -p "$WORK/shell/share/plasma"
       cp -r "$HERE/../plasma/shell/shells" "$HERE/../plasma/shell/plasmoids" "$HERE/../plasma/shell/wallpapers" "$WORK/shell/share/plasma/"
+      # DeskDroid's wallpaper (the Debian desktop's), the default without the phone's.
+      mkdir -p "$WORK/shell/share/wallpapers"
+      cp -r "$HERE/../plasma/shell/images/DeskDroid" "$WORK/shell/share/wallpapers/"
       (cd "$WORK/shell" && zip -qr -X "$OUT/libkwin_data.so" share)
       for root in "${qmlroots[@]}"; do
         (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
