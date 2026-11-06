@@ -60,6 +60,11 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     command -v patchelf >/dev/null || { echo "patchelf is needed to bundle KWin"; exit 1; }
     sysroot="$NDK/toolchains/llvm/prebuilt/$host/sysroot/usr/lib/aarch64-linux-android"
     unversioned() { echo "${1%%.so*}.so"; }
+    # A store package: files in a fixed order with fixed times, so a package
+    # whose files didn't change keeps its checksum from build to build.
+    storezip() {
+      (cd "$1" && find . -type f -exec touch -h -d @315532800 {} + && find . -type f | LC_ALL=C sort | zip -q -X "$2" -@)
+    }
     bundlename() {
       local n; n="$(unversioned "$1")"
       case "$n" in libQt6*|libKF6*|libkwin*|libkdecorations*|libKWayland*|libplasmashell*) echo "$n" ;; *) echo "libdd_${n#lib}" ;; esac
@@ -243,7 +248,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       title="$(sed -n 's/^Name=//p' "$desktop" | head -1)"; summary="$(sed -n 's/^GenericName=//p' "$desktop" | head -1)"
       version="$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' "$pkg"/share/metainfo/*"$app"* 2>/dev/null | head -1)"
       echo "$app" > "$pkg/app.txt"
-      rm -f "$STORE_OUT/$app.zip"; (cd "$pkg" && zip -qr -X "$STORE_OUT/$app.zip" .)
+      rm -f "$STORE_OUT/$app.zip"; storezip "$pkg" "$STORE_OUT/$app.zip"
       size="$(stat -c %s "$STORE_OUT/$app.zip")"; sha="$(sha256sum "$STORE_OUT/$app.zip" | cut -d' ' -f1)"
       cp "$(ls "$pkg"/share/icons/hicolor/128x128/apps/"$app".png "$pkg"/share/icons/hicolor/*/apps/"$app".png 2>/dev/null | head -1)" "$STORE_OUT/$app.png" 2>/dev/null || true
       # Built from another repository: which commit (store-watch.yml compares it with upstream).
@@ -352,7 +357,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       title="$(sed -n 's/^Name=//p' "$desktop" | head -1)"; summary="$(sed -n 's/^GenericName=//p' "$desktop" | head -1)"
       version="$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' "$pkg"/share/metainfo/*"$app"* 2>/dev/null | head -1)"
       echo "$app" > "$pkg/app.txt"
-      rm -f "$STORE_OUT/$app.zip"; (cd "$pkg" && zip -qr -X "$STORE_OUT/$app.zip" .)
+      rm -f "$STORE_OUT/$app.zip"; storezip "$pkg" "$STORE_OUT/$app.zip"
       size="$(stat -c %s "$STORE_OUT/$app.zip")"; sha="$(sha256sum "$STORE_OUT/$app.zip" | cut -d' ' -f1)"
       cp "$(ls "$pkg"/share/icons/hicolor/128x128/apps/*"$app"*.png "$pkg"/share/icons/hicolor/*/apps/*"$app"*.png 2>/dev/null | head -1)" "$STORE_OUT/$app.png" 2>/dev/null || true
       store_entries+=("$(printf '{"id":"%s","name":"%s","summary":"%s","version":"%s","size":%s,"sha256":"%s","file":"%s.zip","icon":"%s.png"}' \
