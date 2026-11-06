@@ -106,11 +106,11 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         PKG_CONFIG_SYSROOT_DIR= pkg-config --cflags --libs gtk+-3.0)"
       "$BIN/aarch64-linux-android$API-clang" -O2 -fPIE -pie -o "$OUT/libdd_gtktest.so" "$HERE/gtktest.c" \
         -L"$DESKDROID_QT_ANDROID/lib" $gtkflags
-      bundled+=("$OUT/libdd_gtktest.so"); echo gtktest >> "$WORK/gtkapps.txt"
-      mkdir -p "$WORK/gtkshare/share/applications"
-      printf '[Desktop Entry]\nType=Application\nName=GTK Test\nComment=A GTK 3 window, natively on Android\nIcon=applications-development\nExec=gtktest\nCategories=Development;\n' \
-        > "$WORK/gtkshare/share/applications/org.deskdroid.gtktest.desktop"
-      echo "   gtk: gtktest"
+      # Not in the menu any more (GIMP and Etherium are the real GTK apps), but
+      # still built: it keeps GTK's libraries in the APK, which the store's
+      # GTK programs use instead of carrying their own.
+      bundled+=("$OUT/libdd_gtktest.so")
+      echo "   gtk: libraries (gtktest, not in the menu)"
     fi
     if [ ${#apps[@]} -gt 0 ]; then
       install -m 755 "$HERE/qtapp.sh" "$OUT/libdd_qtapp.so"
