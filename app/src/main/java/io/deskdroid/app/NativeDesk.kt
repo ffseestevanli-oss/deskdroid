@@ -316,6 +316,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         window.decorView.setOnApplyWindowInsetsListener { v, insets ->
             lastInsets = insets
             sendSafeArea()
+            padMenu()
             v.onApplyWindowInsets(insets)
         }
         if (Build.VERSION.SDK_INT >= 30) {
@@ -1394,7 +1395,34 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     private fun scaleLabel() = Prefs.nativeScale(this).let { if (it == 0f) "Scale: auto" else "Scale ${"%.2f".format(it).trimEnd('0').trimEnd('.')}×" }
 
+    /**
+     * While the DD menu is open Android's status and navigation bars show
+     * (and stay), and the sheet sits above the navigation bar's buttons;
+     * closed, the desktop is full screen again. The window is edge to edge,
+     * so the desktop's size doesn't change when the bars come and go.
+     */
+    private fun systemBars(show: Boolean) {
+        if (Build.VERSION.SDK_INT < 30) return
+        window.insetsController?.apply {
+            if (show) {
+                systemBarsBehavior = WindowInsetsController.BEHAVIOR_DEFAULT
+                show(WindowInsets.Type.systemBars())
+            } else {
+                hide(WindowInsets.Type.systemBars())
+                systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        }
+    }
+
+    private fun padMenu() {
+        if (!::menu.isInitialized) return
+        val i = if (Build.VERSION.SDK_INT >= 30)
+            lastInsets?.getInsets(WindowInsets.Type.systemBars()) else null
+        menu.setPadding(i?.left ?: 0, i?.top ?: 0, i?.right ?: 0, i?.bottom ?: 0)
+    }
+
     private fun showMenu(open: Boolean) {
+        systemBars(open)
         if (open) {
             softKeyboard(false) // the sheet takes the keyboard's place
             fillMenu()
