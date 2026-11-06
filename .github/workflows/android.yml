@@ -90,7 +90,7 @@ jobs:
           sudo apt-get install -y -q librsvg2-bin
           ndk="$ANDROID_HOME/ndk/$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)"
           QT_HOST_PATH="$DESKDROID_QT_HOST" native/store/build-apps.sh ~/plasma-prefix "$ndk"
-      # Firefox (firefox.yml publishes it), bundled when there is one.
+      # Etherium (Firefox; firefox.yml publishes it), packaged for the app store when there is one.
       - name: Fetch Firefox
         continue-on-error: true
         env:

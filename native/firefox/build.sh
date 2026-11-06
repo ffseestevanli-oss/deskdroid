@@ -18,8 +18,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PREFIX="$(cd "$1" && pwd)"; NDK="$2"; SRC="$(cd "$3" && pwd)"; OUT="$(mkdir -p "$4" && cd "$4" && pwd)"
 BRANDING="${BRANDING:-browser/branding/etherium}"
-# Where the browser's own folder is on the phone (NativeDesk.kt: files/kwin/firefox).
-DESKDROID_FIREFOX_DIR=/data/data/io.deskdroid.app/files/kwin/firefox
+# Where the browser's own folder is on the phone (the app store's, Store.kt).
+DESKDROID_FIREFOX_DIR=/data/data/io.deskdroid.app/files/store/apps/firefox/program
 UBLOCK_URL="${UBLOCK_URL:-https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi}"
 # Where the browser finds its files on the phone (Termux's @TERMUX_PREFIX@).
 DESKDROID_PREFIX=/data/data/io.deskdroid.app/files/usr
