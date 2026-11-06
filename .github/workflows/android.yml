@@ -18,6 +18,9 @@ jobs:
       # Termux:X11 and its X server sources (xserver, pixman, ...) build from source.
       - name: Fetch submodules
         run: git submodule update --init --recursive --jobs 8 --depth 1
+      # ddmask (native/ddmask), tested on the runner with glibc's loader standing in for Android's.
+      - name: Test ddmask
+        run: native/ddmask/test/run.sh
       - uses: actions/setup-java@v5
         with:
           distribution: temurin

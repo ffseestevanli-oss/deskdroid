@@ -19,6 +19,8 @@ F-Droid builds every APK from source, so DeskDroid ships no prebuilt binaries.
 (stream-decompress the system image) and `ddtool verify <pubkey> <file> <sig>`
 (check its minisign signature, prehashed `ED` format only).
 
+`ddmask/` is ours: see `ddmask/README.md`.
+
 `gpureport/gpureport.c` is ours: prints the phone's OpenGL ES, ANGLE and
 Vulkan driver details for Settings → GPU report, including the Vulkan
 extensions GPU forwarding (Venus) depends on.
@@ -71,6 +73,7 @@ Outputs (`app/build/generated/nativeTools/lib/arm64-v8a/`):
 - `libproot-loader.so`: proot's loader (found through `PROOT_LOADER`)
 - `libtalloc.so`: talloc shared library proot links against
 - `libddtool.so`: the installer helper above
+- `libddmask.so`: preloaded into the desktop, starts the app's own programs through Android's linker (`ddmask/README.md`)
 - `libgpureport.so`: the GPU report tool (NDK builds only)
 - `libvirgl_test_server.so`, `libvirgl_render_server.so`: the Venus server, dma-buf build (NDK builds only)
 - `libvirgl_test_server_ahb.so`, `libvirgl_render_server_ahb.so`: the AHardwareBuffer build

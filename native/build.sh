@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds libtalloc, proot, proot's loader and ddtool from the vendored sources in
+# Builds libtalloc, proot, proot's loader, ddtool and ddmask from the vendored sources in
 # native/, plus (NDK builds only) the GPU report tool, the native desktop test
 # and the virgl server, and installs them as lib*.so files, so Android puts them
 # in the app's executable nativeLibraryDir (W^X rule for targetSdk 29+).
@@ -67,6 +67,12 @@ mkdir -p "$WORK/ddtool"
   "$HERE/monocypher/monocypher.c" "$HERE/monocypher/monocypher-ed25519.c" \
   -Wl,--build-id=none -Wl,-z,noexecstack -o "$WORK/ddtool/ddtool"
 
+echo "== ddmask"
+# Preloaded into the desktop's processes: starts the programs Android won't
+# exec (the app's own files) through Android's linker (ddmask/ddmask.c).
+"$CC" -O2 -Wall -Wextra -shared -fPIC $REPRO "$HERE/ddmask/ddmask.c" -ldl \
+  -Wl,-soname,libddmask.so -Wl,--build-id=none -Wl,-z,noexecstack -o "$WORK/libddmask.so"
+
 if [ -n "$NDK" ]; then
   echo "== gpureport"
   # GPU/driver report for Settings (gpureport/gpureport.c).
@@ -90,5 +96,6 @@ install -m 755 "$WORK/ddtool/ddtool" "$OUT/libddtool.so"
 install -m 755 "$WORK/proot/proot" "$OUT/libproot.so"
 install -m 755 "$WORK/proot/loader/loader" "$OUT/libproot-loader.so"
 install -m 644 "$WORK/talloc/libtalloc.so" "$OUT/libtalloc.so"
-"$STRIP" --strip-unneeded "$OUT/libproot.so" "$OUT/libtalloc.so" "$OUT/libddtool.so"
+install -m 644 "$WORK/libddmask.so" "$OUT/libddmask.so"
+"$STRIP" --strip-unneeded "$OUT/libproot.so" "$OUT/libtalloc.so" "$OUT/libddtool.so" "$OUT/libddmask.so"
 ls -l "$OUT"

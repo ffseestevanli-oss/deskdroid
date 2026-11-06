@@ -515,6 +515,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     remove("LD_PRELOAD")
                     put("CLASSPATH", applicationInfo.sourceDir)
                     put("LD_LIBRARY_PATH", libs)
+                    ddmask(this, libs)
                     put("HOME", filesDir.path)
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", runtime.path)
@@ -621,6 +622,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     remove("LD_PRELOAD")
                     put("CLASSPATH", applicationInfo.sourceDir)
                     put("LD_LIBRARY_PATH", libs)
+                    ddmask(this, libs)
                     put("HOME", filesDir.path)
                     put("LANG", java.util.Locale.getDefault().let { "${it.language}_${it.country}.UTF-8" }) // the phone's language, for dates, times and text
                     put("TMPDIR", cacheDir.path)
@@ -697,6 +699,18 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * The link lives in app storage, the program in the APK's library folder,
      * where Android lets the app run programs.
      */
+    /**
+     * ddmask (native/ddmask): preloaded into KWin and plasmashell, and so into
+     * every program they start, it starts programs from the app's own files
+     * (store apps, their plug-ins and helpers) through Android's linker, which
+     * Android allows where exec isn't. A file named ddmask-off in the app's
+     * files folder turns it off.
+     */
+    private fun ddmask(env: MutableMap<String, String>, libs: String) {
+        val lib = File(libs, "libddmask.so")
+        if (lib.exists() && !File(filesDir, "ddmask-off").exists()) env["LD_PRELOAD"] = lib.path
+    }
+
     private fun linkApps(libs: String, data: File): File {
         val bin = File(data, "bin").apply { mkdirs() }
         bin.listFiles()?.forEach { it.delete() }
