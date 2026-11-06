@@ -1116,6 +1116,10 @@ build_appstream() {
   # build machine when cross-building; the library doesn't use it.
   sed -i "/^subdir('data\/')$/d" "$s/meson.build"
   if grep -q "^subdir('data/')" "$s/meson.build"; then return 1; fi
+  # It quotes JSON strings with fy_node_set_style, which libfyaml's 0.9
+  # release doesn't have yet (only its later code); strings stay unquoted.
+  sed -i 's|^#if AS_FYAML_CHECK_VERSION(0, 9, 0)$|#if 0 /* DeskDroid: not in libfyaml 0.9 */|' "$s/src/as-reviews-client.c"
+  grep -q "^#if 0 /\* DeskDroid" "$s/src/as-reviews-client.c"
   NINJA_KEEP_GOING=1 meson_cross "$s" -Dstemming=false -Dsystemd=false -Dvapi=false -Dqt=false -Dcompose=false \
     -Dapt-support=false -Dgir=false -Dtools=false -Dzstd-support=false -Dblake3-support=false \
     -Ddisplay-detection=none -Ddocs=false -Dapidocs=false \
