@@ -1185,6 +1185,9 @@ EOF
   # The NDK has execinfo.h, but backtrace() only from Android 13 (API 33).
   sed -i "s/^have_execinfo_h = opt_execinfo.found() or cc.has_header('execinfo.h')$/have_execinfo_h = false # DeskDroid: backtrace() is API 33+/" "$s/meson.build"
   grep -q "^have_execinfo_h = false # DeskDroid" "$s/meson.build"
+  # The TIFF plug-in uses modf() without asking for libm (glibc's libtiff.pc brings it).
+  sed -i 's/^                          libtiff,$/                          libtiff, math,/' "$s/plug-ins/file-tiff/meson.build"
+  grep -q "libtiff, math," "$s/plug-ins/file-tiff/meson.build"
   local stub="$WORK/gimp-stub"; mkdir -p "$stub"
   for n in gimp-console-3.2 gimp-3.2; do printf '#!/bin/sh\nexit 0\n' > "$stub/$n"; chmod +x "$stub/$n"; done
   cat > "$WORK/gimp-native.ini" <<EOF
