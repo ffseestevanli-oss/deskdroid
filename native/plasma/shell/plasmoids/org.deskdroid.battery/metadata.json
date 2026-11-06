@@ -1,0 +1,12 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Category": "System Information",
+        "Description": "The phone's battery",
+        "Icon": "battery-080",
+        "Id": "org.deskdroid.battery",
+        "License": "GPL-2.0+",
+        "Name": "Battery"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

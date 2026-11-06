@@ -1,0 +1,12 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Category": "System Information",
+        "Description": "How busy the desktop keeps the phone's processor",
+        "Icon": "cpu",
+        "Id": "org.deskdroid.cpu",
+        "License": "GPL-2.0+",
+        "Name": "CPU Meter"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -236,6 +236,7 @@ object NativeDesk {
         openWatcher = null
         if (running) nativeStop()
         running = false
+        PhoneStatus.stop()
         c.stopService(android.content.Intent(c, NativeDeskService::class.java))
         activity?.get()?.finish()
         AppLog.i("Native desktop stopped ($why)")
@@ -377,6 +378,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         stats.visibility = android.view.View.GONE
         tookSurface()
         NativeDesk.running = true
+        PhoneStatus.start(applicationContext)
         startForegroundService(android.content.Intent(this, NativeDeskService::class.java))
         AppLog.i("Native desktop test started" + if (attempt > 0) " (try ${attempt + 1})" else "")
         if (File(applicationInfo.nativeLibraryDir, "libkwin_wayland.so").exists()) {
@@ -698,6 +700,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("WAYLAND_DISPLAY", "wayland-0")
                     put("QT_PLUGIN_PATH", pluginPath(libs, data))
                     put("QML_IMPORT_PATH", File(data, "qml").path)
+                    // DeskDroid's battery, CPU and RAM widgets read files/status.json.
+                    put("QML_XHR_ALLOW_FILE_READ", "1")
                     // KDE's look instead of Android's (Qt picks Material there: white
                     // windows, big controls): Plasma's platform theme (colors, fonts,
                     // icons, file dialogs) and KDE's Qt Quick Controls style. A file

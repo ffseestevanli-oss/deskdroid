@@ -52,4 +52,6 @@ var tasks = panel.addWidget("org.kde.plasma.icontasks");
 tasks.currentConfigGroup = ["General"];
 tasks.writeConfig("launchers", pinned);
 
+// The phone's battery (DeskDroid's widget), then the clock.
+panel.addWidget("org.deskdroid.battery");
 panel.addWidget("org.kde.plasma.digitalclock");

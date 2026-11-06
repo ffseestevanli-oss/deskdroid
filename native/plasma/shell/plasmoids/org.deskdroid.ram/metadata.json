@@ -1,0 +1,12 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Category": "System Information",
+        "Description": "How much of the phone's memory is in use",
+        "Icon": "memory",
+        "Id": "org.deskdroid.ram",
+        "License": "GPL-2.0+",
+        "Name": "RAM Meter"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
