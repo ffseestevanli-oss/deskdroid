@@ -398,6 +398,18 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       # the system's mimeapps.list from: XDG_DATA_DIRS/applications.
       mkdir -p "$WORK/shell/share/applications"
       cp "$HERE/mimeapps.list" "$WORK/shell/share/applications/mimeapps.list"
+      # GSettings schemas (GTK's file and color choosers, GIMP's...), compiled:
+      # GIO aborts the first time a GTK program opens a schema it can't find
+      # ("No GSettings schemas are installed"). GIO looks in
+      # XDG_DATA_DIRS/glib-2.0/schemas; the values themselves stay in memory
+      # (GSETTINGS_BACKEND=memory, NativeDesk.kt).
+      if command -v glib-compile-schemas >/dev/null && ls "$DESKDROID_QT_ANDROID"/share/glib-2.0/schemas/*.gschema.xml >/dev/null 2>&1; then
+        mkdir -p "$WORK/shell/share/glib-2.0/schemas"
+        glib-compile-schemas --targetdir="$WORK/shell/share/glib-2.0/schemas" "$DESKDROID_QT_ANDROID/share/glib-2.0/schemas"
+        echo "   gsettings: $(ls "$DESKDROID_QT_ANDROID"/share/glib-2.0/schemas/*.gschema.xml | wc -l) schemas"
+      else
+        echo "   gsettings: no schemas in the prefix, or no glib-compile-schemas"
+      fi
       (cd "$WORK/shell" && zip -qr -X "$OUT/libkwin_data.so" share)
       for root in "${qmlroots[@]}"; do
         (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
