@@ -75,8 +75,24 @@ export PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR=
 # fetch <url> <file>: downloads once into the cache, prints the path.
 fetch() {
   local f="$CACHE/$2"
-  [ -s "$f" ] || { curl -fL --retry 4 -o "$f.part" "$1" && mv "$f.part" "$f"; }
+  [ -s "$f" ] || { curl -fL --retry 4 -o "$f.part" "$1" && mv "$f.part" "$f"; } >&2 ||
+    fetch_git_archive "$1" "$f" >&2
   echo "$f"
+}
+# A GitHub source archive (github.com/OWNER/REPO/archive/[refs/tags/]TAG.tar.gz)
+# that can't be downloaded (some build machines' proxies refuse them): clone
+# the tag instead and pack it the same way, one top folder.
+fetch_git_archive() {
+  local re='^https://github\.com/([^/]+)/([^/]+)/archive/(refs/tags/)?(.+)\.tar\.gz$'
+  [[ "$1" =~ $re ]] || return 1
+  local repo="https://github.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}.git" tag="${BASH_REMATCH[4]}" d
+  echo "   $1 failed; cloning $repo at $tag"
+  d="$(mktemp -d)"
+  git -c advice.detachedHead=false clone -q --depth 1 --branch "$tag" "$repo" "$d/src" &&
+    tar -czf "$2.part" -C "$d" --exclude=.git src && mv "$2.part" "$2"
+  local r=$?
+  rm -rf "$d"
+  return $r
 }
 # unpack <url> <file>: a fresh source tree in $WORK, prints its path.
 unpack() {
