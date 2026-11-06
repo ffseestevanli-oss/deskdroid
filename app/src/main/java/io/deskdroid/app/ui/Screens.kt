@@ -487,7 +487,7 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
 
         addView(ui.column(8) {
             addView(ui.text("QUICK SETTINGS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-            addView(settingRow("Touch mode", if (Prefs.touchMode(c) == "direct") "Direct touch" else "Touchpad") {
+            addView(settingRow("Touch mode", Prefs.TOUCH_MODE_LABELS[maxOf(0, Prefs.TOUCH_MODES.indexOf(Prefs.touchMode(c)))]) {
                 nav.go(SettingsScreen(activity, nav))
             })
             addView(settingRow("Phone files", "") {
@@ -552,8 +552,8 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.heading("Settings", 22f))
 
         addView(ui.text("TOUCH MODE", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        addView(Segmented(ui, listOf("Touchpad", "Direct touch"), if (Prefs.touchMode(c) == "direct") 1 else 0) { i ->
-            Prefs.setTouchMode(c, if (i == 1) "direct" else "touchpad")
+        addView(Segmented(ui, Prefs.TOUCH_MODE_LABELS, maxOf(0, Prefs.TOUCH_MODES.indexOf(Prefs.touchMode(c)))) { i ->
+            Prefs.setTouchMode(c, Prefs.TOUCH_MODES[i])
         }.view, LinearLayout.LayoutParams(-1, -2))
 
         addView(ui.outlineButton("Background limits", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },

@@ -1210,13 +1210,19 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
 
     private val touchpad = Touchpad()
+    private val touchScreen by lazy { TouchScreen(this) }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (!started) return false
+        val mode = Prefs.touchMode(this)
         when {
             e.isFromSource(InputDevice.SOURCE_MOUSE) -> mouse(e)
+            mode == "touch" -> {
+                touchScreen.wheel = Prefs.scrollWheel(this)
+                touchScreen.onTouch(e)
+            }
             // The same Touch mode setting as the desktop (Settings → Touch mode).
-            Prefs.touchMode(this) == "direct" -> {
+            mode == "direct" -> {
                 val up = e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL
                 NativeDesk.nativePointer(e.x, e.y, if (up) 0 else 1)
             }
@@ -1342,9 +1348,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         val sections = listOf(
             section("Touchscreen mode",
-                io.deskdroid.app.ui.Segmented(ui, listOf("Touchpad", "Direct touch"),
-                    if (Prefs.touchMode(this) == "direct") 1 else 0) { i ->
-                    Prefs.setTouchMode(this, if (i == 1) "direct" else "touchpad")
+                io.deskdroid.app.ui.Segmented(ui, Prefs.TOUCH_MODE_LABELS,
+                    maxOf(0, Prefs.TOUCH_MODES.indexOf(Prefs.touchMode(this)))) { i ->
+                    Prefs.setTouchMode(this, Prefs.TOUCH_MODES[i])
                 }.view),
             section("Scroll behavior",
                 io.deskdroid.app.ui.Segmented(ui, listOf("Wheel", "Touchpad"),
@@ -1897,5 +1903,116 @@ class PhoneTouchpadActivity : Activity() {
         displays.unregisterDisplayListener(listener)
         if (NativeDesk.touchpad?.get() === this) NativeDesk.touchpad = null
         super.onDestroy()
+    }
+}
+
+/**
+ * Touch mode: the screen works like a phone's, on the desktop's mouse. A tap
+ * clicks where it lands; a slide scrolls what's under the finger (the content
+ * follows it, as wheel steps or smoothly, per Scroll behavior); touch and
+ * hold, then lift, is the right button; touch and hold, then move, drags with
+ * the left button (selecting text, moving windows and files). A two-finger tap
+ * is the right button too.
+ */
+class TouchScreen(private val view: android.view.View) {
+    var wheel = true
+    private enum class State { IDLE, PENDING, SCROLL, HOLD, DRAG, TWO }
+    private var state = State.IDLE
+    private var downX = 0f
+    private var downY = 0f
+    private var lastX = 0f
+    private var lastY = 0f
+    private var wheelSteps = 0f
+    private val handler = Handler(Looper.getMainLooper())
+    private val slop = view.context.resources.displayMetrics.density * 10f
+
+    private val longPress = Runnable {
+        if (state == State.PENDING) {
+            state = State.HOLD
+            view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        }
+    }
+
+    fun onTouch(e: MotionEvent) {
+        val n = e.pointerCount
+        val cx = (0 until n).map { e.getX(it) }.average().toFloat()
+        val cy = (0 until n).map { e.getY(it) }.average().toFloat()
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                state = State.PENDING
+                downX = e.x; downY = e.y
+                wheelSteps = 0f
+                NativeDesk.nativePointer(e.x, e.y, 0) // the pointer goes where the finger is
+                handler.postDelayed(longPress, LONG_PRESS_MS)
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                handler.removeCallbacks(longPress)
+                when (state) {
+                    State.PENDING, State.HOLD -> state = State.TWO
+                    State.DRAG -> { NativeDesk.nativePointer(lastX, lastY, 0); state = State.SCROLL }
+                    else -> {}
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val moved = abs(e.x - downX) > slop || abs(e.y - downY) > slop
+                when (state) {
+                    State.PENDING, State.TWO -> if (moved) {
+                        handler.removeCallbacks(longPress)
+                        state = State.SCROLL
+                        scroll(cx - lastX, cy - lastY)
+                    }
+                    State.HOLD -> if (moved) {
+                        state = State.DRAG
+                        NativeDesk.nativePointer(downX, downY, 1)
+                        NativeDesk.nativePointer(e.x, e.y, 1)
+                    }
+                    State.SCROLL -> scroll(cx - lastX, cy - lastY)
+                    State.DRAG -> NativeDesk.nativePointer(e.x, e.y, 1)
+                    State.IDLE -> {}
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                handler.removeCallbacks(longPress)
+                val cancel = e.actionMasked == MotionEvent.ACTION_CANCEL
+                when (state) {
+                    State.PENDING -> if (!cancel) click(downX, downY, 1)
+                    State.HOLD, State.TWO -> if (!cancel) click(downX, downY, 2)
+                    State.DRAG -> NativeDesk.nativePointer(e.x, e.y, 0)
+                    else -> {}
+                }
+                state = State.IDLE
+            }
+        }
+        // Re-anchor after the finger count changes, so a scroll doesn't jump.
+        if (e.actionMasked == MotionEvent.ACTION_POINTER_UP) {
+            val rest = (0 until n).filter { it != e.actionIndex }
+            lastX = rest.map { e.getX(it) }.average().toFloat()
+            lastY = rest.map { e.getY(it) }.average().toFloat()
+        } else {
+            lastX = cx; lastY = cy
+        }
+    }
+
+    private fun click(x: Float, y: Float, button: Int) {
+        NativeDesk.nativePointer(x, y, button)
+        NativeDesk.nativePointer(x, y, 0)
+    }
+
+    /** The content follows the finger. */
+    private fun scroll(dx: Float, dy: Float) {
+        if (wheel) {
+            wheelSteps += -dy * NativeDeskActivity.Touchpad.WHEEL_PER_PX
+            val steps = wheelSteps.toInt()
+            if (steps != 0) {
+                NativeDesk.nativeScroll(0f, steps.toFloat(), true)
+                wheelSteps -= steps
+            }
+        } else {
+            NativeDesk.nativeScroll(-dx, -dy, false)
+        }
+    }
+
+    companion object {
+        const val LONG_PRESS_MS = 450L
     }
 }
