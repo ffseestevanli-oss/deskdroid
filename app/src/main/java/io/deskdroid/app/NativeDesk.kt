@@ -1075,12 +1075,19 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             if (e.repeatCount == 0) showMenu(menu.visibility != android.view.View.VISIBLE)
             return true
         }
+        // Volume keys set the phone's volume, which is the desktop's sound too
+        // (there's no KDE mixer yet): Android's own volume slider shows.
+        if (isVolumeKey(keyCode)) return super.onKeyDown(keyCode, e)
         if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, true)
         return true
     }
 
+    private fun isVolumeKey(k: Int) =
+        k == KeyEvent.KEYCODE_VOLUME_UP || k == KeyEvent.KEYCODE_VOLUME_DOWN || k == KeyEvent.KEYCODE_VOLUME_MUTE
+
     override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) return true // Back opens the menu (onKeyDown)
+        if (isVolumeKey(keyCode)) return super.onKeyUp(keyCode, e)
         if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
         return true
     }
@@ -1245,6 +1252,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         private var travel = 0f
         private var maxFingers = 0
         private var dragging = false
+        // Two-finger scroll keeps to the axis it started on (0 not yet known,
+        // 1 vertical, 2 horizontal), so a slightly slanted swipe through a page
+        // doesn't also scroll it sideways.
+        private var scrollAxis = 0
+        private var scrollX = 0f
+        private var scrollY = 0f
+        // Tap, tap, then touch and hold: the middle button held (3D views, autoscroll).
+        private var lastDoubleTapAt = 0L
+        private var middle = false
 
         fun moveTo(x: Float, y: Float) { px = x; py = y }
 
@@ -1258,11 +1274,17 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     downAt = e.eventTime
                     travel = 0f
                     maxFingers = 1
+                    scrollAxis = 0; scrollX = 0f; scrollY = 0f
+                    // Tap, tap, then touch and hold: the middle button, held until lifted.
+                    middle = e.eventTime - lastDoubleTapAt < DOUBLE_TAP_MS
+                    lastDoubleTapAt = 0L
                     // Tap, then touch again and hold: drag with the left button down. The
                     // tap's own click waits for this (pendingTap), so a drag is one press,
                     // not a click and then a press (a double click: title bars maximize).
-                    dragging = e.eventTime - lastTapAt < DOUBLE_TAP_MS
-                    if (dragging) {
+                    dragging = !middle && e.eventTime - lastTapAt < DOUBLE_TAP_MS
+                    if (middle) {
+                        NativeDesk.nativePointer(px, py, 4)
+                    } else if (dragging) {
                         handler.removeCallbacks(pendingTap)
                         NativeDesk.nativePointer(px, py, 1)
                     }
@@ -1272,17 +1294,18 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     val dx = cx - lastX
                     val dy = cy - lastY
                     travel += abs(dx) + abs(dy)
-                    if (n >= 2) {
-                        NativeDesk.nativeScroll(-dx * SCROLL_SPEED, -dy * SCROLL_SPEED) // natural scrolling
+                    if (n >= 2 && !middle) {
+                        scroll(dx, dy)
                     } else {
                         px = (px + dx * SPEED).coerceIn(0f, w - 1)
                         py = (py + dy * SPEED).coerceIn(0f, h - 1)
-                        NativeDesk.nativePointer(px, py, if (dragging) 1 else 0)
+                        NativeDesk.nativePointer(px, py, if (middle) 4 else if (dragging) 1 else 0)
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     val tap = travel < TAP_SLOP && e.eventTime - downAt < TAP_MS
                     when {
+                        middle -> NativeDesk.nativePointer(px, py, 0)
                         // Tap, tap: the second touch's press, its release, then one more
                         // click, so apps see a double click. Tap, hold (or move): a drag.
                         dragging && tap -> { NativeDesk.nativePointer(px, py, 0); click(1) }
@@ -1290,13 +1313,37 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         tap && maxFingers >= 2 -> click(2)
                         tap -> handler.postDelayed(pendingTap, DOUBLE_TAP_MS)
                     }
-                    lastTapAt = if (tap && maxFingers == 1 && !dragging) e.eventTime else 0L
+                    lastDoubleTapAt = if (dragging && tap) e.eventTime else 0L
+                    lastTapAt = if (tap && maxFingers == 1 && !dragging && !middle) e.eventTime else 0L
                     dragging = false
+                    middle = false
                 }
             }
             // Re-anchor after the finger count changes, so the pointer doesn't jump.
             lastX = if (e.actionMasked == MotionEvent.ACTION_POINTER_UP) avgWithout(e, e.actionIndex) { e.getX(it) } else cx
             lastY = if (e.actionMasked == MotionEvent.ACTION_POINTER_UP) avgWithout(e, e.actionIndex) { e.getY(it) } else cy
+        }
+
+        /** Two-finger scroll, kept to the axis the swipe starts along unless it's clearly diagonal. */
+        private fun scroll(dx: Float, dy: Float) {
+            if (scrollAxis == 0) {
+                scrollX += dx; scrollY += dy
+                if (abs(scrollX) + abs(scrollY) < AXIS_SLOP) return
+                scrollAxis = when {
+                    abs(scrollY) >= abs(scrollX) * 2 -> 1
+                    abs(scrollX) >= abs(scrollY) * 2 -> 2
+                    else -> 3 // diagonal: both (panning a large image)
+                }
+                dxdy(scrollX, scrollY)
+                return
+            }
+            dxdy(dx, dy)
+        }
+
+        private fun dxdy(dx: Float, dy: Float) {
+            val sx = if (scrollAxis == 1) 0f else dx
+            val sy = if (scrollAxis == 2) 0f else dy
+            NativeDesk.nativeScroll(-sx * SCROLL_SPEED, -sy * SCROLL_SPEED) // natural scrolling
         }
 
         private val handler = Handler(Looper.getMainLooper())
@@ -1316,6 +1363,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             const val TAP_MS = 220L
             const val DOUBLE_TAP_MS = 300L
             const val TAP_SLOP = 24f
+            const val AXIS_SLOP = 12f
         }
     }
 
