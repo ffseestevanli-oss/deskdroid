@@ -393,8 +393,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" plugins.txt)
     if [ -e "$OUT/libplasmashell.so" ]; then
       # plasmashell's: Plasma's themes and packages, DeskDroid's first shell
-      # (native/plasma/shell), and the QML modules' files.
-      (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" $(ls -d share/plasma share/kf6 2>/dev/null))
+      # (native/plasma/shell), the application menu's categories (NativeDesk.kt
+      # writes the menu from share/deskdroid/menus), and the QML modules' files.
+      (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" $(ls -d share/plasma share/kf6 share/desktop-directories share/deskdroid/menus 2>/dev/null))
       rm -rf "$WORK/shell" && mkdir -p "$WORK/shell/share/plasma"
       cp -r "$HERE/../plasma/shell/shells" "$HERE/../plasma/shell/plasmoids" "$HERE/../plasma/shell/wallpapers" "$WORK/shell/share/plasma/"
       # DeskDroid's wallpaper (the Debian desktop's), the default without the phone's.

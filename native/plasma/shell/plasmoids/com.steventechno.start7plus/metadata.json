@@ -1,0 +1,25 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Claude Sonnet 5.5"
+            },
+            {
+                "Name": "Steventechno"
+            }
+        ],
+        "Category": "Application Launchers",
+        "Description": "A start menu in two styles: Windows 7 (two panes) or Windows 9x (one pane with flyouts), with search, pins, places and a customizable orb",
+        "Icon": "start-here-kde",
+        "Id": "com.steventechno.start7plus",
+        "License": "GPL-2.0+",
+        "Name": "Start 7 Plus",
+        "Version": "3.2.2"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "ui/main.qml",
+    "X-Plasma-Provides": [
+        "org.kde.plasma.launchermenu"
+    ]
+}
