@@ -52,6 +52,12 @@ object Prefs {
     fun keepAwake(c: Context) = prefs(c).getBoolean("keep_awake", false)
     fun setKeepAwake(c: Context, on: Boolean) = prefs(c).edit().putBoolean("keep_awake", on).apply()
 
+    /** The DD menu's dock: up to 10 phone apps, as flattened component names. */
+    fun dockApps(c: Context): List<String> =
+        prefs(c).getString("dock_apps", "")!!.split('\n').filter { it.isNotBlank() }
+    fun setDockApps(c: Context, apps: List<String>) =
+        prefs(c).edit().putString("dock_apps", apps.take(10).joinToString("\n")).apply()
+
     fun setupDone(c: Context) = prefs(c).getBoolean("setup_done", false)
     fun setSetupDone(c: Context, on: Boolean) = prefs(c).edit().putBoolean("setup_done", on).apply()
 

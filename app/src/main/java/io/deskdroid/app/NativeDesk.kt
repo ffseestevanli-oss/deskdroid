@@ -25,6 +25,7 @@ import kotlin.math.abs
 
 /** The menu's desktop scales; 0 is automatic (from the screen's density). */
 private val SCALES = listOf(0f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
+private const val EDGE_DP = 56f // how far up from the bottom a corner swipe may start
 
 /**
  * Native desktop test: the first step towards running Plasma as Android code
@@ -1118,8 +1119,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
+        // Back closes the DD menu, or else shows the desktop (every window
+        // minimized; Back again brings them back). The menu opens with a swipe
+        // up from the bottom right corner.
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (e.repeatCount == 0) showMenu(menu.visibility != android.view.View.VISIBLE)
+            if (e.repeatCount == 0) {
+                if (menu.visibility == android.view.View.VISIBLE) showMenu(false)
+                else if (started) NativeDesk.nativeAction(1)
+            }
             return true
         }
         // Volume keys set the phone's volume, which is the desktop's sound too
@@ -1133,38 +1140,79 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         k == KeyEvent.KEYCODE_VOLUME_UP || k == KeyEvent.KEYCODE_VOLUME_DOWN || k == KeyEvent.KEYCODE_VOLUME_MUTE
 
     override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK) return true // Back opens the menu (onKeyDown)
+        if (keyCode == KeyEvent.KEYCODE_BACK) return true // handled in onKeyDown
         if (isVolumeKey(keyCode)) return super.onKeyUp(keyCode, e)
         if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
         return true
     }
 
-    // ---- DeskDroid's menu: Back opens and closes it ----
+    // ---- The DD menu: a sheet that slides up from the bottom, where the
+    // keyboard sits. Swipe up from the bottom right corner opens it (Back
+    // closes it); swipe up from the bottom left corner brings the keyboard.
 
     private lateinit var menu: FrameLayout
-    private lateinit var panel: LinearLayout
+    private lateinit var panel: android.widget.ScrollView
 
     private fun buildMenu(): android.view.View {
-        val ui = io.deskdroid.app.ui.Ui(this)
         menu = FrameLayout(this).apply {
             setBackgroundColor(0x55000000)
             visibility = android.view.View.GONE
-            setOnClickListener { showMenu(false) } // a tap outside the panel closes it
+            setOnClickListener { showMenu(false) } // a tap outside the sheet closes it
         }
-        panel = ui.column(12) {
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+        panel = android.widget.ScrollView(this).apply {
             setBackgroundColor(io.deskdroid.app.ui.Party.PANEL)
             elevation = dp(16f)
             isClickable = true // touches don't fall through to the desktop
+            isVerticalScrollBarEnabled = false
+        }
+        menu.addView(panel, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL))
+        return menu
+    }
+
+    /** The sheet's contents, made again each time it opens (the dock and the layout follow changes and rotation). */
+    private fun fillMenu() {
+        val ui = io.deskdroid.app.ui.Ui(this)
+        val wide = resources.configuration.screenWidthDp >= 600
+        val content = ui.column(10) {
+            setPadding(dp(16), dp(10), dp(16), dp(14))
+            // A grab handle, like a bottom sheet.
+            addView(android.view.View(context).apply {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = dp(2f); setColor(io.deskdroid.app.ui.Party.BORDER)
+                }
+            }, LinearLayout.LayoutParams(dp(40), dp(4)).apply { gravity = android.view.Gravity.CENTER_HORIZONTAL })
             addView(ui.row {
                 addView(ui.text("DESKDROID", 15f).apply { typeface = io.deskdroid.app.ui.Party.orbitron(context); letterSpacing = 0.08f })
                 spacer()
                 addView(ui.outlineButton("✕", io.deskdroid.app.ui.Party.TEXT) { showMenu(false) }, LinearLayout.LayoutParams(dp(40), dp(40)))
             }, LinearLayout.LayoutParams(-1, -2))
-            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Touchpad", "Direct touch"),
-                if (Prefs.touchMode(context) == "direct") 1 else 0) { i ->
-                Prefs.setTouchMode(context, if (i == 1) "direct" else "touchpad")
-            }.view, LinearLayout.LayoutParams(-1, -2))
+            addView(dockRow(ui), LinearLayout.LayoutParams(-1, -2))
+
+            val segments = listOf(
+                io.deskdroid.app.ui.Segmented(ui, listOf("Touchpad", "Direct touch"),
+                    if (Prefs.touchMode(context) == "direct") 1 else 0) { i ->
+                    Prefs.setTouchMode(context, if (i == 1) "direct" else "touchpad")
+                }.view,
+                io.deskdroid.app.ui.Segmented(ui, listOf("Full screen", "Dodge cutouts"),
+                    if (Prefs.dodgeCutouts(context)) 1 else 0) { i ->
+                    Prefs.setDodgeCutouts(context, i == 1)
+                    sendSafeArea()
+                }.view,
+                io.deskdroid.app.ui.Segmented(ui, listOf("Keyboard: manual", "Automatic"),
+                    if (Prefs.autoKeyboard(context)) 1 else 0) { i ->
+                    Prefs.setAutoKeyboard(context, i == 1)
+                }.view,
+                io.deskdroid.app.ui.Segmented(ui, listOf("Screen may sleep", "Keep awake"),
+                    if (Prefs.keepAwake(context)) 1 else 0) { i ->
+                    Prefs.setKeepAwake(context, i == 1)
+                    applyKeepAwake()
+                }.view,
+            )
+            // Two columns on a wide (landscape) screen, so the sheet stays low.
+            segments.chunked(if (wide) 2 else 1).forEach { pair ->
+                addView(ui.row(8) { pair.forEach { addView(ui.weight(it)) } }, LinearLayout.LayoutParams(-1, -2))
+            }
+
             val scaleTile = ui.tile(scaleLabel(), io.deskdroid.app.ui.Party.YELLOW) {}
             scaleTile.setOnClickListener {
                 val i = (SCALES.indexOf(Prefs.nativeScale(context)) + 1) % SCALES.size
@@ -1173,20 +1221,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 // Applied now: KWin lays the desktop out again at the new scale.
                 if (started) NativeDesk.nativeSetScale(NativeDesk.desktopScale(context))
             }
-            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Full screen", "Dodge cutouts"),
-                if (Prefs.dodgeCutouts(context)) 1 else 0) { i ->
-                Prefs.setDodgeCutouts(context, i == 1)
-                sendSafeArea()
-            }.view, LinearLayout.LayoutParams(-1, -2))
-            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Keyboard: manual", "Automatic"),
-                if (Prefs.autoKeyboard(context)) 1 else 0) { i ->
-                Prefs.setAutoKeyboard(context, i == 1)
-            }.view, LinearLayout.LayoutParams(-1, -2))
-            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Screen may sleep", "Keep awake"),
-                if (Prefs.keepAwake(context)) 1 else 0) { i ->
-                Prefs.setKeepAwake(context, i == 1)
-                applyKeepAwake()
-            }.view, LinearLayout.LayoutParams(-1, -2))
+            val stop = ui.text("STOP", 12f, 0xFFFF6B82.toInt()).apply {
+                typeface = io.deskdroid.app.ui.Party.orbitron(context)
+                letterSpacing = 0.12f
+                gravity = android.view.Gravity.CENTER
+                minHeight = dp(44)
+                background = io.deskdroid.app.ui.ChamferDrawable(dp(12f), stroke = io.deskdroid.app.ui.Party.RED, strokeWidth = dp(1.5f))
+                setOnClickListener { confirmStop() }
+            }
             val grid = listOf(
                 ui.tile("Keyboard", io.deskdroid.app.ui.Party.CYAN) { showMenu(false); toggleKeyboard() },
                 scaleTile,
@@ -1194,20 +1236,122 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     showMenu(false)
                     startActivity(android.content.Intent(this@NativeDeskActivity, StoreActivity::class.java))
                 },
+                stop,
             )
             addView(ui.row(6) { grid.forEach { addView(ui.weight(it)) } }, LinearLayout.LayoutParams(-1, -2))
-            spacer()
-            addView(ui.text("STOP DESKTOP", 12f, 0xFFFF6B82.toInt()).apply {
-                typeface = io.deskdroid.app.ui.Party.orbitron(context)
-                letterSpacing = 0.12f
-                gravity = android.view.Gravity.CENTER
-                minHeight = dp(44)
-                background = io.deskdroid.app.ui.ChamferDrawable(dp(12f), stroke = io.deskdroid.app.ui.Party.RED, strokeWidth = dp(1.5f))
-                setOnClickListener { confirmStop() }
-            }, LinearLayout.LayoutParams(-1, -2))
         }
-        menu.addView(panel, FrameLayout.LayoutParams(dp(304), -1, android.view.Gravity.END))
-        return menu
+        panel.removeAllViews()
+        panel.addView(content, FrameLayout.LayoutParams(-1, -2))
+        // Not wider than a tablet's keyboard on a wide screen.
+        (panel.layoutParams as FrameLayout.LayoutParams).width =
+            if (wide) minOf(dp(720), resources.displayMetrics.widthPixels) else -1
+        panel.requestLayout()
+    }
+
+    /** Up to 10 phone apps: tap opens one, long press takes it off, + adds one. */
+    private fun dockRow(ui: io.deskdroid.app.ui.Ui): android.view.View {
+        val launcher = getSystemService(android.content.pm.LauncherApps::class.java)
+        val me = android.os.Process.myUserHandle()
+        val apps = Prefs.dockApps(this).mapNotNull { name ->
+            val cn = android.content.ComponentName.unflattenFromString(name) ?: return@mapNotNull null
+            try { launcher.resolveActivity(android.content.Intent().setComponent(cn).addCategory(android.content.Intent.CATEGORY_LAUNCHER), me) }
+            catch (e: Exception) { null } // uninstalled: left out
+        }
+        val row = ui.row(4) {
+            for (a in apps) addView(dockItem(ui, a.getBadgedIcon(0), a.label.toString(), {
+                showMenu(false)
+                try { launcher.startMainActivity(a.componentName, me, null, null) }
+                catch (e: Exception) { AppLog.i("Native desktop: couldn't open ${a.componentName}: $e") }
+            }) {
+                Prefs.setDockApps(this@NativeDeskActivity, Prefs.dockApps(this@NativeDeskActivity) - a.componentName.flattenToString())
+                android.widget.Toast.makeText(this@NativeDeskActivity, "${a.label} is off the dock", android.widget.Toast.LENGTH_SHORT).show()
+                fillMenu()
+            })
+            if (apps.size < 10) addView(dockItem(ui, null, "Add app", { pickDockApp() }, null))
+        }
+        return android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    private fun dockItem(ui: io.deskdroid.app.ui.Ui, icon: android.graphics.drawable.Drawable?, label: String,
+                         onTap: () -> Unit, onLongPress: (() -> Unit)?) = ui.column(2) {
+        gravity = android.view.Gravity.CENTER_HORIZONTAL
+        setPadding(dp(4), dp(4), dp(4), dp(4))
+        addView(if (icon != null) android.widget.ImageView(context).apply { setImageDrawable(icon) }
+                else ui.text("+", 26f, io.deskdroid.app.ui.Party.CYAN, 700).apply {
+                    gravity = android.view.Gravity.CENTER
+                    background = io.deskdroid.app.ui.ChamferDrawable(dp(10f), stroke = io.deskdroid.app.ui.Party.BORDER, strokeWidth = dp(1.5f))
+                }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        addView(ui.ellipsize(ui.text(label, 11f, io.deskdroid.app.ui.Party.TEXT).apply { gravity = android.view.Gravity.CENTER }),
+            LinearLayout.LayoutParams(dp(64), -2))
+        setOnClickListener { onTap() }
+        if (onLongPress != null) setOnLongClickListener { onLongPress(); true }
+    }
+
+    private fun pickDockApp() {
+        val launcher = getSystemService(android.content.pm.LauncherApps::class.java)
+        val have = Prefs.dockApps(this).toSet()
+        val all = launcher.getActivityList(null, android.os.Process.myUserHandle())
+            .filter { it.componentName.packageName != packageName && it.componentName.flattenToString() !in have }
+            .sortedBy { it.label.toString().lowercase() }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Add to the dock")
+            .setItems(all.map { it.label }.toTypedArray()) { _, i ->
+                Prefs.setDockApps(this, Prefs.dockApps(this) + all[i].componentName.flattenToString())
+                fillMenu()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    // ---- Swipes up from the bottom corners (in every touch mode): left
+    // brings the keyboard, right opens the DD menu. A touch that starts in a
+    // corner is held back until it's clearly a swipe up or clearly not one;
+    // if not, it goes to the desktop as it happened.
+    private var edge = 0 // 0 none, 1 left corner, 2 right corner, -1 swipe done (rest of the touch ignored)
+    private var edgeX = 0f
+    private var edgeY = 0f
+    private val held = ArrayList<MotionEvent>()
+
+    override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+        if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+            edge = 0
+            val v = window.decorView
+            if (started && menu.visibility != android.view.View.VISIBLE &&
+                    !e.isFromSource(InputDevice.SOURCE_MOUSE) && e.rawY > v.height - dp(EDGE_DP)) {
+                edge = when {
+                    e.rawX < v.width * 0.3f -> 1
+                    e.rawX > v.width * 0.7f -> 2
+                    else -> 0
+                }
+            }
+            if (edge == 0) return super.dispatchTouchEvent(e)
+            edgeX = e.rawX; edgeY = e.rawY
+            held.add(MotionEvent.obtain(e))
+            return true
+        }
+        val end = e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL
+        when (edge) {
+            0 -> return super.dispatchTouchEvent(e)
+            -1 -> { if (end) edge = 0; return true }
+        }
+        val up = edgeY - e.rawY
+        val side = abs(e.rawX - edgeX)
+        if (e.actionMasked == MotionEvent.ACTION_MOVE && up > dp(48f) && up > side * 1.5f) {
+            val which = edge
+            edge = -1
+            held.forEach { it.recycle() }; held.clear()
+            if (which == 1) toggleKeyboard() else showMenu(true)
+            return true
+        }
+        val notASwipe = end || e.actionMasked == MotionEvent.ACTION_POINTER_DOWN ||
+            side > dp(32f) || e.eventTime - e.downTime > 500
+        if (!notASwipe) { held.add(MotionEvent.obtain(e)); return true }
+        edge = 0
+        held.forEach { super.dispatchTouchEvent(it); it.recycle() }; held.clear()
+        return super.dispatchTouchEvent(e)
     }
 
     // Home (button or swipe up) while the desktop is already showing: like
@@ -1234,13 +1378,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private fun scaleLabel() = Prefs.nativeScale(this).let { if (it == 0f) "Scale: auto" else "Scale ${"%.2f".format(it).trimEnd('0').trimEnd('.')}×" }
 
     private fun showMenu(open: Boolean) {
-        val w = dp(304f)
         if (open) {
+            softKeyboard(false) // the sheet takes the keyboard's place
+            fillMenu()
             menu.visibility = android.view.View.VISIBLE
-            panel.translationX = w
-            panel.animate().translationX(0f).setDuration(180).start()
+            panel.translationY = resources.displayMetrics.heightPixels.toFloat()
+            panel.animate().translationY(0f).setDuration(200).start()
         } else if (menu.visibility == android.view.View.VISIBLE) {
-            panel.animate().translationX(w).setDuration(150).withEndAction { menu.visibility = android.view.View.GONE }.start()
+            panel.animate().translationY(panel.height.toFloat()).setDuration(150)
+                .withEndAction { menu.visibility = android.view.View.GONE }.start()
         }
     }
 
