@@ -22,6 +22,7 @@
 
 #include <QImage>
 #include <QPointF>
+#include <QPointer>
 #include <QSize>
 
 #include <memory>
@@ -34,6 +35,7 @@ namespace KWin
 {
 
 class NativeDeskBackend;
+class Window;
 class RenderLoop;
 class OutputFrame;
 
@@ -233,6 +235,7 @@ private:
     void send(const ndesk_msg &m, int passFd = -1);
     void readMessages();
     void freeBuffers();
+    static bool isBrowser(Window *w);
     qreal outputScale() const { return m_output ? m_output->scale() : m_scale; }
 
     QSize m_size;
@@ -248,6 +251,7 @@ private:
     std::unique_ptr<NativeDeskInputDevice> m_pointer;
     std::unique_ptr<NativeDeskInputDevice> m_keyboard;
     bool m_textInputActive = false;
+    QList<QPointer<Window>> m_minimizedForScreenOff; // NDESK_ACTION_SCREEN_OFF
 };
 
 } // namespace KWin

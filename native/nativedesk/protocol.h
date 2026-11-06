@@ -71,6 +71,8 @@ enum ndesk_op {
 
 enum ndesk_action {
     NDESK_ACTION_SHOW_DESKTOP = 1, /* minimize every window (KWin's Show Desktop) */
+    NDESK_ACTION_SCREEN_OFF = 2,   /* the phone's screen went off: minimize the browser's windows */
+    NDESK_ACTION_SCREEN_ON = 3,    /* and on again: bring back the ones minimized for it */
 };
 
 struct ndesk_msg {

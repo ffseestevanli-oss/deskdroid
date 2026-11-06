@@ -51,6 +51,10 @@ object Prefs {
     fun autoKeyboard(c: Context) = prefs(c).getBoolean("auto_keyboard", false)
     fun setAutoKeyboard(c: Context, on: Boolean) = prefs(c).edit().putBoolean("auto_keyboard", on).apply()
 
+    /** Etherium's windows minimized while the phone's screen is off (a playing video stops drawing; its sound goes on). */
+    fun browserScreenOff(c: Context) = prefs(c).getBoolean("browser_screen_off", true)
+    fun setBrowserScreenOff(c: Context, on: Boolean) = prefs(c).edit().putBoolean("browser_screen_off", on).apply()
+
     /** The screen stays on while the desktop is showing. */
     fun keepAwake(c: Context) = prefs(c).getBoolean("keep_awake", false)
     fun setKeepAwake(c: Context, on: Boolean) = prefs(c).edit().putBoolean("keep_awake", on).apply()

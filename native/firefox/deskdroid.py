@@ -85,4 +85,28 @@ edit("xpcom/build/BinaryPath.h",
     }
 """)
 
+# The window's Wayland app_id, which the taskbar matches to Etherium's menu
+# entry (org.deskdroid.firefox.desktop) for its icon. Upstream finds GTK's
+# setter with dlsym(RTLD_DEFAULT), which on Android doesn't see GTK (a
+# dependency of libxul, not of the program), so no app_id was ever set and
+# the taskbar showed a generic icon. Call it directly, always with Etherium's.
+edit("widget/gtk/nsWindow.cpp",
+     """  static auto sGdkWaylandWindowSetApplicationId =
+      (void (*)(GdkWindow*, const char*))dlsym(
+          RTLD_DEFAULT, "gdk_wayland_window_set_application_id");
+
+  if (GdkIsWaylandDisplay() && sGdkWaylandWindowSetApplicationId &&
+      !mGtkWindowAppClass.IsEmpty()) {
+    sGdkWaylandWindowSetApplicationId(gdkWindow, mGtkWindowAppClass.get());
+  }""",
+     """  // DeskDroid: GTK's setter directly (dlsym(RTLD_DEFAULT) misses it on
+  // Android), with Etherium's desktop file name.
+  if (GdkIsWaylandDisplay()) {
+    gdk_wayland_window_set_application_id(gdkWindow, "org.deskdroid.firefox");
+  }""")
+edit("widget/gtk/nsWindow.cpp",
+     "void nsWindow::RefreshWindowClass(void) {\n",
+     'extern "C" void gdk_wayland_window_set_application_id(GdkWindow*, const char*);  // DeskDroid\n'
+     "void nsWindow::RefreshWindowClass(void) {\n")
+
 print("deskdroid changes: applied")

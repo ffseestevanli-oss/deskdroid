@@ -337,6 +337,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             addView(buildMenu(), FrameLayout.LayoutParams(-1, -1))
         })
         applyKeepAwake()
+        // Screen off: Etherium's windows minimized (Prefs.browserScreenOff), so a
+        // video stops drawing and decoding while its sound plays on; screen on:
+        // back as they were (KWin remembers which, NDESK_ACTION_SCREEN_OFF/ON).
+        registerReceiver(screenReceiver, android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_SCREEN_OFF)
+            addAction(android.content.Intent.ACTION_SCREEN_ON)
+        })
         // Dodge display cutouts: tell KWin which screen edges the camera cutout
         // and rounded corners hide, again whenever they move (rotation).
         window.decorView.setOnApplyWindowInsetsListener { v, insets ->
@@ -1449,6 +1456,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     Prefs.setKeepAwake(this, i == 1)
                     applyKeepAwake()
                 }.view,
+                io.deskdroid.app.ui.Segmented(ui, listOf("Browser plays on", "Hide browser when off"),
+                    if (Prefs.browserScreenOff(this)) 1 else 0) { i ->
+                    Prefs.setBrowserScreenOff(this, i == 1)
+                }.view,
                 scaleTile),
         )
         val settings = ui.column(14) {
@@ -1860,7 +1871,25 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
+    private var hidBrowser = false
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context, intent: android.content.Intent) {
+            if (!started) return
+            when (intent.action) {
+                android.content.Intent.ACTION_SCREEN_OFF -> if (Prefs.browserScreenOff(c)) {
+                    NativeDesk.nativeAction(2)
+                    hidBrowser = true
+                }
+                android.content.Intent.ACTION_SCREEN_ON -> if (hidBrowser) {
+                    NativeDesk.nativeAction(3)
+                    hidBrowser = false
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
+        try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
         main.removeCallbacks(tick)
         // Stop (in the menu or the notification) ends the desktop; anything else
         // that destroys the window leaves it running in the background.
