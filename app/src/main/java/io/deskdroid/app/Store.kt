@@ -19,6 +19,15 @@ import java.util.zip.ZipInputStream
  *   share/  its menu entry, icons and data, into ~/.local/share, where KDE
  *           looks first and Plasma's menu sees new apps at once. The files an
  *           app put there are listed in store/apps/<id>/files.txt.
+ *
+ * Or, for a program like GIMP, a whole folder instead of lib/:
+ *
+ *   program/      its programs, plug-ins, libraries and data, into
+ *                 store/apps/<id>/program, read-only, the ELF files marked
+ *                 executable (GIMP looks for its plug-ins that way). Android
+ *                 runs them through its linker (store-program.sh).
+ *   program.txt   its main program, relative to program/.
+ *   program.env   variables it needs, @PROGRAM@ standing for program/'s path.
  */
 object Store {
     data class App(
@@ -67,6 +76,7 @@ object Store {
                 if (e.isDirectory || e.name.contains("..")) continue
                 val out = when {
                     e.name.startsWith("lib/") -> File(lib, e.name.removePrefix("lib/"))
+                    e.name.startsWith("program/") || e.name == "program.txt" || e.name == "program.env" -> File(dir, e.name)
                     e.name.startsWith("share/") -> File(share, e.name.removePrefix("share/")).also { files += it.path }
                     e.name == "app.txt" -> null
                     else -> null
@@ -74,6 +84,10 @@ object Store {
                 out.parentFile?.mkdirs()
                 out.outputStream().use { z.copyTo(it) }
                 if (out.parentFile == lib) out.setReadOnly()
+                if (e.name.startsWith("program/")) {
+                    if (isElf(out)) out.setExecutable(true, false)
+                    out.setReadOnly()
+                }
             }
         }
         zip.delete()
@@ -90,6 +104,7 @@ object Store {
         File(dir, "app.txt").delete()
         File(dir, "files.txt").takeIf { it.exists() }?.readLines()?.forEach { if (it.isNotBlank()) File(it).delete() }
         File(dir, "lib").listFiles()?.forEach { it.setWritable(true) }
+        File(dir, "program").walkTopDown().forEach { it.setWritable(true) }
         dir.deleteRecursively()
         File(c.filesDir, "kwin/bin/$id").delete()
         AppLog.i("Store: removed $id")
@@ -102,11 +117,17 @@ object Store {
         val cmd = File(bin, id)
         if (cmd.exists()) return
         try {
-            android.system.Os.symlink(File(c.applicationInfo.nativeLibraryDir, "libdd_qtapp.so").path, cmd.path)
+            // A program (GIMP...) starts through store-program.sh, a library through QtHost (qtapp.sh).
+            val launcher = if (File(root(c), "$id/program.txt").exists()) "libdd_store-program.so" else "libdd_qtapp.so"
+            android.system.Os.symlink(File(c.applicationInfo.nativeLibraryDir, launcher).path, cmd.path)
         } catch (e: Exception) {
             AppLog.i("Store: couldn't link $id: $e")
         }
     }
+
+    private fun isElf(f: File): Boolean = try {
+        f.inputStream().use { s -> val b = ByteArray(4); s.read(b) == 4 && b[0] == 0x7f.toByte() && b[1] == 'E'.code.toByte() && b[2] == 'L'.code.toByte() && b[3] == 'F'.code.toByte() }
+    } catch (e: Exception) { false }
 
     private fun connect(url: String): HttpURLConnection {
         var u = URL(url)
