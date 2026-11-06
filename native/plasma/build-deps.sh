@@ -20,7 +20,7 @@ shift 2
 API=29
 HOSTPREFIX="$PREFIX/host"
 STAMPS="$PREFIX/stamps"
-mkdir -p "$STAMPS" "$HOSTPREFIX"
+mkdir -p "$STAMPS" "$HOSTPREFIX" "$PREFIX/lib"
 
 host="$(uname -s | tr A-Z a-z)-x86_64"
 BIN="$NDK/toolchains/llvm/prebuilt/$host/bin"
