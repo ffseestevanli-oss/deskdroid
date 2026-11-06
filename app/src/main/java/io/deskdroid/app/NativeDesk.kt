@@ -49,6 +49,32 @@ object NativeDesk {
     @JvmStatic external fun nativeDetach()
     @JvmStatic external fun nativeSetScale(scale: Float)
     @JvmStatic external fun nativeSetSafeArea(left: Float, top: Float, right: Float, bottom: Float)
+    /** The phone's apps in Plasma's menu are watched once per process (watchAndroidApps). */
+    @Volatile var appsWatched = false
+    private val appsLock = Any()
+    private var appsRunning = false
+    private var appsAgain = false
+
+    /**
+     * Runs a listing of the phone's apps for the menu, one at a time: asked
+     * again while one runs, it runs once more afterwards instead of alongside.
+     */
+    fun refreshAndroidApps(list: () -> Unit) {
+        synchronized(appsLock) {
+            if (appsRunning) { appsAgain = true; return }
+            appsRunning = true
+        }
+        Thread {
+            while (true) {
+                synchronized(appsLock) { appsAgain = false }
+                runCatching(list).onFailure { AppLog.i("Native desktop: listing Android apps failed: $it") }
+                synchronized(appsLock) {
+                    if (!appsAgain) { appsRunning = false; return@Thread }
+                }
+            }
+        }.start()
+    }
+
     /** A desktop action (protocol.h's NDESK_ACTION_*): 1 shows the desktop. */
     @JvmStatic external fun nativeAction(action: Int)
 
@@ -502,7 +528,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "[Desktop Entry]\nType=Application\nName=App Store\nGenericName=Install KDE apps\n" +
                 "Icon=plasmadiscover\nExec=android-open deskdroid:store\nCategories=System;\n")
             NativeDesk.watchOpenRequests(applicationContext)
-            Thread { writeAndroidApps() }.start() // before plasmashell reads the menu (KWin starts first)
+            NativeDesk.refreshAndroidApps { writeAndroidApps(applicationContext) } // before plasmashell reads the menu (KWin starts first)
             watchAndroidApps()
             val bus = startSessionBus(libs, data, runtime)
             val scale = NativeDesk.desktopScale(this).toDouble()
@@ -750,21 +776,25 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * folder: Private Space (Android 15+, listed only while DeskDroid is the
      * home app) and Work. Icons are drawn again only for updated apps.
      */
-    private var appsWatched = false
 
     /** The menu follows apps installed or removed, and Private Space locking or unlocking. */
     private fun watchAndroidApps() {
-        if (appsWatched) return
-        appsWatched = true
-        val again = Runnable { Thread { writeAndroidApps() }.start() }
-        val later: () -> Unit = { main.removeCallbacks(again); main.postDelayed(again, 1500) }
-        getSystemService(android.content.pm.LauncherApps::class.java).registerCallback(object : android.content.pm.LauncherApps.Callback() {
+        // Once per process, not per window: every desktop window used to add its
+        // own watchers, and their listings ran all at once, so many that Android's
+        // binder gave up halfway (BadParcelable, DeadSystem) and apps left the menu.
+        if (NativeDesk.appsWatched) return
+        NativeDesk.appsWatched = true
+        val app = applicationContext
+        val again = Runnable { NativeDesk.refreshAndroidApps { writeAndroidApps(app) } }
+        val ui = android.os.Handler(Looper.getMainLooper())
+        val later: () -> Unit = { ui.removeCallbacks(again); ui.postDelayed(again, 1500) }
+        app.getSystemService(android.content.pm.LauncherApps::class.java).registerCallback(object : android.content.pm.LauncherApps.Callback() {
             override fun onPackageRemoved(packageName: String?, user: android.os.UserHandle?) = later()
             override fun onPackageAdded(packageName: String?, user: android.os.UserHandle?) = later()
             override fun onPackageChanged(packageName: String?, user: android.os.UserHandle?) = later()
             override fun onPackagesAvailable(packageNames: Array<out String>?, user: android.os.UserHandle?, replacing: Boolean) = later()
             override fun onPackagesUnavailable(packageNames: Array<out String>?, user: android.os.UserHandle?, replacing: Boolean) = later()
-        }, main)
+        }, android.os.Handler(Looper.getMainLooper()))
         if (Build.VERSION.SDK_INT >= 31) {
             val filter = android.content.IntentFilter().apply {
                 addAction(android.content.Intent.ACTION_PROFILE_AVAILABLE)
@@ -775,19 +805,22 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val receiver = object : android.content.BroadcastReceiver() {
                 override fun onReceive(c: android.content.Context, i: android.content.Intent) = later()
             }
-            if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
-            else registerReceiver(receiver, filter)
+            if (Build.VERSION.SDK_INT >= 33) app.registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
+            else app.registerReceiver(receiver, filter)
         }
     }
 
-    private fun writeAndroidApps() {
-        val dir = File(filesDir, ".local/share/applications").apply { mkdirs() }
-        val icons = File(filesDir, ".local/share/deskdroid-android-icons").apply { mkdirs() }
-        val launcher = getSystemService(android.content.pm.LauncherApps::class.java)
-        val users = getSystemService(android.os.UserManager::class.java)
+    private fun writeAndroidApps(c: android.content.Context) {
+        val dir = File(c.filesDir, ".local/share/applications").apply { mkdirs() }
+        val icons = File(c.filesDir, ".local/share/deskdroid-android-icons").apply { mkdirs() }
+        val launcher = c.getSystemService(android.content.pm.LauncherApps::class.java)
+        val users = c.getSystemService(android.os.UserManager::class.java)
         val me = android.os.Process.myUserHandle()
         val keep = mutableSetOf<String>()
-        for (user in launcher.profiles) {
+        // A listing that fails (Android's app service restarting: DeadSystemException)
+        // must not empty the menu: then nothing is taken out this time.
+        var failed = false
+        for (user in runCatching { launcher.profiles }.getOrElse { failed = true; emptyList() }) {
             val serial = users.getSerialNumberForUser(user)
             val private = user != me && Build.VERSION.SDK_INT >= 35 &&
                 runCatching { launcher.getLauncherUserInfo(user)?.userType == android.os.UserManager.USER_TYPE_PROFILE_PRIVATE }.getOrDefault(false)
@@ -797,7 +830,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 else -> "X-DeskDroid-Android-Work" to "@$serial"
             }
             val apps = try { launcher.getActivityList(null, user) } catch (e: Exception) {
-                AppLog.i("Native desktop: couldn't list profile $serial: $e"); emptyList()
+                AppLog.i("Native desktop: couldn't list profile $serial: $e"); failed = true; emptyList()
             }.distinctBy { it.componentName.packageName }
             for (info in apps) {
                 val pkg = info.componentName.packageName
@@ -807,7 +840,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 try {
                     val icon = File(icons, "$id.png")
                     if (!icon.exists() || icon.lastModified() < info.firstInstallTime ||
-                        icon.lastModified() < runCatching { packageManager.getPackageInfo(pkg, 0).lastUpdateTime }.getOrDefault(0L)) {
+                        icon.lastModified() < runCatching { c.packageManager.getPackageInfo(pkg, 0).lastUpdateTime }.getOrDefault(0L)) {
                         val d = info.getBadgedIcon(0) // the profile's badge (briefcase, lock) on its apps
                         val px = 128
                         val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
@@ -826,7 +859,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             AppLog.i("Native desktop: profile $serial${if (private) " (private)" else ""}: ${apps.size} apps")
         }
         // Apps uninstalled since the last start (and a locked Private Space's).
-        dir.listFiles { f -> f.name.startsWith("android-") && f.name !in keep }?.forEach { it.delete() }
+        if (!failed) dir.listFiles { f -> f.name.startsWith("android-") && f.name !in keep }?.forEach { it.delete() }
         AppLog.i("Native desktop: ${keep.size} Android apps in the menu")
     }
 
