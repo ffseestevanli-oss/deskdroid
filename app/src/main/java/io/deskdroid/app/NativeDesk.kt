@@ -521,10 +521,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             // KWin remembers each screen's scale; the app sets it at every start.
             File(filesDir, "config/kwinoutputconfig.json").delete()
             val runtime = File(cacheDir, "runtime").apply { mkdirs(); setReadable(true, true); setWritable(true, true); setExecutable(true, true) }
-            val fonts = File(data, "fonts.conf").apply {
-                writeText("<?xml version=\"1.0\"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n" +
-                    "  <cachedir>${File(cacheDir, "fontconfig").path}</cachedir>\n</fontconfig>\n")
-            }
+            val fonts = File(data, "fonts.conf").apply { writeText(fontsConf()) }
             val config = File(filesDir, "config").apply { mkdirs() }
             // Breeze cursors (shipped in KWin's data) unless the user picked others.
             File(config, "kcminputrc").takeUnless { it.exists() }
@@ -664,6 +661,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         File(config, "kdeglobals").takeUnless { it.readText().contains("[KDE Action Restrictions]") }
             ?.appendText("\n[KDE Action Restrictions]\naction/lock_screen=false\n")
         writeUserDirs(config)
+        writeTerminalSetup(config)
         copyWallpaper()
         // While DeskDroid's default layout changes from build to build, start from it
         // again when it's newer than the saved one (layout.js runs only without one).
@@ -719,6 +717,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("GSETTINGS_BACKEND", "memory")
                     // Apps the desktop starts (bin/dolphin...) inherit all this.
                     put("PATH", "${bin.path}:${System.getenv("PATH") ?: "/system/bin"}")
+                    put("DESKDROID_BIN", bin.path) // help in the terminal lists these apps
+                    put("SHELL", "/system/bin/sh") // terminals (Konsole, Kate's, Dolphin's) start Android's shell
                     sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
                 }
             }.start()
@@ -927,6 +927,66 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // Apps uninstalled since the last start (and a locked Private Space's).
         if (!failed) dir.listFiles { f -> f.name.startsWith("android-") && f.name !in keep }?.forEach { it.delete() }
         AppLog.i("Native desktop: ${keep.size} Android apps in the menu")
+    }
+
+    /**
+     * Fontconfig for every program: Android's fonts, plus the generic names
+     * (monospace, sans-serif, serif) and the monospace fonts programs ask for
+     * by name (Hack, KDE's default) mapped onto them. Without these, a request for a monospace
+     * font got the first font in /system/fonts, a proportional one, and
+     * Konsole spread every character over the widest one's cell.
+     * ~/.local/share/fonts takes fonts the user adds.
+     */
+    private fun fontsConf(): String {
+        val mono = monospaceFont()
+        fun alias(families: List<String>, prefer: List<String>) = families.joinToString("") { f ->
+            "  <alias binding=\"same\"><family>$f</family><prefer>" +
+                prefer.joinToString("") { "<family>$it</family>" } + "</prefer></alias>\n"
+        }
+        return "<?xml version=\"1.0\"?>\n<!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\">\n<fontconfig>\n" +
+            "  <dir>/system/fonts</dir>\n  <dir>${File(filesDir, ".local/share/fonts").path}</dir>\n" +
+            "  <cachedir>${File(cacheDir, "fontconfig").path}</cachedir>\n" +
+            alias(listOf("monospace", "Monospace", "Hack", "DejaVu Sans Mono", "Noto Sans Mono", "Liberation Mono", "Courier", "Courier New"),
+                listOf(mono, "Droid Sans Mono", "Cutive Mono")) +
+            alias(listOf("sans-serif", "sans", "Sans"),
+                listOf("Roboto", "Google Sans", "Noto Sans")) +
+            alias(listOf("serif", "Serif"),
+                listOf("Noto Serif", "Droid Serif")) +
+            "</fontconfig>\n"
+    }
+
+    /** The phone's monospace font: Droid Sans Mono on every Android so far. */
+    private fun monospaceFont() = listOf("DroidSansMono.ttf" to "Droid Sans Mono", "CutiveMono.ttf" to "Cutive Mono")
+        .firstOrNull { File("/system/fonts", it.first).exists() }?.second ?: "Droid Sans Mono"
+
+    /**
+     * Konsole: a DeskDroid profile (the default unless the user picked another)
+     * that starts Android's shell with DeskDroid's setup (assets/linux/deskdroid-shrc:
+     * the welcome, a short prompt and help) and the phone's monospace font.
+     * Konsole's built-in profile has no command and warned "Could not find ''".
+     * The profile is written once, so changes made in Konsole stay.
+     */
+    private fun writeTerminalSetup(config: File) {
+        try {
+            val rc = File(filesDir, "deskdroid/shrc")
+            rc.parentFile?.mkdirs()
+            Tuning.writeIfChanged(rc, assets.open("linux/deskdroid-shrc").use { it.readBytes() })
+            val font = "${monospaceFont()},10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
+            File(filesDir, ".local/share/konsole").apply { mkdirs() }.resolve("DeskDroid.profile")
+                .takeUnless { it.exists() }
+                ?.writeText("[General]\nName=DeskDroid\nParent=FALLBACK/\nCommand=/system/bin/sh\n" +
+                    "Environment=TERM=xterm-256color,COLORTERM=truecolor,SHELL=/system/bin/sh,ENV=${rc.path}\n" +
+                    "\n[Appearance]\nFont=$font\n")
+            File(config, "konsolerc").let { f ->
+                if (!f.exists() || !f.readText().contains("DefaultProfile=")) f.appendText("\n[Desktop Entry]\nDefaultProfile=DeskDroid.profile\n")
+            }
+            // KDE's fixed-width font (Kate, Dolphin's terminal...) unless one is set.
+            File(config, "kdeglobals").let { g ->
+                if (!g.exists() || !Regex("(?m)^fixed=").containsMatchIn(g.readText())) g.appendText("\n[General]\nfixed=$font\n")
+            }
+        } catch (e: Exception) {
+            AppLog.i("Native desktop test: couldn't write the terminal setup: $e")
+        }
     }
 
     /**
