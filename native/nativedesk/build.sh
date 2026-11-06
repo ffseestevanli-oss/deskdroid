@@ -129,6 +129,12 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       install -m 755 "$DESKDROID_QT_ANDROID/bin/dbus-daemon" "$OUT/libdd_dbus-daemon.so"
       bundled+=("$OUT/libdd_dbus-daemon.so")
     fi
+    # dbus-send, for Set as Wallpaper (set-wallpaper.sh asks plasmashell).
+    if [ -e "$DESKDROID_QT_ANDROID/bin/dbus-send" ]; then
+      install -m 755 "$DESKDROID_QT_ANDROID/bin/dbus-send" "$OUT/libdd_dbus-send.so"
+      bundled+=("$OUT/libdd_dbus-send.so")
+      install -m 755 "$HERE/set-wallpaper.sh" "$OUT/libdd_set-wallpaper.so"
+    fi
     plugins=0
     : > "$WORK/plugins.txt" # flat name, then the path under plugins/ (KDE looks there by namespace)
     if [ -d "$DESKDROID_QT_ANDROID/plugins" ]; then

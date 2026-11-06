@@ -576,6 +576,22 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             File(filesDir, ".local/share/applications/org.deskdroid.store.desktop").writeText(
                 "[Desktop Entry]\nType=Application\nName=App Store\nGenericName=Install KDE apps\n" +
                 "Icon=plasmadiscover\nExec=android-open deskdroid:store\nCategories=System;\n")
+            // Set as Desktop Wallpaper in right-click menus (KDE's own entry needs
+            // more than DeskDroid has: it's switched off). KDE only reads service
+            // menus that are executable.
+            File(filesDir, ".local/share/kio/servicemenus").apply { mkdirs() }
+                .resolve("deskdroid-wallpaper.desktop").apply {
+                    writeText("[Desktop Entry]\nType=Service\nMimeType=image/jpeg;image/png;image/webp;image/gif;image/bmp;\n" +
+                        "Actions=setWallpaper\nX-KDE-Priority=TopLevel\n\n" +
+                        "[Desktop Action setWallpaper]\nName=Set as Desktop Wallpaper\nIcon=viewimage\nExec=set-wallpaper %f\n")
+                    setExecutable(true)
+                }
+            File(filesDir, "config/kservicemenurc").apply {
+                val text = if (exists()) readText() else ""
+                if ("wallpaperfileitemaction" !in text) writeText(
+                    if ("[Show]\n" in text) text.replaceFirst("[Show]\n", "[Show]\nwallpaperfileitemaction=false\n")
+                    else text + "\n[Show]\nwallpaperfileitemaction=false\n")
+            }
             // The panel's keyboard button (an Icon widget on this file).
             File(filesDir, ".local/share/applications/org.deskdroid.keyboard.desktop").writeText(
                 "[Desktop Entry]\nType=Application\nName=Keyboard\nGenericName=Show or hide the phone's keyboard\n" +
@@ -850,9 +866,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         // Apps from the app store (Store.kt).
         Store.installed(this).forEach { Store.linkCommand(this, it) }
-        File(libs, "libdd_android-open.so").takeIf { it.exists() }?.let {
-            try { android.system.Os.symlink(it.path, File(bin, "android-open").path) }
-            catch (e: Exception) { AppLog.i("Native desktop test: couldn't link android-open: $e") }
+        for (tool in listOf("android-open", "set-wallpaper", "dbus-send")) File(libs, "libdd_$tool.so").takeIf { it.exists() }?.let {
+            try { android.system.Os.symlink(it.path, File(bin, tool).path) }
+            catch (e: Exception) { AppLog.i("Native desktop test: couldn't link $tool: $e") }
         }
         AppLog.i("Native desktop test: apps: ${apps.joinToString().ifEmpty { "none" }}")
         return bin
@@ -1269,6 +1285,44 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private fun mouse(e: MotionEvent) {
         touchpad.moveTo(e.x, e.y)
         NativeDesk.nativePointer(e.x, e.y, e.buttonState)
+        captureMouse()
+    }
+
+    // Mouse capture: Android hands the mouse's movement to the desktop (no
+    // Android cursor on top of KWin's, right click isn't Back, the pointer
+    // can't leave the desktop). The DD menu lets it go while it's open.
+    private var captureListening = false
+
+    private fun captureMouse() {
+        if (!Prefs.mouseCapture(this) || !hasWindowFocus() || surfaceView.hasPointerCapture() ||
+            menu.visibility == android.view.View.VISIBLE) return
+        if (!captureListening) {
+            surfaceView.setOnCapturedPointerListener { _, e -> capturedMouse(e); true }
+            captureListening = true
+        }
+        surfaceView.requestPointerCapture()
+    }
+
+    private fun releaseMouse() {
+        if (surfaceView.hasPointerCapture()) surfaceView.releasePointerCapture()
+    }
+
+    private fun capturedMouse(e: MotionEvent) {
+        if (!started) return
+        if (e.actionMasked == MotionEvent.ACTION_SCROLL) {
+            NativeDesk.nativeScroll(-e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 120f,
+                -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 120f, true)
+            return
+        }
+        if (!Prefs.mouseCapture(this)) { releaseMouse(); return }
+        // Relative movement: each sample's distance since the one before.
+        var dx = e.x; var dy = e.y
+        for (i in 0 until e.historySize) { dx += e.getHistoricalX(i); dy += e.getHistoricalY(i) }
+        val w = surfaceView.width.toFloat(); val h = surfaceView.height.toFloat()
+        val (px, py) = touchpad.position() ?: Pair(w / 2, h / 2)
+        val x = (px + dx).coerceIn(0f, w - 1); val y = (py + dy).coerceIn(0f, h - 1)
+        touchpad.moveTo(x, y)
+        NativeDesk.nativePointer(x, y, e.buttonState)
     }
 
     override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
@@ -1372,6 +1426,11 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 io.deskdroid.app.ui.Segmented(ui, listOf("Wheel", "Touchpad"),
                     if (Prefs.scrollWheel(this)) 0 else 1) { i ->
                     Prefs.setScrollWheel(this, i == 0)
+                }.view),
+            section("Mouse",
+                io.deskdroid.app.ui.Segmented(ui, listOf("Captured", "Free"),
+                    if (Prefs.mouseCapture(this)) 0 else 1) { i ->
+                    Prefs.setMouseCapture(this, i == 0)
                 }.view),
             section("Panel display behavior",
                 io.deskdroid.app.ui.Segmented(ui, listOf("Full screen", "Dodge cutouts"),
@@ -1594,6 +1653,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         systemBars(open)
         if (open) {
             softKeyboard(false) // the sheet takes the keyboard's place
+            releaseMouse() // the mouse can reach the sheet
             fillMenu()
             menu.visibility = android.view.View.VISIBLE
             panel.translationY = resources.displayMetrics.heightPixels.toFloat()
@@ -1680,6 +1740,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         private var wheelSteps = 0f
 
         fun moveTo(x: Float, y: Float) { px = x; py = y }
+        fun position(): Pair<Float, Float>? = if (px < 0) null else Pair(px, py)
 
         /** The buttons held (bit 1 left, 2 right), from on-screen buttons, at the pointer. */
         fun buttons(b: Int) { if (px >= 0) NativeDesk.nativePointer(px, py, b) }

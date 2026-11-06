@@ -561,7 +561,13 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
         monitorInfo.addView(ui.text("Full screen on the monitor. Phone touchpad mode and DeX-style windows come next.", 12f, Party.MUTED))
     }
 
+    private fun isHomeApp(): Boolean {
+        val home = android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME)
+        return c.packageManager.resolveActivity(home, 0)?.activityInfo?.packageName == c.packageName
+    }
+
     private fun startOrOpen() {
+        if (io.deskdroid.app.NativeDesk.running || isHomeApp()) return
         val display = if (onMonitor) externalDisplay()?.displayId ?: Display.DEFAULT_DISPLAY else Display.DEFAULT_DISPLAY
         io.deskdroid.app.NativeSession.start(c, display)
     }
@@ -582,7 +588,17 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private fun refreshStatus() {
         val running = io.deskdroid.app.NativeDesk.running
         status.text = if (running) "LIVE" else "READY"
-        startButton.text = if (running) "OPEN DESKTOP" else "START DESKTOP"
+        // Running already, or DeskDroid is the home app (Home opens the desktop):
+        // the button is greyed out.
+        val home = isHomeApp()
+        startButton.text = when {
+            running -> "DESKTOP RUNNING"
+            home -> "PRESS HOME FOR THE DESKTOP"
+            else -> "START DESKTOP"
+        }
+        startButton.isEnabled = !running && !home
+        startButton.isClickable = !running && !home
+        startButton.alpha = if (running || home) 0.4f else 1f
     }
 }
 

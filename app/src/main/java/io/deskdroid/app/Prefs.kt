@@ -56,6 +56,10 @@ object Prefs {
     fun setKeepAwake(c: Context, on: Boolean) = prefs(c).edit().putBoolean("keep_awake", on).apply()
 
     /** Two-finger scrolling as a mouse wheel (vertical, by lines; default) or a touchpad's (any direction, smooth). */
+    /** A real mouse is captured: the desktop gets its movement, Android's cursor hides. */
+    fun mouseCapture(c: Context) = prefs(c).getBoolean("mouse_capture", true)
+    fun setMouseCapture(c: Context, on: Boolean) = prefs(c).edit().putBoolean("mouse_capture", on).apply()
+
     fun scrollWheel(c: Context) = prefs(c).getBoolean("scroll_wheel", true)
     fun setScrollWheel(c: Context, on: Boolean) = prefs(c).edit().putBoolean("scroll_wheel", on).apply()
 
