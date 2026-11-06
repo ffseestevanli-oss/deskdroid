@@ -765,6 +765,28 @@ build_dolphin() {
   KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
   test -e "$PREFIX/lib/libdolphin.so"
 }
+# System Settings, as a library QtHost starts (apps/as-library.py), and its
+# pages (KCMs) one by one. For now only Default Applications, plasma-workspace's
+# kcm_componentchooser (componentchooser/), which writes config/mimeapps.list.
+build_systemsettings() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/systemsettings-$PLASMA_VERSION.tar.xz" "systemsettings-$PLASMA_VERSION.tar.xz")"
+  python3 "$HERE/apps/as-library.py" "$s" app/CMakeLists.txt systemsettings app/main.cpp
+  # Its UI tests (Appium) and docs aren't for the phone.
+  sed -i 's/^add_subdirectory(appiumtests)$//' "$s/CMakeLists.txt"
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
+  test -e "$PREFIX/lib/libsystemsettings.so"
+  test -e "$PREFIX/share/applications/systemsettings.desktop"
+}
+inputs_systemsettings() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
+build_kcm_componentchooser() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-workspace-$PLASMA_VERSION.tar.xz" "plasma-workspace-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  rm -rf "$s/_componentchooser" && cp -r "$HERE/componentchooser" "$s/_componentchooser"
+  kde_cmake "$s/_componentchooser" -DWORKSPACE_SRC="$s"
+  find "$PREFIX/plugins" -name '*kcm_componentchooser*' | grep -q .
+}
+inputs_kcm_componentchooser() { cat "$HERE"/componentchooser/*; }
 # Thumbnails (Dolphin, the wallpaper picker): kio-extras' thumbnail worker
 # and its thumbnailers only; the rest of kio-extras isn't needed.
 build_kio_extras() {
@@ -1331,7 +1353,8 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      syntax_highlighting kio_extras ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
-     curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp)
+     curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp
+     systemsettings kcm_componentchooser)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/*.* "$HERE"/kwin-nativedesk/CMakeLists.txt "$HERE/../nativedesk/protocol.h" "$HERE/ahb/deskdroid_ahb.h"; }
