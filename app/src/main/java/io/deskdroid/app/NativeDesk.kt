@@ -1279,7 +1279,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     // closes it); swipe up from the bottom left corner brings the keyboard.
 
     private lateinit var menu: FrameLayout
-    private lateinit var panel: android.widget.ScrollView
+    private lateinit var panel: LinearLayout
 
     private fun buildMenu(): android.view.View {
         menu = FrameLayout(this).apply {
@@ -1287,96 +1287,129 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             visibility = android.view.View.GONE
             setOnClickListener { showMenu(false) } // a tap outside the sheet closes it
         }
-        panel = android.widget.ScrollView(this).apply {
+        panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setBackgroundColor(io.deskdroid.app.ui.Party.PANEL)
             elevation = dp(16f)
             isClickable = true // touches don't fall through to the desktop
-            isVerticalScrollBarEnabled = false
         }
         menu.addView(panel, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL))
         return menu
     }
 
-    /** The sheet's contents, made again each time it opens (the dock and the layout follow changes and rotation). */
+    /**
+     * The sheet's contents, made again each time it opens (the dock and the
+     * layout follow changes and rotation). The title, the dock and the action
+     * buttons stay put; the settings between them scroll, under small
+     * category headings.
+     */
     private fun fillMenu() {
         val ui = io.deskdroid.app.ui.Ui(this)
         val wide = resources.configuration.screenWidthDp >= 600
-        val content = ui.column(10) {
-            setPadding(dp(16), dp(10), dp(16), dp(14))
-            // A grab handle, like a bottom sheet.
-            addView(android.view.View(context).apply {
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    cornerRadius = dp(2f); setColor(io.deskdroid.app.ui.Party.BORDER)
-                }
-            }, LinearLayout.LayoutParams(dp(40), dp(4)).apply { gravity = android.view.Gravity.CENTER_HORIZONTAL })
-            addView(ui.row {
-                addView(ui.text("DESKDROID", 15f).apply { typeface = io.deskdroid.app.ui.Party.orbitron(context); letterSpacing = 0.08f })
-                spacer()
-                addView(ui.outlineButton("✕", io.deskdroid.app.ui.Party.TEXT) { showMenu(false) }, LinearLayout.LayoutParams(dp(40), dp(40)))
-            }, LinearLayout.LayoutParams(-1, -2))
-            addView(dockRow(ui), LinearLayout.LayoutParams(-1, -2))
+        val P = io.deskdroid.app.ui.Party
+        panel.removeAllViews()
+        panel.setPadding(dp(16), dp(10), dp(16), dp(14))
 
-            val segments = listOf(
+        // A grab handle, like a bottom sheet.
+        panel.addView(android.view.View(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(2f); setColor(P.BORDER)
+            }
+        }, LinearLayout.LayoutParams(dp(40), dp(4)).apply { gravity = android.view.Gravity.CENTER_HORIZONTAL; bottomMargin = dp(6) })
+        panel.addView(ui.row {
+            addView(ui.text("DESKDROID", 15f).apply { typeface = P.orbitron(context); letterSpacing = 0.08f })
+            spacer()
+            addView(ui.outlineButton("✕", P.TEXT) { showMenu(false) }, LinearLayout.LayoutParams(dp(40), dp(40)))
+        }, LinearLayout.LayoutParams(-1, -2))
+        panel.addView(dockRow(ui), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6); bottomMargin = dp(6) })
+
+        fun heading(title: String) = ui.text("— ${title.uppercase()} —", 11f, P.MUTED, 700).apply {
+            gravity = android.view.Gravity.CENTER
+            letterSpacing = 0.12f
+        }
+        fun section(title: String, vararg views: android.view.View) = ui.column(6) {
+            addView(heading(title), LinearLayout.LayoutParams(-1, -2))
+            views.forEach { addView(it, LinearLayout.LayoutParams(-1, -2)) }
+        }
+
+        val scaleTile = ui.tile(scaleLabel(), P.YELLOW) {}
+        scaleTile.setOnClickListener {
+            val i = (SCALES.indexOf(Prefs.nativeScale(this)) + 1) % SCALES.size
+            Prefs.setNativeScale(this, SCALES[i])
+            scaleTile.text = scaleLabel()
+            // Applied now: KWin lays the desktop out again at the new scale.
+            if (started) NativeDesk.nativeSetScale(NativeDesk.desktopScale(this))
+        }
+        val sections = listOf(
+            section("Touchscreen mode",
                 io.deskdroid.app.ui.Segmented(ui, listOf("Touchpad", "Direct touch"),
-                    if (Prefs.touchMode(context) == "direct") 1 else 0) { i ->
-                    Prefs.setTouchMode(context, if (i == 1) "direct" else "touchpad")
-                }.view,
-                io.deskdroid.app.ui.Segmented(ui, listOf("Scroll: wheel", "Touchpad"),
-                    if (Prefs.scrollWheel(context)) 0 else 1) { i ->
-                    Prefs.setScrollWheel(context, i == 0)
-                }.view,
+                    if (Prefs.touchMode(this) == "direct") 1 else 0) { i ->
+                    Prefs.setTouchMode(this, if (i == 1) "direct" else "touchpad")
+                }.view),
+            section("Scroll behavior",
+                io.deskdroid.app.ui.Segmented(ui, listOf("Wheel", "Touchpad"),
+                    if (Prefs.scrollWheel(this)) 0 else 1) { i ->
+                    Prefs.setScrollWheel(this, i == 0)
+                }.view),
+            section("Panel display behavior",
                 io.deskdroid.app.ui.Segmented(ui, listOf("Full screen", "Dodge cutouts"),
-                    if (Prefs.dodgeCutouts(context)) 1 else 0) { i ->
-                    Prefs.setDodgeCutouts(context, i == 1)
+                    if (Prefs.dodgeCutouts(this)) 1 else 0) { i ->
+                    Prefs.setDodgeCutouts(this, i == 1)
                     sendSafeArea()
-                }.view,
-                io.deskdroid.app.ui.Segmented(ui, listOf("Keyboard: manual", "Automatic"),
-                    if (Prefs.autoKeyboard(context)) 1 else 0) { i ->
-                    Prefs.setAutoKeyboard(context, i == 1)
-                }.view,
+                }.view),
+            section("Keyboard spawning",
+                io.deskdroid.app.ui.Segmented(ui, listOf("Manual", "Automatic"),
+                    if (Prefs.autoKeyboard(this)) 1 else 0) { i ->
+                    Prefs.setAutoKeyboard(this, i == 1)
+                }.view),
+            section("Display options",
                 io.deskdroid.app.ui.Segmented(ui, listOf("Screen may sleep", "Keep awake"),
-                    if (Prefs.keepAwake(context)) 1 else 0) { i ->
-                    Prefs.setKeepAwake(context, i == 1)
+                    if (Prefs.keepAwake(this)) 1 else 0) { i ->
+                    Prefs.setKeepAwake(this, i == 1)
                     applyKeepAwake()
                 }.view,
-            )
-            // Two columns on a wide (landscape) screen, so the sheet stays low.
-            segments.chunked(if (wide) 2 else 1).forEach { pair ->
-                addView(ui.row(8) { pair.forEach { addView(ui.weight(it)) } }, LinearLayout.LayoutParams(-1, -2))
+                scaleTile),
+        )
+        val settings = ui.column(14) {
+            setPadding(0, dp(4), 0, dp(8))
+            // Two sections side by side on a wide (landscape) screen.
+            sections.chunked(if (wide) 2 else 1).forEach { pair ->
+                addView(ui.row(10) { pair.forEach { addView(ui.weight(it)) } }, LinearLayout.LayoutParams(-1, -2))
             }
-
-            val scaleTile = ui.tile(scaleLabel(), io.deskdroid.app.ui.Party.YELLOW) {}
-            scaleTile.setOnClickListener {
-                val i = (SCALES.indexOf(Prefs.nativeScale(context)) + 1) % SCALES.size
-                Prefs.setNativeScale(context, SCALES[i])
-                scaleTile.text = scaleLabel()
-                // Applied now: KWin lays the desktop out again at the new scale.
-                if (started) NativeDesk.nativeSetScale(NativeDesk.desktopScale(context))
-            }
-            val stop = ui.text("STOP", 12f, 0xFFFF6B82.toInt()).apply {
-                typeface = io.deskdroid.app.ui.Party.orbitron(context)
-                letterSpacing = 0.12f
-                gravity = android.view.Gravity.CENTER
-                minHeight = dp(44)
-                background = io.deskdroid.app.ui.ChamferDrawable(dp(12f), stroke = io.deskdroid.app.ui.Party.RED, strokeWidth = dp(1.5f))
-                setOnClickListener { confirmStop() }
-            }
-            val grid = listOf(
-                ui.tile("Keyboard", io.deskdroid.app.ui.Party.CYAN) { showMenu(false); toggleKeyboard() },
-                scaleTile,
-                ui.tile("App Store", io.deskdroid.app.ui.Party.GREEN) {
-                    showMenu(false)
-                    startActivity(android.content.Intent(this@NativeDeskActivity, StoreActivity::class.java))
-                },
-                stop,
-            )
-            addView(ui.row(6) { grid.forEach { addView(ui.weight(it)) } }, LinearLayout.LayoutParams(-1, -2))
         }
-        panel.removeAllViews()
-        panel.addView(content, FrameLayout.LayoutParams(-1, -2))
-        // Not wider than a tablet's keyboard on a wide screen.
-        (panel.layoutParams as FrameLayout.LayoutParams).width =
-            if (wide) minOf(dp(720), resources.displayMetrics.widthPixels) else -1
+        panel.addView(android.widget.ScrollView(this).apply {
+            isVerticalScrollBarEnabled = true
+            isVerticalFadingEdgeEnabled = true
+            setFadingEdgeLength(dp(24))
+            addView(settings, FrameLayout.LayoutParams(-1, -2))
+        }, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val stop = ui.text("STOP", 12f, 0xFFFF6B82.toInt()).apply {
+            typeface = P.orbitron(context)
+            letterSpacing = 0.12f
+            gravity = android.view.Gravity.CENTER
+            minHeight = dp(44)
+            background = io.deskdroid.app.ui.ChamferDrawable(dp(12f), stroke = P.RED, strokeWidth = dp(1.5f))
+            setOnClickListener { confirmStop() }
+        }
+        val actions = listOf(
+            ui.tile("Keyboard", P.CYAN) { showMenu(false); toggleKeyboard() },
+            ui.tile("App Store", P.GREEN) {
+                showMenu(false)
+                startActivity(android.content.Intent(this@NativeDeskActivity, StoreActivity::class.java))
+            },
+            stop,
+        )
+        panel.addView(ui.row(6) { actions.forEach { addView(ui.weight(it)) } },
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+
+        // A fixed height, about half the screen (most of it when the screen is
+        // wide and short); the settings scroll inside it.
+        val dm = resources.displayMetrics
+        (panel.layoutParams as FrameLayout.LayoutParams).apply {
+            width = if (wide) minOf(dp(720), dm.widthPixels) else -1
+            height = (dm.heightPixels * if (dm.heightPixels > dm.widthPixels) 0.5f else 0.85f).toInt()
+        }
         panel.requestLayout()
     }
 
