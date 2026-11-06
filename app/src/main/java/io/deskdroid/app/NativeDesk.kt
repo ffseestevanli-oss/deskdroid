@@ -49,6 +49,8 @@ object NativeDesk {
     @JvmStatic external fun nativeDetach()
     @JvmStatic external fun nativeSetScale(scale: Float)
     @JvmStatic external fun nativeSetSafeArea(left: Float, top: Float, right: Float, bottom: Float)
+    /** A desktop action (protocol.h's NDESK_ACTION_*): 1 shows the desktop. */
+    @JvmStatic external fun nativeAction(action: Int)
 
     /** Plasma's usual size on a phone (about twice the panel's pixels), or the menu's choice. */
     fun desktopScale(c: android.content.Context): Float =
@@ -1152,6 +1154,21 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         menu.addView(panel, FrameLayout.LayoutParams(dp(304), -1, android.view.Gravity.END))
         return menu
+    }
+
+    // Home (button or swipe up) while the desktop is already showing: like
+    // a phone launcher going back to its home screen, every window is
+    // minimized (KWin's Show Desktop; Home again brings them back). Coming
+    // back from another app, Home only brings the desktop forward.
+    private var inFront = false
+    override fun onResume() { super.onResume(); inFront = true }
+    override fun onPause() { super.onPause(); inFront = false }
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        if (inFront && started && intent.hasCategory(android.content.Intent.CATEGORY_HOME)) {
+            showMenu(false)
+            NativeDesk.nativeAction(1)
+        }
     }
 
     /** The menu's Keep awake: the screen stays on while the desktop shows. */

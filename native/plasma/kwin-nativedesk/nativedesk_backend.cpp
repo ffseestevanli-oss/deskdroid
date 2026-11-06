@@ -899,6 +899,13 @@ void NativeDeskBackend::readMessages()
         case NDESK_KEY:
             m_keyboard->key(m.key.keycode, m.key.unicode, m.key.down);
             break;
+        case NDESK_ACTION:
+            // Home on the phone: every window out of the way (Show Desktop),
+            // and back again on a second press, like Plasma's own button.
+            if (m.action.action == NDESK_ACTION_SHOW_DESKTOP && Workspace::self()) {
+                Workspace::self()->setShowingDesktop(!Workspace::self()->showingDesktop());
+            }
+            break;
         }
     }
 }

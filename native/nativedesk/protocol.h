@@ -35,6 +35,8 @@
  *     SAFE       desktops: screen pixels at each edge that the camera cutout or
  *                rounded corners hide (0 when dodging is off); panels and
  *                maximized windows keep out, the wallpaper still fills
+ *     ACTION     desktops: a desktop action from the phone (NDESK_ACTION_*),
+ *                such as Home minimizing every window
  *
  * Buffers are GPU memory owned by the app (AHardwareBuffer), drawn by the app
  * with the phone's own GLES/Vulkan driver and sampled by the compositor with
@@ -63,6 +65,11 @@ enum ndesk_op {
     NDESK_SCROLL,
     NDESK_SCALE,
     NDESK_SAFE,
+    NDESK_ACTION,
+};
+
+enum ndesk_action {
+    NDESK_ACTION_SHOW_DESKTOP = 1, /* minimize every window (KWin's Show Desktop) */
 };
 
 struct ndesk_msg {
@@ -80,6 +87,7 @@ struct ndesk_msg {
         struct { float dx, dy; } scroll;
         struct { float scale; } scale;
         struct { float left, top, right, bottom; } safe;
+        struct { uint32_t action; } action;
     };
 };
 

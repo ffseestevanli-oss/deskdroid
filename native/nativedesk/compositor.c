@@ -103,6 +103,7 @@ static struct {
     float new_scale;             /* set by nativeSetScale: for the desktops, then 0 */
     float safe[4];               /* nativeSetSafeArea: left, top, right, bottom, screen pixels */
     bool safe_changed;           /* send safe to the desktops */
+    uint32_t action;             /* nativeAction: for the desktops, then 0 */
     /* Swapping the window (the activity went to the background and came
      * back): nativeStart/nativeDetach ask, the loop does it under C.lock. */
     ANativeWindow *pending_window;
@@ -730,8 +731,16 @@ static void *loop(void *unused)
         C.new_scale = 0;
         bool safe_changed = C.safe_changed;
         C.safe_changed = false;
+        uint32_t action = C.action;
+        C.action = 0;
         struct ndesk_msg safe = { .op = NDESK_SAFE, .safe = { C.safe[0], C.safe[1], C.safe[2], C.safe[3] } };
         pthread_mutex_unlock(&C.lock);
+        for (int i = 0; action && i < MAX_CLIENTS; i++) {
+            struct client *cl = C.clients[i];
+            if (!cl || !cl->desktop) continue;
+            struct ndesk_msg r = { .op = NDESK_ACTION, .action = { action } };
+            send_msg(cl, &r);
+        }
         for (int i = 0; safe_changed && i < MAX_CLIENTS; i++) {
             struct client *cl = C.clients[i];
             if (cl && cl->desktop) send_msg(cl, &safe);
@@ -947,6 +956,17 @@ Java_io_deskdroid_app_NativeDesk_nativeSetSafeArea(JNIEnv *env, jclass cls, jflo
         C.safe[0] = l; C.safe[1] = t; C.safe[2] = r; C.safe[3] = b;
         C.safe_changed = true;
     }
+    pthread_mutex_unlock(&C.lock);
+    wake();
+}
+
+/* A desktop action (NDESK_ACTION_*), such as Home showing the desktop. */
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeAction(JNIEnv *env, jclass cls, jint action)
+{
+    (void)env; (void)cls;
+    pthread_mutex_lock(&C.lock);
+    C.action = (uint32_t)action;
     pthread_mutex_unlock(&C.lock);
     wake();
 }
