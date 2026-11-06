@@ -1013,6 +1013,13 @@ build_xz() {
     --disable-lzma-links --disable-scripts --disable-doc --disable-nls
   test -e "$PREFIX/lib/liblzma.so"
 }
+# bzip2 (GIMP's compressed-file plug-in): a static library, as its own
+# build makes only versioned shared ones.
+build_bzip2() {
+  local s; s="$(unpack https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz bzip2-1.0.8.tar.gz)"
+  make -C "$s" libbz2.a CC="$CC" AR="$BIN/llvm-ar" RANLIB="$BIN/llvm-ranlib" CFLAGS="-O2 -fPIC -D_FILE_OFFSET_BITS=64"
+  install -m 644 "$s/libbz2.a" "$PREFIX/lib/" && install -m 644 "$s/bzlib.h" "$PREFIX/include/"
+}
 build_libtiff() {
   local s; s="$(unpack https://download.osgeo.org/libtiff/tiff-4.7.0.tar.xz tiff-4.7.0.tar.xz)"
   cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -Dtiff-tools=OFF -Dtiff-tests=OFF -Dtiff-contrib=OFF -Dtiff-docs=OFF \
@@ -1187,7 +1194,7 @@ EOF
     -Dshmem-type=none -Dcheck-update=no -Denable-console-bin=false -Dcan-crosscompile-gir=false -Dvala=disabled \
     -Djavascript=disabled -Dlua=false -Dlinux-input=disabled -Dheadless-tests=disabled -Dgi-docgen=disabled \
     -Dappdata-test=disabled -Dlibunwind=false -Dlibbacktrace=false -Drelocatable-bundle=no \
-    -Dprint=true -Dcairo-pdf=enabled -Dwebkit-unmaintained=false
+    -Dprint=true -Dcairo-pdf=enabled -Dwebkit-unmaintained=false -Dvector-icons=false
   PATH="$stub:$PATH" ninja -C "$s/_android" -k 0 install
   test -e "$PREFIX/bin/gimp-3.2"
 }
@@ -1300,7 +1307,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
      syntax_highlighting kio_extras ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
-     xz libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
+     xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
      curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
