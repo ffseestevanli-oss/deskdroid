@@ -1274,6 +1274,11 @@ build_plasma_desktop_packages() {
   rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff"
   cp -r "$s/applets/kickoff/package" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff"
   test -e "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff/contents/ui/main.qml"
+  # Application Menu (Kicker), the cascading menu, as an alternative to
+  # Kickoff: the same C++ plugin and the same categories.
+  rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kicker"
+  cp -r "$s/applets/kicker/package" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kicker"
+  test -e "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kicker/contents/ui/main.qml"
   # Add Panel's choices (Default Panel, Empty Panel): without them its menu
   # was empty. The default panel leaves out widgets not built yet.
   python3 "$HERE/patches/desktoppackage/layout-templates.py" "$s" "$PREFIX/share/plasma/layout-templates"
@@ -1340,6 +1345,22 @@ build_mime_stubs() {
   test -e "$PREFIX/share/mime/audio/mpeg.xml"
 }
 inputs_mime_stubs() { cat "$HERE"/mime/*; }
+# KDE's application menu: the categories Kickoff and the other launchers
+# show (Development, Games, Graphics, Internet...), and their names and icons
+# in every language (.directory files), from plasma-workspace's menu/desktop.
+# NativeDesk.kt puts the Android Apps folders into the menu at each start.
+build_app_menu() {
+  local tar d="$WORK/src/app-menu"
+  tar="$(fetch "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-workspace-$PLASMA_VERSION.tar.xz" "plasma-workspace-$PLASMA_VERSION.tar.xz")"
+  rm -rf "$d" && mkdir -p "$d"
+  tar -xf "$tar" -C "$d" --strip-components=1 --wildcards '*/menu/desktop/*'
+  rm -rf "$PREFIX/share/desktop-directories" "$PREFIX/share/deskdroid/menus"
+  mkdir -p "$PREFIX/share/desktop-directories" "$PREFIX/share/deskdroid/menus"
+  cp "$d"/menu/desktop/*.directory "$PREFIX/share/desktop-directories/"
+  cp "$d/menu/desktop/plasma-applications.menu" "$PREFIX/share/deskdroid/menus/"
+  test -e "$PREFIX/share/desktop-directories/kf5-games.directory"
+  grep -q "<DefaultMergeDirs/>" "$PREFIX/share/deskdroid/menus/plasma-applications.menu"
+}
 inputs_plasma_desktop_folder() { cat "$HERE"/desktopcontainment/*; echo folder-package; }
 inputs_plasma_desktop_packages() { cat "$HERE"/patches/desktoppackage/*; }
 inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/x11-stubs/*; }
@@ -1352,7 +1373,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      plasma_wayland_protocols kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
-     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs kfilemetadata breeze_icons kcmutils_host dolphin
+     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs app_menu kfilemetadata breeze_icons kcmutils_host dolphin
      syntax_highlighting kio_extras ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
