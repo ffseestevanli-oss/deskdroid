@@ -919,6 +919,22 @@ build_pcre2() {
 # the build machine first, then GLib for Android.
 build_glib() {
   local s; s="$(unpack https://download.gnome.org/sources/glib/2.84/glib-2.84.1.tar.xz glib-2.84.1.tar.xz)"
+  # g_file_query_exists() asks faccessat() with AT_EACCESS | AT_SYMLINK_NOFOLLOW,
+  # flags Android's libc refuses (EINVAL), so every file looked missing: GIMP
+  # found no theme, icons or config folder and aborted. lstat() answers the same
+  # question (a broken link exists too).
+  python3 - "$s/gio/glocalfile.c" <<'EOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = "  return faccessat (0, local->filename, F_OK, AT_EACCESS | AT_SYMLINK_NOFOLLOW) == 0;"
+new = """#ifdef __ANDROID__
+  struct stat st; /* DeskDroid: bionic's faccessat() takes no flags */
+  return lstat (local->filename, &st) == 0;
+#else
+""" + old + "\n#endif"
+assert s.count(old) == 1, "glocalfile.c: faccessat call not found"
+open(p, "w").write(s.replace(old, new))
+EOF
   local opts=(-Dtests=false -Dintrospection=disabled -Dman-pages=disabled -Ddocumentation=false -Dsysprof=disabled
     -Dselinux=disabled -Dxattr=false -Dlibmount=disabled -Dnls=disabled -Dlibelf=disabled -Dglib_debug=disabled)
   # Static, so the tools don't pick up the runner's older GLib when they run.
