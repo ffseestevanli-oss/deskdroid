@@ -23,8 +23,10 @@ if [ -e "$dir/program.env" ]; then
     export "$(printf '%s' "$line" | sed "s|@PROGRAM@|$P|g")"
   done < "$dir/program.env"
 fi
-# With ddmask preloaded (the desktop's apps have it), exec it plainly: ddmask
-# goes through the linker too, and the program keeps its own name, argv[0]
-# and /proc/self/exe.
+# ddmask (native/ddmask) runs it, and every program it starts (GIMP's
+# plug-ins...), through the linker, each keeping its own name, argv[0] and
+# /proc/self/exe. The desktop's apps already have it preloaded; otherwise
+# preload it here, for this program and its children.
 case "$LD_PRELOAD" in *libddmask.so*) exec "$P/$main" "$@" ;; esac
+[ -e "$libs/libddmask.so" ] && export LD_PRELOAD="$libs/libddmask.so${LD_PRELOAD:+:$LD_PRELOAD}"
 exec /system/bin/linker64 "$P/$main" "$@"
