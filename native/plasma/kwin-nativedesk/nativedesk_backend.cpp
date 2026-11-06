@@ -10,6 +10,7 @@
 #include "scene/workspacescene.h"
 #include "core/renderloop.h"
 #include "input.h"
+#include "main.h"
 #include "deskdroid_ahb_server.h"
 #include "opengl/eglcontext.h"
 #include "opengl/egldisplay.h"
@@ -130,16 +131,25 @@ void NativeDeskOutput::setPixelSize(const QSize &pixelSize)
     qInfo("nativedesk: screen now %dx%d", pixelSize.width(), pixelSize.height());
 }
 
-// The user picked another scale in DeskDroid's menu: applied now, as KDE's
-// display settings would.
+// The user picked another scale in DeskDroid's menu: applied now, the way
+// KDE's display settings do it (an output configuration through the
+// workspace, which lays windows, panels and the desktop out again and tells
+// the apps; setting the output's state alone changed the number but nothing
+// on screen until a restart). Before the workspace exists, the state only.
 void NativeDeskOutput::setUserScale(qreal scale)
 {
     if (qFuzzyCompare(scale, this->scale())) {
         return;
     }
-    State next = m_state;
-    next.scale = scale;
-    setState(next);
+    if (Workspace::self()) {
+        OutputConfiguration config;
+        config.changeSet(this)->scale = scale;
+        Workspace::self()->applyOutputConfiguration(config);
+    } else {
+        State next = m_state;
+        next.scale = scale;
+        setState(next);
+    }
     qInfo("nativedesk: scale now %.2f", scale);
 }
 
@@ -738,6 +748,16 @@ bool NativeDeskBackend::initialize()
     m_output = new NativeDeskOutput(this, m_size, m_scale);
     Q_EMIT outputAdded(m_output);
     Q_EMIT outputsQueried();
+    // KWin restores the scale it saved last (now that changes go through its
+    // output configuration, which saves them); DeskDroid's menu has the say,
+    // so its scale goes on again once the workspace is up.
+    connect(kwinApp(), &Application::workspaceCreated, this, [this] {
+        QTimer::singleShot(0, this, [this] {
+            if (m_output) {
+                m_output->setUserScale(m_scale);
+            }
+        });
+    });
     return true;
 }
 
