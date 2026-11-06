@@ -21,6 +21,18 @@ jobs:
       # ddmask (native/ddmask), tested on the runner with glibc's loader standing in for Android's.
       - name: Test ddmask
         run: native/ddmask/test/run.sh
+      # glibc for ddmask (native/glibc): built with the cross compiler, kept in a
+      # cache keyed on its sources, tested under qemu.
+      - name: Install the glibc cross compiler
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-aarch64-linux-gnu g++-aarch64-linux-gnu bison gawk qemu-user
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/deskdroid/glibc
+          key: glibc-${{ hashFiles('native/glibc/build.sh', 'native/glibc/patch.py') }}
+      - name: Build and test glibc
+        run: |
+          native/glibc/build.sh "$RUNNER_TEMP/glibc"
+          native/glibc/test/run.sh "$RUNNER_TEMP/glibc"
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
