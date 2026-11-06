@@ -498,7 +498,7 @@ build_kiconthemes() {
   local s; s="$(kf_src kiconthemes)"
   python3 "$HERE/patches/kiconthemes/icon-theme.py" "$s"
   unandroid "$s"
-  kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DUSE_BreezeIcons=OFF -DKICONTHEMES_USE_QTQUICK=OFF
+  kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DUSE_BreezeIcons=OFF -DKICONTHEMES_USE_QTQUICK=ON # QML module org.kde.iconthemes: the desktop's Icons settings page
 }
 inputs_kiconthemes() { cat "$HERE"/patches/kiconthemes/*; }
 # Breeze: KWin's window borders (and the Qt style, colors and cursors). The
