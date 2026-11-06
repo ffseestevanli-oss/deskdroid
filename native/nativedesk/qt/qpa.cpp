@@ -240,9 +240,13 @@ private:
                 key(m);
                 break;
             case NDESK_SCROLL:
-                QWindowSystemInterface::handleWheelEvent(window(), m_pointer, m_pointer,
-                    QPoint(qRound(m.scroll.dx), qRound(m.scroll.dy)),
-                    QPoint(qRound(m.scroll.dx * 2), qRound(m.scroll.dy * 2)));
+                if (m.scroll.wheel) // steps in 120ths of a click; content moves the other way
+                    QWindowSystemInterface::handleWheelEvent(window(), m_pointer, m_pointer, QPoint(),
+                        QPoint(-qRound(m.scroll.dx), -qRound(m.scroll.dy)));
+                else
+                    QWindowSystemInterface::handleWheelEvent(window(), m_pointer, m_pointer,
+                        QPoint(qRound(m.scroll.dx), qRound(m.scroll.dy)),
+                        QPoint(qRound(m.scroll.dx * 2), qRound(m.scroll.dy * 2)));
                 break;
             }
         }

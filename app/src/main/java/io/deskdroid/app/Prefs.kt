@@ -52,6 +52,10 @@ object Prefs {
     fun keepAwake(c: Context) = prefs(c).getBoolean("keep_awake", false)
     fun setKeepAwake(c: Context, on: Boolean) = prefs(c).edit().putBoolean("keep_awake", on).apply()
 
+    /** Two-finger scrolling as a mouse wheel (vertical, by lines; default) or a touchpad's (any direction, smooth). */
+    fun scrollWheel(c: Context) = prefs(c).getBoolean("scroll_wheel", true)
+    fun setScrollWheel(c: Context, on: Boolean) = prefs(c).edit().putBoolean("scroll_wheel", on).apply()
+
     /** The DD menu's dock: up to 10 phone apps, as flattened component names. */
     fun dockApps(c: Context): List<String> =
         prefs(c).getString("dock_apps", "")!!.split('\n').filter { it.isNotBlank() }

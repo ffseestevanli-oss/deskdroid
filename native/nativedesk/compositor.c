@@ -75,7 +75,7 @@ struct client {
 struct input {
     enum { IN_POINTER, IN_KEY, IN_SCROLL } type;
     float x, y;     /* pointer position, or scroll amount */
-    int buttons;
+    int buttons;    /* or, scrolling: 1 for wheel steps */
     int keycode, unicode, down;
 };
 
@@ -476,7 +476,7 @@ static void handle_input(const struct input *in)
         int i = client_at(C.px, C.py, &title);
         if (i < 0 || title) return;
         send_pointer(i, true); /* where the scroll happens */
-        struct ndesk_msg m = { .op = NDESK_SCROLL, .scroll = { in->x, in->y } };
+        struct ndesk_msg m = { .op = NDESK_SCROLL, .scroll = { in->x, in->y, (uint32_t)in->buttons } };
         send_msg(C.clients[i], &m);
         return;
     }
@@ -897,10 +897,10 @@ Java_io_deskdroid_app_NativeDesk_nativeKey(JNIEnv *env, jclass cls, jint keycode
 }
 
 JNIEXPORT void JNICALL
-Java_io_deskdroid_app_NativeDesk_nativeScroll(JNIEnv *env, jclass cls, jfloat dx, jfloat dy)
+Java_io_deskdroid_app_NativeDesk_nativeScroll(JNIEnv *env, jclass cls, jfloat dx, jfloat dy, jboolean wheel)
 {
     (void)env; (void)cls;
-    queue((struct input){ .type = IN_SCROLL, .x = dx, .y = dy });
+    queue((struct input){ .type = IN_SCROLL, .x = dx, .y = dy, .buttons = wheel ? 1 : 0 });
 }
 
 /*

@@ -76,7 +76,7 @@ public:
     bool isLidSwitch() const override;
 
     void pointer(const QPointF &pos, uint32_t buttons);
-    void scroll(qreal dx, qreal dy);
+    void scroll(qreal dx, qreal dy, bool wheel);
     void key(int androidKeyCode, int unicode, bool down);
 
 private:

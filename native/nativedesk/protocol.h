@@ -29,8 +29,9 @@
  *                app has a frame of slack, and three buffers are enough.
  *     POINTER    pointer position (window coordinates) and buttons
  *     KEY        Android key code, Unicode character, down/up
- *     SCROLL     scroll by dx, dy pixels (wheel or two-finger drag), at the
- *                last POINTER position
+ *     SCROLL     scroll by dx, dy pixels (two-finger drag), at the last POINTER
+ *                position; with wheel set, dx, dy are mouse-wheel steps in
+ *                120ths of a click instead (a wheel: apps scroll by lines)
  *     SCALE      desktops: the user picked a new scale (1.5 = 150%), for now
  *     SAFE       desktops: screen pixels at each edge that the camera cutout or
  *                rounded corners hide (0 when dodging is off); panels and
@@ -84,7 +85,7 @@ struct ndesk_msg {
         struct { uint64_t time_ns; } frame;
         struct { float x, y; uint32_t buttons, inside; } pointer;
         struct { int32_t keycode, unicode; uint32_t down; } key;
-        struct { float dx, dy; } scroll;
+        struct { float dx, dy; uint32_t wheel; } scroll;
         struct { float scale; } scale;
         struct { float left, top, right, bottom; } safe;
         struct { uint32_t action; } action;

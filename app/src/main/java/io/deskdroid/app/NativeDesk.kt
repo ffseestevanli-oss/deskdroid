@@ -44,7 +44,7 @@ object NativeDesk {
     @JvmStatic external fun nativeStop()
     @JvmStatic external fun nativePointer(x: Float, y: Float, buttons: Int)
     @JvmStatic external fun nativeKey(keycode: Int, unicode: Int, down: Boolean)
-    @JvmStatic external fun nativeScroll(dx: Float, dy: Float)
+    @JvmStatic external fun nativeScroll(dx: Float, dy: Float, wheel: Boolean)
     @JvmStatic external fun nativeStats(): String
     @JvmStatic external fun nativeResized()
     @JvmStatic external fun nativeDetach()
@@ -1113,7 +1113,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 val up = e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL
                 NativeDesk.nativePointer(e.x, e.y, if (up) 0 else 1)
             }
-            else -> touchpad.onTouch(e, surfaceView.width.toFloat(), surfaceView.height.toFloat())
+            else -> {
+                touchpad.wheel = Prefs.scrollWheel(this)
+                touchpad.onTouch(e, surfaceView.width.toFloat(), surfaceView.height.toFloat())
+            }
         }
         return true
     }
@@ -1121,9 +1124,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     override fun onGenericMotionEvent(e: MotionEvent): Boolean {
         if (!started) return false
         if (e.actionMasked == MotionEvent.ACTION_SCROLL) {
-            // One wheel notch scrolls about three lines.
-            NativeDesk.nativeScroll(-e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 60f,
-                -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 60f)
+            // A real wheel: its clicks, in 120ths (fractions from a smooth wheel).
+            NativeDesk.nativeScroll(-e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 120f,
+                -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 120f, true)
             return true
         }
         mouse(e)
@@ -1210,6 +1213,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 io.deskdroid.app.ui.Segmented(ui, listOf("Touchpad", "Direct touch"),
                     if (Prefs.touchMode(context) == "direct") 1 else 0) { i ->
                     Prefs.setTouchMode(context, if (i == 1) "direct" else "touchpad")
+                }.view,
+                io.deskdroid.app.ui.Segmented(ui, listOf("Scroll: wheel", "Touchpad"),
+                    if (Prefs.scrollWheel(context)) 0 else 1) { i ->
+                    Prefs.setScrollWheel(context, i == 0)
                 }.view,
                 io.deskdroid.app.ui.Segmented(ui, listOf("Full screen", "Dodge cutouts"),
                     if (Prefs.dodgeCutouts(context)) 1 else 0) { i ->
@@ -1499,6 +1506,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // Tap, tap, then touch and hold: the middle button held (3D views, autoscroll).
         private var lastDoubleTapAt = 0L
         private var middle = false
+        /** Scroll type (DD menu): a mouse wheel's steps, up and down only, or a touchpad's. */
+        var wheel = true
+        private var wheelSteps = 0f
 
         fun moveTo(x: Float, y: Float) { px = x; py = y }
 
@@ -1512,7 +1522,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     downAt = e.eventTime
                     travel = 0f
                     maxFingers = 1
-                    scrollAxis = 0; scrollX = 0f; scrollY = 0f
+                    scrollAxis = 0; scrollX = 0f; scrollY = 0f; wheelSteps = 0f
                     // Tap, tap, then touch and hold: the middle button, held until lifted.
                     middle = e.eventTime - lastDoubleTapAt < DOUBLE_TAP_MS
                     lastDoubleTapAt = 0L
@@ -1564,6 +1574,17 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
         /** Two-finger scroll, kept to the axis the swipe starts along unless it's clearly diagonal. */
         private fun scroll(dx: Float, dy: Float) {
+            if (wheel) {
+                // Up and down only, as whole 120ths of a wheel click (natural:
+                // the content follows the fingers).
+                wheelSteps += -dy * WHEEL_PER_PX
+                val steps = wheelSteps.toInt()
+                if (steps != 0) {
+                    NativeDesk.nativeScroll(0f, steps.toFloat(), true)
+                    wheelSteps -= steps
+                }
+                return
+            }
             if (scrollAxis == 0) {
                 scrollX += dx; scrollY += dy
                 if (abs(scrollX) + abs(scrollY) < AXIS_SLOP) return
@@ -1581,7 +1602,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         private fun dxdy(dx: Float, dy: Float) {
             val sx = if (scrollAxis == 1) 0f else dx
             val sy = if (scrollAxis == 2) 0f else dy
-            NativeDesk.nativeScroll(-sx * SCROLL_SPEED, -sy * SCROLL_SPEED) // natural scrolling
+            NativeDesk.nativeScroll(-sx * SCROLL_SPEED, -sy * SCROLL_SPEED, false) // natural scrolling
         }
 
         private val handler = Handler(Looper.getMainLooper())
@@ -1602,6 +1623,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             const val DOUBLE_TAP_MS = 300L
             const val TAP_SLOP = 24f
             const val AXIS_SLOP = 12f
+            const val WHEEL_PER_PX = 3f // a wheel click (120) per 40 px of finger travel
         }
     }
 
@@ -1704,6 +1726,7 @@ class PhoneTouchpadActivity : Activity() {
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (NativeDesk.surfaceW <= 0f) return false
+        touchpad.wheel = Prefs.scrollWheel(this)
         touchpad.onTouch(e, NativeDesk.surfaceW, NativeDesk.surfaceH)
         return true
     }

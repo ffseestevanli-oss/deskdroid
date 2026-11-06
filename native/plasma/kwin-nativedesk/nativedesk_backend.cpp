@@ -268,16 +268,20 @@ void NativeDeskInputDevice::pointer(const QPointF &pos, uint32_t buttons)
     Q_EMIT pointerFrame(this);
 }
 
-void NativeDeskInputDevice::scroll(qreal dx, qreal dy)
+void NativeDeskInputDevice::scroll(qreal dx, qreal dy, bool wheel)
 {
     // The compositor sends pixels, positive when content should move up (like
     // a wheel turned towards the user); KWin's axis deltas use the same sign.
+    // A wheel's steps come in 120ths of a click: apps scroll by lines, like
+    // with a mouse (libinput: 15 degrees a click), and a browser doesn't take
+    // them for touchpad swipes (back, forward).
     const auto time = now();
+    const auto source = wheel ? PointerAxisSource::Wheel : PointerAxisSource::Finger;
     if (dy != 0) {
-        Q_EMIT pointerAxisChanged(PointerAxis::Vertical, dy, 0, PointerAxisSource::Finger, false, time, this);
+        Q_EMIT pointerAxisChanged(PointerAxis::Vertical, wheel ? dy * 15 / 120 : dy, wheel ? dy : 0, source, false, time, this);
     }
     if (dx != 0) {
-        Q_EMIT pointerAxisChanged(PointerAxis::Horizontal, dx, 0, PointerAxisSource::Finger, false, time, this);
+        Q_EMIT pointerAxisChanged(PointerAxis::Horizontal, wheel ? dx * 15 / 120 : dx, wheel ? dx : 0, source, false, time, this);
     }
     Q_EMIT pointerFrame(this);
 }
@@ -856,7 +860,11 @@ void NativeDeskBackend::readMessages()
             m_pointer->pointer(QPointF(m.pointer.x, m.pointer.y) / outputScale(), m.pointer.buttons);
             break;
         case NDESK_SCROLL:
-            m_pointer->scroll(m.scroll.dx / outputScale(), m.scroll.dy / outputScale());
+            if (m.scroll.wheel) {
+                m_pointer->scroll(m.scroll.dx, m.scroll.dy, true);
+            } else {
+                m_pointer->scroll(m.scroll.dx / outputScale(), m.scroll.dy / outputScale(), false);
+            }
             break;
         case NDESK_CONFIGURE:
             // After the first one: the screen's size changed (rotation).
