@@ -17,6 +17,17 @@ printf '#!/bin/sh\necho "sh-script $0 $*"\n' > "$T/app/bin/shscript"
 cp "$T/app/bin/probe" "$T/app/bin/noexec"
 chmod 755 "$T/app/bin/script" "$T/app/bin/shscript"
 chmod 644 "$T/app/bin/noexec"
+# Static programs: through ddload (libdd_static.so), built for this machine.
+"$CC" -O2 -Wall -fPIE -static-pie -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
+  -fno-asynchronous-unwind-tables "$HERE/../ddload.c" -o "$T/lib/libdd_static.so"
+"$CC" -O2 -static "$HERE/probe.c" -o "$T/app/bin/sprobe"
+"$CC" -O2 -static-pie "$HERE/probe.c" -o "$T/app/bin/spieprobe"
+# AppImages: the runner (with this machine's shell), and a pretend AppImage, a
+# static program with AppImage's mark that unpacks an AppRun script.
+sed '1s|.*|#!/bin/sh|' "$HERE/../appimage.sh" > "$T/lib/libdd_appimage.so"
+chmod 755 "$T/lib/libdd_appimage.so"
+"$CC" -O2 -static "$HERE/fake-appimage.c" -o "$T/app/bin/Fake.AppImage"
+printf 'AI\002' | dd of="$T/app/bin/Fake.AppImage" bs=1 seek=8 conv=notrunc status=none
 
 ALLOW="/usr:/bin:/lib:/lib32:/lib64:/sbin:/etc:$T/lib"
 run() { env LD_PRELOAD="$T/lib/libddmask.so" DDMASK_ALLOW="$ALLOW" PATH="$T/app/bin:/usr/bin:/bin" "$@" 2>&1; }
@@ -62,5 +73,22 @@ expect "allowed programs run as before" "$out" "status=0"
 
 out="$(env LD_PRELOAD="$T/lib/libddmask.so" DDMASK_ALLOW="$ALLOW:$T/app" /bin/sh -c "exec $P")"
 expect "inside DDMASK_ALLOW: plain exec" "$out" "cmd0=$P"
+
+S="$T/app/bin/sprobe"
+out="$(run /bin/sh -c "exec $S one")"
+expect "a static program runs through ddload" "$out" "argv0=$S " "comm=sprobe " "cmd0=[^ ]*libdd_static.so" "arg=one"
+
+out="$(run /bin/sh -c "exec spieprobe two")"
+expect "a static PIE program, found on PATH" "$out" "argv0=spieprobe " "comm=spieprobe " "cmd0=[^ ]*libdd_static.so" "arg=two"
+
+out="$(run "$P" execvp sprobe)"
+expect "a loaded program starts a static one" "$out" "argv0=sprobe exe=[^ ]*libdd_static.so comm=sprobe .* arg=child"
+
+export DDMASK_APPIMAGE_CACHE="$T/cache"
+out="$(run /bin/sh -c "exec Fake.AppImage x y")"
+expect "an AppImage unpacks and its AppRun starts" "$out" "apprun appimage=$T/app/bin/Fake.AppImage argv0=Fake.AppImage appdir=$T/cache/Fake.AppImage-[^ ]* args=x y" "^unpacked$"
+out="$(run /bin/sh -c "exec Fake.AppImage again")"
+expect "the second start uses the unpacked copy" "$out" "apprun .* args=again"
+if grep -q "^unpacked" <<<"$out"; then echo "FAIL it unpacked again"; fails=$((fails + 1)); fi
 
 [ "$fails" -eq 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

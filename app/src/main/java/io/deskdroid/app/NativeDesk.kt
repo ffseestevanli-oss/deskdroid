@@ -778,29 +778,35 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     /**
-     * glibc (native/glibc), for the ordinary Linux programs ddmask starts: its
-     * libraries ship zipped as libdd_glibc.so and are unpacked into files/glibc,
-     * the folder it was built for, once per app version. Its /etc is written
-     * here: the app's user, and DNS from Android's current network.
+     * glibc and musl (native/glibc, native/musl), for the ordinary Linux
+     * programs ddmask starts. glibc's libraries ship zipped as libdd_glibc.so
+     * and are unpacked into files/glibc, the folder it was built for, once per
+     * app version; musl is all in its loader (libdd_ld-musl.so), and files/musl
+     * holds the libraries musl programs bring. Each one's /etc is written here:
+     * the app's user, and DNS from Android's current network.
      */
     private fun glibcRuntime(libs: String) {
         val zip = File(libs, "libdd_glibc.so")
-        if (!zip.exists()) return
-        val glibc = File(filesDir, "glibc")
-        unpackKWinData(zip, glibc)
-        val etc = File(glibc, "etc").apply { mkdirs() }
+        if (zip.exists()) unpackKWinData(zip, File(filesDir, "glibc"))
         val uid = android.os.Process.myUid()
         val home = File(filesDir, "home").apply { mkdirs() }
-        File(etc, "passwd").writeText("root:x:0:0:root:/:/system/bin/sh\n" +
-            "deskdroid:x:$uid:$uid:DeskDroid:${home.path}:/system/bin/sh\n")
-        File(etc, "group").writeText("root:x:0:\ndeskdroid:x:$uid:\n")
         val dns = try {
             val cm = getSystemService(android.net.ConnectivityManager::class.java)
             cm.getLinkProperties(cm.activeNetwork)?.dnsServers?.mapNotNull { it.hostAddress?.substringBefore('%') }.orEmpty()
         } catch (e: Exception) { emptyList() }
-        File(etc, "resolv.conf").writeText((dns.ifEmpty { listOf("8.8.8.8", "1.1.1.1") }).joinToString("") { "nameserver $it\n" })
-        File(glibc, "tmp").mkdirs()
-        File(glibc, "var/tmp").mkdirs()
+        for ((name, loader) in listOf("glibc" to "libdd_ld-glibc.so", "musl" to "libdd_ld-musl.so")) {
+            if (!File(libs, loader).exists()) continue
+            val root = File(filesDir, name)
+            val etc = File(root, "etc").apply { mkdirs() }
+            File(etc, "passwd").writeText("root:x:0:0:root:/:/system/bin/sh\n" +
+                "deskdroid:x:$uid:$uid:DeskDroid:${home.path}:/system/bin/sh\n")
+            File(etc, "group").writeText("root:x:0:\ndeskdroid:x:$uid:\n")
+            File(etc, "resolv.conf").writeText((dns.ifEmpty { listOf("8.8.8.8", "1.1.1.1") }).joinToString("") { "nameserver $it\n" })
+            File(etc, "hosts").takeIf { !it.exists() }?.writeText("127.0.0.1 localhost\n::1 localhost\n")
+            File(root, "lib").mkdirs()
+            File(root, "tmp").mkdirs()
+            File(root, "var/tmp").mkdirs()
+        }
     }
 
     private fun linkApps(libs: String, data: File): File {

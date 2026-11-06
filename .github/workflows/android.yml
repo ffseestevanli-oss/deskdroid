@@ -29,10 +29,16 @@ jobs:
         with:
           path: ~/.cache/deskdroid/glibc
           key: glibc-${{ hashFiles('native/glibc/build.sh', 'native/glibc/patch.py') }}
-      - name: Build and test glibc
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/deskdroid/musl
+          key: musl-${{ hashFiles('native/musl/build.sh', 'native/musl/patch.py') }}
+      - name: Build and test glibc and musl
         run: |
-          native/glibc/build.sh "$RUNNER_TEMP/glibc"
-          native/glibc/test/run.sh "$RUNNER_TEMP/glibc"
+          native/glibc/build.sh "$RUNNER_TEMP/libc"
+          native/glibc/test/run.sh "$RUNNER_TEMP/libc"
+          native/musl/build.sh "$RUNNER_TEMP/libc"
+          native/musl/test/run.sh "$RUNNER_TEMP/libc"
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
