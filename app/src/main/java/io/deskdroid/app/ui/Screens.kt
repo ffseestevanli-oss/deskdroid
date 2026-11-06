@@ -319,13 +319,20 @@ class InstallingScreen(a: Activity, n: Navigator) : Screen(a, n) {
 class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private lateinit var childStatus: TextView
     private lateinit var batteryStatus: TextView
+    private lateinit var usageStatus: TextView
+    private lateinit var notesStatus: TextView
     private lateinit var filesStatus: TextView
+    // Opened again later (Settings, or Home's warning): Back instead of the setup's Continue.
+    private val again = Prefs.setupDone(a)
 
     override fun build() = page(listOf(Triple(0.85f, 0.2f, Party.GREEN))) {
         addView(ui.column(6) {
             addView(ui.row {
-                addView(ui.kicker("Step 3 / 3 · "))
-                addView(ui.kicker("Installed", Party.GREEN))
+                if (again) addView(ui.kicker("Battery + background"))
+                else {
+                    addView(ui.kicker("Setup · "))
+                    addView(ui.kicker("Battery", Party.GREEN))
+                }
             })
             addView(ui.heading("Don't let Android kill the party"))
             addView(ui.text("Android shuts down apps that run lots of programs. A desktop does exactly that.", 14f, Party.MUTED))
@@ -357,11 +364,27 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
         }, LinearLayout.LayoutParams(-1, -2))
         addView(ui.accentRow(Party.CYAN, Party.CARD) {
             addView(ui.weight(ui.column(2) {
-                addView(ui.text("Background + notifications", 15f, Party.TEXT, 700))
+                addView(ui.text("Battery optimization", 15f, Party.TEXT, 700))
                 batteryStatus = ui.text("", 13f, Party.MUTED)
                 addView(batteryStatus)
             }))
-            setOnClickListener { fixBattery() }
+            setOnClickListener { if (!Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c) else Checks.openAppInfo(c) }
+        }, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.accentRow(Party.GREEN, Party.CARD) {
+            addView(ui.weight(ui.column(2) {
+                addView(ui.text("Background usage", 15f, Party.TEXT, 700))
+                usageStatus = ui.text("", 13f, Party.MUTED)
+                addView(usageStatus)
+            }))
+            setOnClickListener { Checks.openAppInfo(c) }
+        }, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.accentRow(Party.PINK, Party.CARD) {
+            addView(ui.weight(ui.column(2) {
+                addView(ui.text("Status notification", 15f, Party.TEXT, 700))
+                notesStatus = ui.text("", 13f, Party.MUTED)
+                addView(notesStatus)
+            }))
+            setOnClickListener { fixNotifications() }
         }, LinearLayout.LayoutParams(-1, -2))
         addView(ui.accentRow(Party.PURPLE, Party.CARD) {
             addView(ui.weight(ui.column(2) {
@@ -381,8 +404,11 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
             "Fingerprint or PIN to open DeskDroid.", Prefs.lockDesktop(c)) { on -> Prefs.setLockDesktop(c, on) },
             LinearLayout.LayoutParams(-1, -2))
         spacer()
-        addView(ui.primaryButton("Continue") { finish() }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.linkButton("Skip for now", Party.MUTED) { finish() }, LinearLayout.LayoutParams(-1, -2))
+        if (again) addView(ui.primaryButton("Done") { nav.back() }, LinearLayout.LayoutParams(-1, -2))
+        else {
+            addView(ui.primaryButton("Continue") { finish() }, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.linkButton("Skip for now", Party.MUTED) { finish() }, LinearLayout.LayoutParams(-1, -2))
+        }
     }
 
     override fun onShow() = refresh()
@@ -397,12 +423,19 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
         }
         val battery = Checks.batteryUnrestricted(c)
         val notes = Checks.notificationsAllowed(c)
-        batteryStatus.text = when {
-            battery && notes -> "All set"
-            !battery -> "Tap to turn battery optimization off"
-            else -> "Tap to allow the status notification"
+        val restricted = Checks.backgroundRestricted(c)
+        batteryStatus.text = if (battery) "Off. Android won't put the desktop to sleep to save battery."
+            else "On. Tap and choose Allow, or Android may stop the desktop while it runs in the background."
+        batteryStatus.setTextColor(if (battery) Party.GREEN else Party.ORANGE)
+        usageStatus.text = when {
+            restricted -> "Restricted. Tap, then App battery usage › Unrestricted."
+            battery -> "Unrestricted. To check: App battery usage in App info."
+            else -> "Tap, then App battery usage › Unrestricted (Allow background usage on)."
         }
-        batteryStatus.setTextColor(if (battery && notes) Party.GREEN else Party.MUTED)
+        usageStatus.setTextColor(if (battery && !restricted) Party.GREEN else Party.MUTED)
+        notesStatus.text = if (notes) "Allowed. The desktop keeps a notification while it runs, so Android keeps it alive."
+            else "Tap to allow it. Without it Android may stop the desktop sooner."
+        notesStatus.setTextColor(if (notes) Party.GREEN else Party.MUTED)
         val files = Storage.granted(c)
         filesStatus.text = if (files) "All set. Your phone's storage shows up on the desktop as a drive called Phone."
             else "Tap to allow All files access, so the desktop can open and save files on your phone"
@@ -426,10 +459,15 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
             .setPositiveButton("OK", null).show()
     }
 
-    private fun fixBattery() {
-        if (!Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c)
-        else if (android.os.Build.VERSION.SDK_INT >= 33)
+    private fun fixNotifications() {
+        if (Checks.notificationsAllowed(c)) return
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            !c.shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS) &&
+            c.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            !Prefs.askedNotifications(c)) {
+            Prefs.setAskedNotifications(c)
             c.requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 0)
+        } else Checks.openNotificationSettings(c)
     }
 
     private fun finish() {
@@ -444,6 +482,7 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private lateinit var status: TextView
     private lateinit var startButton: TextView
     private var filesValue: TextView? = null
+    private var batteryValue: TextView? = null
     private val statusListener: (String) -> Unit = { refreshStatus() }
 
     override fun build() = page(listOf(Triple(0.15f, 0.25f, Party.PURPLE)), top = 48) {
@@ -493,6 +532,8 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
             addView(settingRow("Phone files", "") {
                 if (Storage.granted(c)) nav.go(SettingsScreen(activity, nav)) else Storage.request(activity)
             }.also { filesValue = it.getChildAt(it.childCount - 1) as TextView })
+            addView(settingRow("Battery", "") { nav.go(KeepRunningScreen(activity, nav)) }
+                .also { batteryValue = it.getChildAt(it.childCount - 1) as TextView })
         }, LinearLayout.LayoutParams(-1, -2))
         renderMonitor()
     }
@@ -530,6 +571,8 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
         refreshStatus()
         renderMonitor()
         filesValue?.text = if (Storage.granted(c)) "Shared ›" else "Not shared · tap to allow ›"
+        batteryValue?.text = if (Checks.batteryUnrestricted(c) && !Checks.backgroundRestricted(c)) "Unrestricted ›" else "Optimized · tap to fix ›"
+        batteryValue?.setTextColor(if (Checks.batteryUnrestricted(c) && !Checks.backgroundRestricted(c)) Party.MUTED else Party.ORANGE)
     }
 
     override fun onHide() {
@@ -556,7 +599,7 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             Prefs.setTouchMode(c, Prefs.TOUCH_MODES[i])
         }.view, LinearLayout.LayoutParams(-1, -2))
 
-        addView(ui.outlineButton("Background limits", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
+        addView(ui.outlineButton("Battery + background", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
         addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))

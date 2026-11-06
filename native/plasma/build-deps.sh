@@ -743,12 +743,15 @@ project(kcmutils_host_tools CXX)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 add_executable(kcmdesktopfilegenerator "$s/tools/kcmmetadatagenerator.cpp")
 target_link_libraries(kcmdesktopfilegenerator Qt6::Core)
+# Run during KCM builds (kcmutils_add_qml_kcm), where nothing points at the host Qt.
+set_target_properties(kcmdesktopfilegenerator PROPERTIES INSTALL_RPATH "$QT_HOST_PATH/lib")
 install(TARGETS kcmdesktopfilegenerator EXPORT KF6KCMUtilsToolingTargets DESTINATION lib/libexec/kf6)
 install(EXPORT KF6KCMUtilsToolingTargets DESTINATION lib/cmake/KF6KCMUtils FILE KF6KCMUtilsToolingTargets.cmake NAMESPACE KF6::)
 EOF2
   cmake -S "$d" -B "$d/_host" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_HOST_PATH" -DCMAKE_INSTALL_PREFIX="$HOSTPREFIX"
   cmake --build "$d/_host" && cmake --install "$d/_host"
   test -e "$HOSTPREFIX/lib/cmake/KF6KCMUtils/KF6KCMUtilsToolingTargets.cmake"
+  "$HOSTPREFIX/lib/libexec/kf6/kcmdesktopfilegenerator" --help >/dev/null 2>&1 || [ $? -ne 127 ]
 }
 
 # ---- Apps (stage 5) -----------------------------------------------------------

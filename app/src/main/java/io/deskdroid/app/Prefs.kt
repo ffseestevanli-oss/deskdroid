@@ -65,6 +65,8 @@ object Prefs {
     fun setDockApps(c: Context, apps: List<String>) =
         prefs(c).edit().putString("dock_apps", apps.take(10).joinToString("\n")).apply()
 
+    fun askedNotifications(c: Context) = prefs(c).getBoolean("asked_notifications", false)
+    fun setAskedNotifications(c: Context) = prefs(c).edit().putBoolean("asked_notifications", true).apply()
     fun setupDone(c: Context) = prefs(c).getBoolean("setup_done", false)
     fun setSetupDone(c: Context, on: Boolean) = prefs(c).edit().putBoolean("setup_done", on).apply()
 
