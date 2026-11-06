@@ -60,11 +60,25 @@ object Store {
     fun install(c: Context, app: App, progress: (Float) -> Unit = {}) {
         val zip = File(c.cacheDir, "store-${app.id}.zip")
         download(baseUrl + app.file, zip, app.size, progress)
-        val sha = MessageDigest.getInstance("SHA-256").let { md ->
-            zip.inputStream().use { s -> val b = ByteArray(1 shl 16); while (true) { val n = s.read(b); if (n < 0) break; md.update(b, 0, n) } }
-            md.digest().joinToString("") { "%02x".format(it) }
+        if (sha256(zip) != app.sha256) {
+            // The store may have been republished since the catalog was read
+            // (a new build replaces every package): read it again and retry once.
+            val fresh = runCatching { catalog().firstOrNull { it.id == app.id } }.getOrNull()
+            if (fresh == null || fresh.sha256 == app.sha256) { zip.delete(); throw Exception("the download is damaged (checksum)") }
+            AppLog.i("Store: ${app.id} changed on the server; downloading it again")
+            download(baseUrl + fresh.file, zip, fresh.size, progress)
+            if (sha256(zip) != fresh.sha256) { zip.delete(); throw Exception("the download is damaged (checksum)") }
+            return installZip(c, fresh, zip)
         }
-        if (sha != app.sha256) { zip.delete(); throw Exception("the download is damaged (checksum)") }
+        installZip(c, app, zip)
+    }
+
+    private fun sha256(f: File): String = MessageDigest.getInstance("SHA-256").let { md ->
+        f.inputStream().use { s -> val b = ByteArray(1 shl 16); while (true) { val n = s.read(b); if (n < 0) break; md.update(b, 0, n) } }
+        md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun installZip(c: Context, app: App, zip: File) {
         uninstall(c, app.id) // an update replaces the old files
         val dir = File(root(c), app.id).apply { mkdirs() }
         val lib = File(dir, "lib").apply { mkdirs() }
