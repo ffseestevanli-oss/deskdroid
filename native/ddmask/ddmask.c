@@ -62,6 +62,15 @@
 #include <unistd.h>
 
 #define EXPORT __attribute__((visibility("default")))
+/* The glibc build of ddmask (for glibc programs) runs on Android too. */
+#if defined(__ANDROID__) || defined(DDMASK_GLIBC)
+#define DDMASK_ON_ANDROID 1
+#endif
+/* Both builds sit in the APK's library folder; each world reads its own variable. */
+#define BIONIC_SHIM "libddmask.so"
+#define GLIBC_SHIM "libddmask_glibc.so"
+#define GLIBC_LOADER "libdd_ld-glibc.so"
+#define GLIBC_PRELOAD_VAR "DDMASK_GLIBC_LD_PRELOAD"
 #define MAX_DEPTH 4           /* #! scripts whose interpreter is a script... */
 #define EXTRA_ARGS (2 * MAX_DEPTH + 4)
 #define LINE_MAX_SCRIPT 256   /* the kernel reads this much of a #! line too */
@@ -81,6 +90,8 @@ static readlinkat_fn real_readlinkat;
 
 static char self_path[PATH_MAX];   /* libddmask.so */
 static char self_dir[PATH_MAX];    /* its folder */
+static char bionic_shim[PATH_MAX]; /* the two builds of ddmask, when there */
+static char glibc_shim[PATH_MAX];
 static char exe_path[PATH_MAX];    /* the program this process really is, when started through a loader */
 
 /* ---- small helpers that don't allocate ---- */
@@ -134,7 +145,7 @@ static int in_list(const char *path, const char *list) {
 static int exec_allowed(const char *real, char *const envp[]) {
     const char *allow = env_get(envp, "DDMASK_ALLOW");
     if (allow) return in_list(real, allow);
-#ifdef __ANDROID__
+#ifdef DDMASK_ON_ANDROID
     if (in_list(real, "/system:/vendor:/apex:/product:/odm:/system_ext")) return 1;
     return self_dir[0] && in_dir(real, self_dir, strlen(self_dir));
 #else
@@ -145,11 +156,16 @@ static int exec_allowed(const char *real, char *const envp[]) {
 /* Replaces `path` through DDMASK_MAP (and Android's defaults) into out; returns out or path. */
 static const char *map_path(const char *path, char *const envp[], char *out, size_t outsz) {
     const char *map = env_get(envp, "DDMASK_MAP");
-#ifdef __ANDROID__
+#ifdef DDMASK_ON_ANDROID
     static const char defaults[] = "/bin/sh=/system/bin/sh:/usr/bin/env=/system/bin/env:/bin/env=/system/bin/env";
 #else
     static const char defaults[] = "";
 #endif
+    /* glibc programs: glibc's loader from the APK (native/glibc). */
+    static const char glibc_interp[] = "/lib/ld-linux-aarch64.so.1";
+    if (strcmp(path, glibc_interp) == 0 && self_dir[0] && !(map && strstr(map, glibc_interp))) {
+        if ((size_t)snprintf(out, outsz, "%s/" GLIBC_LOADER, self_dir) < outsz && access(out, F_OK) == 0) return out;
+    }
     const char *lists[2] = { map, defaults };
     size_t plen = strlen(path);
     for (int i = 0; i < 2; i++) {
@@ -250,6 +266,7 @@ struct plan {
     char mapped[MAX_DEPTH][PATH_MAX];
     char emu[PATH_MAX];
     char preload[2 * PATH_MAX + 32];
+    char preload_glibc[2 * PATH_MAX + 32];
     char env_exe[PATH_MAX + 16];
     char env_argv0[PATH_MAX + 16];
 };
@@ -260,25 +277,28 @@ static int count(char *const v[]) {
     return n;
 }
 
-/* New environment: libddmask.so in LD_PRELOAD, DDMASK_EXE/DDMASK_ARGV0 only
- * when given. nenvp has room for count(envp) + 3. */
+/* Puts `lib` (a full path) first in the ':'-separated list `var` of envp, into buf. */
+static char *with_preload(char *const envp[], const char *var, const char *lib, char *buf, size_t size) {
+    const char *cur = env_get(envp, var);
+    if (cur && *cur && strstr(cur, lib)) snprintf(buf, size, "%s=%s", var, cur);
+    else if (cur && *cur) snprintf(buf, size, "%s=%s:%s", var, lib, cur);
+    else snprintf(buf, size, "%s=%s", var, lib);
+    return buf;
+}
+
+/* New environment: ddmask in LD_PRELOAD (Android's loader) and, when the glibc
+ * build is there, in DDMASK_GLIBC_LD_PRELOAD (glibc's loader, native/glibc);
+ * DDMASK_EXE/DDMASK_ARGV0 only when given. nenvp has room for count(envp) + 4. */
 static void build_env(char *const envp[], char **nenvp, struct plan *pl, int with_exe) {
     int j = 0;
-    const char *pre = env_get(envp, "LD_PRELOAD");
     for (char *const *e = envp; e && *e; e++) {
         if (strncmp(*e, "DDMASK_EXE=", 11) == 0 || strncmp(*e, "DDMASK_ARGV0=", 13) == 0) continue;
-        if (strncmp(*e, "LD_PRELOAD=", 11) == 0) continue;
+        if (bionic_shim[0] && strncmp(*e, "LD_PRELOAD=", 11) == 0) continue;
+        if (glibc_shim[0] && strncmp(*e, GLIBC_PRELOAD_VAR "=", sizeof GLIBC_PRELOAD_VAR) == 0) continue;
         nenvp[j++] = *e;
     }
-    if (self_path[0]) {
-        if (pre && *pre && strstr(pre, self_path)) snprintf(pl->preload, sizeof pl->preload, "LD_PRELOAD=%s", pre);
-        else if (pre && *pre) snprintf(pl->preload, sizeof pl->preload, "LD_PRELOAD=%s:%s", self_path, pre);
-        else snprintf(pl->preload, sizeof pl->preload, "LD_PRELOAD=%s", self_path);
-        nenvp[j++] = pl->preload;
-    } else if (pre) {
-        snprintf(pl->preload, sizeof pl->preload, "LD_PRELOAD=%s", pre);
-        nenvp[j++] = pl->preload;
-    }
+    if (bionic_shim[0]) nenvp[j++] = with_preload(envp, "LD_PRELOAD", bionic_shim, pl->preload, sizeof pl->preload);
+    if (glibc_shim[0]) nenvp[j++] = with_preload(envp, GLIBC_PRELOAD_VAR, glibc_shim, pl->preload_glibc, sizeof pl->preload_glibc);
     if (with_exe) {
         if (pl->env_exe[0]) nenvp[j++] = pl->env_exe;
         if (pl->env_argv0[0]) nenvp[j++] = pl->env_argv0;
@@ -389,7 +409,7 @@ done:
 static int dd_execve(const char *path, char *const argv[], char *const envp[]) {
     if (!path) { errno = EFAULT; return -1; }
     char *nargv[count(argv) + EXTRA_ARGS + 2];
-    char *nenvp[count(envp) + 4];
+    char *nenvp[count(envp) + 5];
     struct plan pl;
     const char *npath;
     if (plan_exec(path, argv, envp, &npath, nargv, nenvp, &pl) != 0) return -1;
@@ -427,7 +447,7 @@ static int dd_execvpe(const char *file, char *const argv[], char *const envp[]) 
 shell: {
         int argc = count(argv);
         char *sargv[argc + 3];
-#ifdef __ANDROID__
+#ifdef DDMASK_ON_ANDROID
         sargv[0] = (char *)"/system/bin/sh";
 #else
         sargv[0] = (char *)"/bin/sh";
@@ -506,7 +526,7 @@ EXPORT int execveat(int dirfd, const char *path, char *const argv[], char *const
 static int dd_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *fa,
                     const posix_spawnattr_t *attr, char *const argv[], char *const envp[]) {
     if (!real_posix_spawn) return ENOSYS;
-    size_t na = count(argv) + EXTRA_ARGS + 2, ne = count(envp) + 4;
+    size_t na = count(argv) + EXTRA_ARGS + 2, ne = count(envp) + 5;
     char **nargv = malloc(na * sizeof *nargv), **nenvp = malloc(ne * sizeof *nenvp);
     struct plan *pl = malloc(sizeof *pl);
     int r;
@@ -586,6 +606,17 @@ __attribute__((constructor)) static void ddmask_init(int argc, char **argv, char
         snprintf(self_dir, sizeof self_dir, "%s", self_path);
         char *slash = strrchr(self_dir, '/');
         if (slash) *slash = 0; else self_dir[0] = 0;
+    }
+    if (self_dir[0]) {
+        snprintf(bionic_shim, sizeof bionic_shim, "%s/" BIONIC_SHIM, self_dir);
+        snprintf(glibc_shim, sizeof glibc_shim, "%s/" GLIBC_SHIM, self_dir);
+#ifdef DDMASK_GLIBC
+        if (access(bionic_shim, F_OK) != 0) bionic_shim[0] = 0;
+        snprintf(glibc_shim, sizeof glibc_shim, "%s", self_path);
+#else
+        if (access(glibc_shim, F_OK) != 0) glibc_shim[0] = 0;
+        snprintf(bionic_shim, sizeof bionic_shim, "%s", self_path);
+#endif
     }
 
     /* Started through a loader by ddmask: take back the program's identity. */

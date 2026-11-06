@@ -92,6 +92,11 @@ else
   echo "== skipping gpureport, the native desktop test and the virgl server (Android-only, need the NDK)"
 fi
 
+echo "== glibc"
+# glibc for ddmask, so ordinary Linux programs run without proot (glibc/README.md).
+# Skipped without an aarch64 glibc cross compiler.
+"$HERE/glibc/build.sh" "$OUT"
+
 install -m 755 "$WORK/ddtool/ddtool" "$OUT/libddtool.so"
 install -m 755 "$WORK/proot/proot" "$OUT/libproot.so"
 install -m 755 "$WORK/proot/loader/loader" "$OUT/libproot-loader.so"

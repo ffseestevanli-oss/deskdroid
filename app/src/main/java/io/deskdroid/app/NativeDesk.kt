@@ -753,7 +753,36 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      */
     private fun ddmask(env: MutableMap<String, String>, libs: String) {
         val lib = File(libs, "libddmask.so")
-        if (lib.exists() && !File(filesDir, "ddmask-off").exists()) env["LD_PRELOAD"] = lib.path
+        if (lib.exists() && !File(filesDir, "ddmask-off").exists()) {
+            env["LD_PRELOAD"] = lib.path
+            try { glibcRuntime(libs) } catch (e: Exception) { AppLog.i("Native desktop test: glibc runtime: $e") }
+        }
+    }
+
+    /**
+     * glibc (native/glibc), for the ordinary Linux programs ddmask starts: its
+     * libraries ship zipped as libdd_glibc.so and are unpacked into files/glibc,
+     * the folder it was built for, once per app version. Its /etc is written
+     * here: the app's user, and DNS from Android's current network.
+     */
+    private fun glibcRuntime(libs: String) {
+        val zip = File(libs, "libdd_glibc.so")
+        if (!zip.exists()) return
+        val glibc = File(filesDir, "glibc")
+        unpackKWinData(zip, glibc)
+        val etc = File(glibc, "etc").apply { mkdirs() }
+        val uid = android.os.Process.myUid()
+        val home = File(filesDir, "home").apply { mkdirs() }
+        File(etc, "passwd").writeText("root:x:0:0:root:/:/system/bin/sh\n" +
+            "deskdroid:x:$uid:$uid:DeskDroid:${home.path}:/system/bin/sh\n")
+        File(etc, "group").writeText("root:x:0:\ndeskdroid:x:$uid:\n")
+        val dns = try {
+            val cm = getSystemService(android.net.ConnectivityManager::class.java)
+            cm.getLinkProperties(cm.activeNetwork)?.dnsServers?.mapNotNull { it.hostAddress?.substringBefore('%') }.orEmpty()
+        } catch (e: Exception) { emptyList() }
+        File(etc, "resolv.conf").writeText((dns.ifEmpty { listOf("8.8.8.8", "1.1.1.1") }).joinToString("") { "nameserver $it\n" })
+        File(glibc, "tmp").mkdirs()
+        File(glibc, "var/tmp").mkdirs()
     }
 
     private fun linkApps(libs: String, data: File): File {

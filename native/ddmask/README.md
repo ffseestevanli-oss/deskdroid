@@ -20,11 +20,14 @@ the folders Android allows, it runs:
 | an ARM64 Android (bionic) program | `/system/bin/linker64 <program> <args>` (its own `PT_INTERP`) |
 | a `#!` script | its interpreter (`/bin/sh` and `/usr/bin/env` map to `/system/bin`), then these same rules for the interpreter |
 | a file without an exec bit | refused with `EACCES`, as before |
-| anything else (static, glibc, x86) | refused with `EACCES`; not a goal for now (DeskDroid ports are native Android builds) |
+| an ARM64 glibc (ordinary Linux) program | DeskDroid's glibc loader, `libdd_ld-glibc.so <program> <args>` (`/lib/ld-linux-aarch64.so.1` maps to it; see `../glibc/README.md`) |
+| anything else (static, x86) | refused with `EACCES`; not a goal for now |
 
 A program started through the linker still sees its own `argv[0]`, has its
 own process name, and reads its own path from `/proc/self/exe`. Every exec
-puts `libddmask.so` back into `LD_PRELOAD`, so a program that clears its
+puts `libddmask.so` back into `LD_PRELOAD` (and its glibc build,
+`libddmask_glibc.so`, into `DDMASK_GLIBC_LD_PRELOAD`, which glibc's loader
+reads instead), so bionic and glibc programs can start each other, and a program that clears its
 environment still starts its children through ddmask.
 
 Programs inside allowed folders (`/system`, `/vendor`, `/apex`, the APK's
