@@ -80,7 +80,7 @@ jobs:
       - name: Use DeskDroid's own Qt and KWin when built
         run: |
           if [ -e ~/plasma-prefix/lib/libkwin_wayland.so ]; then
-            sudo apt-get install -y -q patchelf zip
+            sudo apt-get install -y -q patchelf zip libglib2.0-bin
             echo "DESKDROID_QT_ANDROID=$HOME/plasma-prefix" >> "$GITHUB_ENV"
             echo "Bundling KWin with DeskDroid's own Qt"
           else
