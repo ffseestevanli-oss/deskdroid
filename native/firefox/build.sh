@@ -6,7 +6,9 @@
 #   native/firefox/build.sh <deps prefix> <ndk dir> <source dir> <out dir>
 #
 # Any Firefox-based source works (Floorp's runtime too): the source tree is an
-# argument, the branding is BRANDING (default: unofficial).
+# argument, the branding is BRANDING (default: Etherium, etherium/: Firefox
+# under DeskDroid's own name and icon, with nothing phoning home and uBlock
+# Origin installed).
 #
 # Like Termux's Firefox, the build treats Android as Linux (termux-patches/):
 # desktop Gecko with Bionic, without GeckoView's Java-backed Android parts.
@@ -15,7 +17,10 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PREFIX="$(cd "$1" && pwd)"; NDK="$2"; SRC="$(cd "$3" && pwd)"; OUT="$(mkdir -p "$4" && cd "$4" && pwd)"
-BRANDING="${BRANDING:-browser/branding/unofficial}"
+BRANDING="${BRANDING:-browser/branding/etherium}"
+# Where the browser's own folder is on the phone (NativeDesk.kt: files/kwin/firefox).
+DESKDROID_FIREFOX_DIR=/data/data/io.deskdroid.app/files/kwin/firefox
+UBLOCK_URL="${UBLOCK_URL:-https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi}"
 # Where the browser finds its files on the phone (Termux's @TERMUX_PREFIX@).
 DESKDROID_PREFIX=/data/data/io.deskdroid.app/files/usr
 
@@ -33,6 +38,7 @@ for p in "$HERE"/termux-patches/*.patch; do
 done
 [ ${#failed[@]} -eq 0 ] || echo "== patches that didn't apply: ${failed[*]}"
 python3 "$HERE/deskdroid.py" "$SRC"
+[ "$BRANDING" != browser/branding/etherium ] || python3 "$HERE/etherium/branding.py" "$SRC"
 
 # glibc's libpthread and librt are part of Bionic's libc: empty stand-ins
 # for the build files that still ask for them (Termux ships the same).
@@ -74,5 +80,20 @@ if [ $rc -ne 0 ]; then
   exit 1
 fi
 ./mach package > "$OUT/package.log" 2>&1 || { tail -60 "$OUT/package.log"; exit 1; }
-cp obj-deskdroid/dist/*.tar.* "$OUT/"
+pkg="$(ls obj-deskdroid/dist/*.tar.* | head -1)"
+if [ "$BRANDING" = browser/branding/etherium ]; then
+  # Etherium's policies (etherium/policies.json) and uBlock Origin, in the
+  # browser's distribution folder, where Firefox looks for both.
+  rm -rf "$OUT/pkg" && mkdir -p "$OUT/pkg" && tar xf "$pkg" -C "$OUT/pkg"
+  dist="$OUT/pkg/$(ls "$OUT/pkg" | head -1)/distribution"
+  mkdir -p "$dist/extensions"
+  sed "s|@DISTRIBUTION@|$DESKDROID_FIREFOX_DIR/distribution|g" "$HERE/etherium/policies.json" > "$dist/policies.json"
+  curl -sSfL --retry 4 -o "$dist/extensions/uBlock0@raymondhill.net.xpi" "$UBLOCK_URL"
+  unzip -l "$dist/extensions/uBlock0@raymondhill.net.xpi" | grep -q "manifest.json"
+  name="$(basename "$pkg")"
+  (cd "$OUT/pkg" && tar cJf "$OUT/${name%%.tar.*}.tar.xz" *)
+  rm -rf "$OUT/pkg"
+else
+  cp "$pkg" "$OUT/"
+fi
 ls -la "$OUT"
