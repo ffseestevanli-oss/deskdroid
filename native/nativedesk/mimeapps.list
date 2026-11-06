@@ -28,13 +28,13 @@ application/json=org.kde.kwrite.desktop;org.kde.kate.desktop;
 application/xml=org.kde.kwrite.desktop;org.kde.kate.desktop;
 application/x-shellscript=org.kde.kwrite.desktop;org.kde.kate.desktop;
 
-# Web pages and links
-text/html=org.deskdroid.firefox.desktop;
-application/xhtml+xml=org.deskdroid.firefox.desktop;
-x-scheme-handler/http=org.deskdroid.firefox.desktop;
-x-scheme-handler/https=org.deskdroid.firefox.desktop;
+# Web pages and links: Etherium (app store), else the phone's browser
+text/html=org.deskdroid.firefox.desktop;org.deskdroid.android-open.desktop;
+application/xhtml+xml=org.deskdroid.firefox.desktop;org.deskdroid.android-open.desktop;
+x-scheme-handler/http=org.deskdroid.firefox.desktop;org.deskdroid.android-browser.desktop;
+x-scheme-handler/https=org.deskdroid.firefox.desktop;org.deskdroid.android-browser.desktop;
 
-# PDFs: Etherium's built-in viewer, else an Android app
+# PDFs: Etherium's built-in viewer (app store), else an Android app
 application/pdf=org.deskdroid.firefox.desktop;org.deskdroid.android-open.desktop;
 
 # Images: Gwenview (app store), else an Android app (not GIMP, which also

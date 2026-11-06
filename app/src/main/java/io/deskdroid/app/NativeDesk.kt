@@ -197,6 +197,18 @@ object NativeDesk {
     }
 
     private fun openWithAndroid(c: android.content.Context, path: String) {
+        // A web link (no browser on the desktop): the phone's browser.
+        if (path.startsWith("http://") || path.startsWith("https://")) {
+            try {
+                val view = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(path))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                (activity?.get() ?: c).startActivity(view)
+                AppLog.i("Native desktop: opening a link with the phone's browser")
+            } catch (e: Exception) {
+                AppLog.i("Native desktop: couldn't open a link with the phone's browser: $e")
+            }
+            return
+        }
         val file = File(if (path.startsWith("file://")) android.net.Uri.parse(path).path ?: path else path)
         try {
             val uri = androidx.core.content.FileProvider.getUriForFile(c, "${c.packageName}.files", file)
@@ -543,6 +555,12 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     "[Desktop Entry]\nType=Application\nName=Android app\nGenericName=Open with an Android app\n" +
                     "Icon=smartphone\nExec=android-open %F\nMimeType=application/octet-stream;\nNoDisplay=true\n" +
                     "InitialPreference=1\n")
+            // Links when Etherium isn't installed: the phone's browser.
+            File(filesDir, ".local/share/applications/org.deskdroid.android-browser.desktop").writeText(
+                "[Desktop Entry]\nType=Application\nName=Phone's browser\nGenericName=Web Browser\n" +
+                "Icon=smartphone\nExec=android-open %u\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\nNoDisplay=true\n")
+            // Termux's Firefox patches put /tmp under files/usr.
+            File(filesDir, "usr/tmp").mkdirs()
             File(filesDir, ".local/share/applications/org.deskdroid.store.desktop").writeText(
                 "[Desktop Entry]\nType=Application\nName=App Store\nGenericName=Install KDE apps\n" +
                 "Icon=plasmadiscover\nExec=android-open deskdroid:store\nCategories=System;\n")
@@ -801,12 +819,6 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             try { android.system.Os.symlink(File(libs, "libdd_$app.so").path, File(bin, app).path) }
             catch (e: Exception) { AppLog.i("Native desktop test: couldn't link $app: $e") }
         }
-        // Firefox (native/firefox): bin/firefox starts it (firefox.sh); its
-        // programs and libraries are linked into data/firefox in linkPlugins.
-        File(libs, "libdd_firefox-run.so").takeIf { it.exists() }?.let {
-            try { android.system.Os.symlink(it.path, File(bin, "firefox").path) }
-            catch (e: Exception) { AppLog.i("Native desktop test: couldn't link firefox: $e") }
-        }
         // Apps from the app store (Store.kt).
         Store.installed(this).forEach { Store.linkCommand(this, it) }
         File(libs, "libdd_android-open.so").takeIf { it.exists() }?.let {
@@ -1030,8 +1042,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         linkFlatLibraries(libs, File(data, "plugins.txt"), File(data, "plugins"), clear = true)
         // QML plugins, next to their qmldir files (unpacked from the data).
         linkFlatLibraries(libs, File(data, "qml.txt"), File(data, "qml"), clear = false)
-        // Firefox's programs and libraries, next to its files (unpacked from the data).
-        linkFlatLibraries(libs, File(data, "firefox.txt"), File(data, "firefox"), clear = false)
+        // Firefox used to come in the APK, linked here; it's in the app store now.
+        File(data, "firefox").takeIf { it.exists() }?.deleteRecursively()
     }
 
     private fun linkFlatLibraries(libs: String, listFile: File, root: File, clear: Boolean) {

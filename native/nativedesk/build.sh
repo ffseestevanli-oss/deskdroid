@@ -83,6 +83,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Store apps that are whole folders of programs and libraries, packaged below too.
     store_programs=()
     [ -x "$DESKDROID_QT_ANDROID/bin/gimp-3.2" ] && store_programs+=(gimp)
+    # Etherium (Firefox, native/firefox, published by firefox.yml) is in the
+    # store too, run through ddmask like GIMP.
+    [ -n "${DESKDROID_FIREFOX:-}" ] && [ -e "$DESKDROID_FIREFOX" ] && store_programs+=(firefox)
     for app in dolphin kioworker ksmserver-logout-greeter kwrite; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
@@ -167,49 +170,6 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         done < <(cd "$root/qml" && find . -name '*.so' | sed 's|^\./||' | grep -Ev "$qmlskip" | sort)
       done
       echo "   $qmlplugins QML plugins"
-    fi
-    # Firefox (native/firefox, published by firefox.yml): its programs and
-    # libraries go in the library folder like everything else (Android runs
-    # programs only from there), its other files (omni.ja...) in the data;
-    # the app links the first into data/firefox next to the second, where
-    # Firefox looks for them (firefox.txt), and bin/firefox starts it (firefox.sh).
-    : > "$WORK/firefox.txt"
-    if [ -n "${DESKDROID_FIREFOX:-}" ] && [ -e "$DESKDROID_FIREFOX" ]; then
-      rm -rf "$WORK/ff" && mkdir -p "$WORK/ff" && tar xf "$DESKDROID_FIREFOX" -C "$WORK/ff"
-      ffroot="$(ls "$WORK/ff" | head -1)"
-      mkdir -p "$WORK/ffdata/firefox"
-      while IFS= read -r rel; do
-        f="$WORK/ff/$ffroot/$rel"
-        if [ "$(head -c 4 "$f" | od -An -c | tr -d ' ')" = '177ELF' ]; then
-          # Its own libraries under their own names (NSS opens libsoftokn3.so
-          # and libfreeblpriv3.so by name, next to itself), its programs and
-          # the libraries in subfolders by their path.
-          case "$rel" in
-            */*) name="libdd_ff_$(echo "${rel%.so}" | tr '/' '_').so" ;;
-            *.so) name="$rel" ;;
-            *) name="libdd_ff_$rel.so" ;;
-          esac
-          install -m 755 "$f" "$OUT/$name"; bundled+=("$OUT/$name")
-          printf '%s\t%s\n' "$name" "$rel" >> "$WORK/firefox.txt"
-        else
-          mkdir -p "$WORK/ffdata/firefox/$(dirname "$rel")" && cp -p "$f" "$WORK/ffdata/firefox/$rel"
-        fi
-      done < <(cd "$WORK/ff/$ffroot" && find . -type f | sed 's|^\./||' | sort)
-      echo "$ffroot" > "$WORK/ffdata/firefox/program.txt"
-      install -m 755 "$HERE/firefox.sh" "$OUT/libdd_firefox-run.so"
-      mkdir -p "$WORK/ffdata/share/applications"
-      # Etherium: Firefox under DeskDroid's own name and rainbow icon
-      # (native/firefox/etherium).
-      for png in "$HERE/../firefox/etherium"/etherium-*.png; do
-        size="${png##*-}"; size="${size%.png}"
-        mkdir -p "$WORK/ffdata/share/icons/hicolor/${size}x${size}/apps"
-        cp "$png" "$WORK/ffdata/share/icons/hicolor/${size}x${size}/apps/etherium.png"
-      done
-      mkdir -p "$WORK/ffdata/share/icons/hicolor/scalable/apps"
-      cp "$HERE/../firefox/etherium/etherium.svg" "$WORK/ffdata/share/icons/hicolor/scalable/apps/etherium.svg"
-      printf '[Desktop Entry]\nType=Application\nName=Etherium\nGenericName=Web Browser\nComment=Browse the web (built from Firefox, with nothing phoning home)\nIcon=etherium\nExec=firefox %%u\nStartupWMClass=firefox\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\nActions=new-window;new-private-window;\n\n[Desktop Action new-window]\nName=New Window\nExec=firefox --new-window\n\n[Desktop Action new-private-window]\nName=New Private Window\nExec=firefox --private-window\n' \
-        > "$WORK/ffdata/share/applications/org.deskdroid.firefox.desktop"
-      echo "   firefox: $ffroot, $(wc -l < "$WORK/firefox.txt") programs and libraries"
     fi
     todo=("${bundled[@]}")
     while [ ${#todo[@]} -gt 0 ]; do
@@ -322,6 +282,36 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
             GIMP3_SYSCONFDIR=@PROGRAM@/etc/gimp/3.0 BABL_PATH=@PROGRAM@/lib/babl-0.1 GEGL_PATH=@PROGRAM@/lib/gegl-0.4 \
             GDK_BACKEND=wayland > "$pkg/program.env"
           ;;
+        firefox)
+          # Etherium: Firefox's own folder as it comes (its program, libraries
+          # and omni.ja side by side, where it looks for them), its menu entry
+          # and rainbow icon (native/firefox/etherium).
+          rm -rf "$WORK/ff" && mkdir -p "$WORK/ff" && tar xf "$DESKDROID_FIREFOX" -C "$WORK/ff"
+          cp -a "$WORK/ff/$(ls "$WORK/ff" | head -1)/." "$P/"
+          rm -rf "$WORK/ff"
+          # uBlock Origin's policy names the folder the browser lives in.
+          [ -e "$P/distribution/policies.json" ] && sed -i \
+            "s|/data/data/io.deskdroid.app/files/kwin/firefox/|/data/data/io.deskdroid.app/files/store/apps/firefox/program/|g" \
+            "$P/distribution/policies.json"
+          echo firefox > "$pkg/program.txt"
+          # Firefox finds its files next to its program, which it would take
+          # from /proc/self/exe (deskdroid.py); Termux's patches put /tmp
+          # under files/usr (NativeDesk.kt makes it).
+          printf '%s\n' DESKDROID_FIREFOX_BINARY=@PROGRAM@/firefox MOZ_ENABLE_WAYLAND=1 GDK_BACKEND=wayland > "$pkg/program.env"
+          eth="$HERE/../firefox/etherium"
+          for png in "$eth"/etherium-*.png; do
+            size="${png##*-}"; size="${size%.png}"
+            mkdir -p "$pkg/share/icons/hicolor/${size}x${size}/apps"
+            cp "$png" "$pkg/share/icons/hicolor/${size}x${size}/apps/firefox-etherium.png"
+          done
+          mkdir -p "$pkg/share/icons/hicolor/scalable/apps" "$pkg/share/applications" "$pkg/share/metainfo"
+          cp "$eth/etherium.svg" "$pkg/share/icons/hicolor/scalable/apps/firefox-etherium.svg"
+          printf '[Desktop Entry]\nType=Application\nName=Etherium\nGenericName=Web Browser\nComment=Browse the web (built from Firefox, with nothing phoning home)\nIcon=firefox-etherium\nExec=firefox %%u\nStartupWMClass=firefox\nCategories=Network;WebBrowser;\nMimeType=text/html;application/xhtml+xml;application/pdf;x-scheme-handler/http;x-scheme-handler/https;\nActions=new-window;new-private-window;\n\n[Desktop Action new-window]\nName=New Window\nExec=firefox --new-window\n\n[Desktop Action new-private-window]\nName=New Private Window\nExec=firefox --private-window\n' \
+            > "$pkg/share/applications/org.deskdroid.firefox.desktop"
+          version="$(sed -n 's/^Version=//p' "$P/application.ini" | head -1)"
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<component type="desktop-application">\n  <id>org.deskdroid.firefox</id>\n  <name>Etherium</name>\n  <releases><release version="%s"/></releases>\n</component>\n' \
+            "$version" > "$pkg/share/metainfo/org.deskdroid.firefox.metainfo.xml"
+          ;;
       esac
       (cd "$DESKDROID_QT_ANDROID" && for d in share/applications/*"$app"*.desktop share/icons/hicolor/*/apps/*"$app"*.png share/metainfo/*"$app"*; do
         [ -e "$d" ] && mkdir -p "$pkg/$(dirname "$d")" && cp -r "$d" "$pkg/$d"
@@ -336,6 +326,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         f="${todo[0]}"; todo=("${todo[@]:1}")
         for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
           [ -e "$sysroot/$API/$(unversioned "$lib")" ] || [ -e "$sysroot/$(unversioned "$lib")" ] && continue
+          # Its own, next to it (Firefox's libxul...): found there as they are.
+          [ -e "$(dirname "$f")/$lib" ] && continue
           name="$(bundlename "$lib")"
           [ -e "$OUT/$name" ] || [ -e "$P/lib/$name" ] && continue
           src="$DESKDROID_QT_ANDROID/lib/$lib"
@@ -347,6 +339,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       for f in "${own[@]}"; do
         args=()
         for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
+          [ -e "$(dirname "$f")/$lib" ] && continue
           name="$(bundlename "$lib")"
           [ "$name" != "$lib" ] && { [ -e "$OUT/$name" ] || [ -e "$P/lib/$name" ]; } && args+=(--replace-needed "$lib" "$name")
         done
@@ -391,8 +384,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
           | grep -Ev "^qml/${qmlskip#^}" | zip -q -X "$OUT/libkwin_data.so" -@)
       done
-      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt gtkapps.txt firefox.txt)
-      [ -d "$WORK/ffdata" ] && (cd "$WORK/ffdata" && zip -qr -X "$OUT/libkwin_data.so" firefox share)
+      (cd "$WORK" && zip -q -X "$OUT/libkwin_data.so" qml.txt apps.txt gtkapps.txt)
       [ -d "$WORK/gtkshare" ] && (cd "$WORK/gtkshare" && zip -qr -X "$OUT/libkwin_data.so" share)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \

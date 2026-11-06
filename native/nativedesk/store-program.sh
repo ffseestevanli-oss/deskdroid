@@ -15,7 +15,8 @@ dir="$HOME/store/apps/$app"
 P="$dir/program"
 main="$(cat "$dir/program.txt" 2>/dev/null)"
 [ -n "$main" ] && [ -e "$P/$main" ] || { echo "$app: not installed" >&2; exit 1; }
-export LD_LIBRARY_PATH="$P/lib:$libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# Its libraries: program/lib, and those next to the main program (Firefox's).
+export LD_LIBRARY_PATH="$P/lib:$(dirname "$P/$main"):$libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 if [ -e "$dir/program.env" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in ''|'#'*) continue ;; esac
