@@ -72,6 +72,10 @@ echo "== ddmask"
 # exec (the app's own files) through Android's linker (ddmask/ddmask.c).
 "$CC" -O2 -Wall -Wextra -shared -fPIC $REPRO "$HERE/ddmask/ddmask.c" -ldl \
   -Wl,-soname,libddmask.so -Wl,--build-id=none -Wl,-z,noexecstack -o "$WORK/libddmask.so"
+# Its loader for static programs (ddmask/ddload.c): freestanding, no C library.
+"$CC" -O2 -Wall -Wextra -fPIE -static-pie -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
+  -fno-asynchronous-unwind-tables $REPRO "$HERE/ddmask/ddload.c" \
+  -Wl,--build-id=none -Wl,-z,noexecstack -o "$WORK/libdd_static.so"
 
 if [ -n "$NDK" ]; then
   echo "== gpureport"
@@ -96,11 +100,17 @@ echo "== glibc"
 # glibc for ddmask, so ordinary Linux programs run without proot (glibc/README.md).
 # Skipped without an aarch64 glibc cross compiler.
 "$HERE/glibc/build.sh" "$OUT"
+echo "== musl"
+# musl for ddmask, for musl programs (musl/README.md); same cross compiler.
+"$HERE/musl/build.sh" "$OUT"
 
 install -m 755 "$WORK/ddtool/ddtool" "$OUT/libddtool.so"
 install -m 755 "$WORK/proot/proot" "$OUT/libproot.so"
 install -m 755 "$WORK/proot/loader/loader" "$OUT/libproot-loader.so"
 install -m 644 "$WORK/talloc/libtalloc.so" "$OUT/libtalloc.so"
 install -m 644 "$WORK/libddmask.so" "$OUT/libddmask.so"
-"$STRIP" --strip-unneeded "$OUT/libproot.so" "$OUT/libtalloc.so" "$OUT/libddtool.so" "$OUT/libddmask.so"
+install -m 755 "$WORK/libdd_static.so" "$OUT/libdd_static.so"
+# ddmask's AppImage runner, a shell script (ddmask/appimage.sh).
+install -m 755 "$HERE/ddmask/appimage.sh" "$OUT/libdd_appimage.so"
+"$STRIP" --strip-unneeded "$OUT/libproot.so" "$OUT/libtalloc.so" "$OUT/libddtool.so" "$OUT/libddmask.so" "$OUT/libdd_static.so"
 ls -l "$OUT"

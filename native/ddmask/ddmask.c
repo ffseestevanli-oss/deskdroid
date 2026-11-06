@@ -13,14 +13,21 @@
  * start is outside the folders Android allows, it starts it like this instead:
  *
  *   ELF for this CPU, dynamic  -> its own interpreter (PT_INTERP) as a program:
- *                                 /system/bin/linker64 <program> <args>
+ *                                 /system/bin/linker64 <program> <args>; glibc's
+ *                                 and musl's map to DeskDroid's builds of them in
+ *                                 the APK (native/glibc, native/musl), started as
+ *                                 <loader> --argv0 <argv[0]> <program> <args>
+ *   ELF for this CPU, static   -> libdd_static.so <program> <argv[0]> <args>
+ *                                 (ddload.c, next to libddmask.so)
+ *   AppImage                   -> libdd_appimage.so <appimage> <argv[0]> <args>
+ *                                 (appimage.sh: unpacks it, starts its AppRun)
  *   ELF for x86_64             -> $DDMASK_X86_64 (default: libbox64.so next to
  *                                 libddmask.so, when it's there) <program> <args>
  *   ELF for i386               -> $DDMASK_I386 <program> <args>
  *   #! script                  -> its interpreter, mapped by $DDMASK_MAP, then
  *                                 these same rules for the interpreter
- *   anything else ELF (static,
- *   interpreter missing)       -> $DDMASK_FALLBACK <program> <args> (proot...),
+ *   anything else ELF (the
+ *   above missing)             -> $DDMASK_FALLBACK <program> <args> (proot...),
  *                                 or EACCES
  *
  * A program started through the linker sees its own argv[0], gets its own
@@ -62,15 +69,37 @@
 #include <unistd.h>
 
 #define EXPORT __attribute__((visibility("default")))
-/* The glibc build of ddmask (for glibc programs) runs on Android too. */
-#if defined(__ANDROID__) || defined(DDMASK_GLIBC)
+/* The glibc and musl builds of ddmask (for those programs) run on Android too. */
+#if defined(__ANDROID__) || defined(DDMASK_GLIBC) || defined(DDMASK_MUSL)
 #define DDMASK_ON_ANDROID 1
 #endif
-/* Both builds sit in the APK's library folder; each world reads its own variable. */
-#define BIONIC_SHIM "libddmask.so"
-#define GLIBC_SHIM "libddmask_glibc.so"
-#define GLIBC_LOADER "libdd_ld-glibc.so"
-#define GLIBC_PRELOAD_VAR "DDMASK_GLIBC_LD_PRELOAD"
+
+/*
+ * The C libraries ddmask knows. Each has its own loader in the APK's library
+ * folder (bionic's is the system's linker64), its own build of ddmask there,
+ * and its own preload variable: the patched glibc and musl read theirs instead
+ * of LD_PRELOAD (native/glibc, native/musl). Every exec puts each build that's
+ * there into its variable, so programs of any kind start each other.
+ */
+struct world {
+    const char *shim;    /* ddmask's build for it */
+    const char *loader;  /* its loader, in the APK's library folder */
+    const char *interp;  /* the PT_INTERP its programs ask for */
+    const char *var;     /* its preload variable */
+};
+static const struct world worlds[] = {
+    { "libddmask.so", NULL, NULL, "LD_PRELOAD" },
+    { "libddmask_glibc.so", "libdd_ld-glibc.so", "/lib/ld-linux-aarch64.so.1", "DDMASK_GLIBC_LD_PRELOAD" },
+    { "libddmask_musl.so", "libdd_ld-musl.so", "/lib/ld-musl-aarch64.so.1", "DDMASK_MUSL_LD_PRELOAD" },
+};
+#define WORLDS (int)(sizeof worlds / sizeof worlds[0])
+#if defined(DDMASK_GLIBC)
+#define SELF_WORLD 1
+#elif defined(DDMASK_MUSL)
+#define SELF_WORLD 2
+#else
+#define SELF_WORLD 0
+#endif
 #define MAX_DEPTH 4           /* #! scripts whose interpreter is a script... */
 #define EXTRA_ARGS (2 * MAX_DEPTH + 4)
 #define LINE_MAX_SCRIPT 256   /* the kernel reads this much of a #! line too */
@@ -90,8 +119,7 @@ static readlinkat_fn real_readlinkat;
 
 static char self_path[PATH_MAX];   /* libddmask.so */
 static char self_dir[PATH_MAX];    /* its folder */
-static char bionic_shim[PATH_MAX]; /* the two builds of ddmask, when there */
-static char glibc_shim[PATH_MAX];
+static char shims[WORLDS][PATH_MAX]; /* ddmask's builds that are there, by world */
 static char exe_path[PATH_MAX];    /* the program this process really is, when started through a loader */
 
 /* ---- small helpers that don't allocate ---- */
@@ -153,6 +181,15 @@ static int exec_allowed(const char *real, char *const envp[]) {
 #endif
 }
 
+/* Whether `runner` is glibc's or musl's loader from the APK. */
+static int is_world_loader(const char *runner) {
+    const char *base = strrchr(runner, '/');
+    base = base ? base + 1 : runner;
+    for (int w = 0; w < WORLDS; w++)
+        if (worlds[w].loader && strcmp(base, worlds[w].loader) == 0) return 1;
+    return 0;
+}
+
 /* Replaces `path` through DDMASK_MAP (and Android's defaults) into out; returns out or path. */
 static const char *map_path(const char *path, char *const envp[], char *out, size_t outsz) {
     const char *map = env_get(envp, "DDMASK_MAP");
@@ -161,10 +198,11 @@ static const char *map_path(const char *path, char *const envp[], char *out, siz
 #else
     static const char defaults[] = "";
 #endif
-    /* glibc programs: glibc's loader from the APK (native/glibc). */
-    static const char glibc_interp[] = "/lib/ld-linux-aarch64.so.1";
-    if (strcmp(path, glibc_interp) == 0 && self_dir[0] && !(map && strstr(map, glibc_interp))) {
-        if ((size_t)snprintf(out, outsz, "%s/" GLIBC_LOADER, self_dir) < outsz && access(out, F_OK) == 0) return out;
+    /* glibc and musl programs: their loader from the APK (native/glibc, native/musl). */
+    for (int w = 0; w < WORLDS; w++) {
+        const struct world *wd = &worlds[w];
+        if (!wd->interp || strcmp(path, wd->interp) != 0 || !self_dir[0] || (map && strstr(map, wd->interp))) continue;
+        if ((size_t)snprintf(out, outsz, "%s/%s", self_dir, wd->loader) < outsz && access(out, F_OK) == 0) return out;
     }
     const char *lists[2] = { map, defaults };
     size_t plen = strlen(path);
@@ -190,7 +228,7 @@ static const char *map_path(const char *path, char *const envp[], char *out, siz
 
 /* ---- what to run ---- */
 
-enum kind { RUN_AS_IS, RUN_LOADER, RUN_EMULATOR, RUN_SCRIPT, RUN_FALLBACK, RUN_NOEXEC };
+enum kind { RUN_AS_IS, RUN_LOADER, RUN_STATIC, RUN_EMULATOR, RUN_SCRIPT, RUN_FALLBACK, RUN_NOEXEC };
 
 #if defined(__aarch64__)
 #define NATIVE_MACHINE EM_AARCH64
@@ -206,7 +244,7 @@ enum kind { RUN_AS_IS, RUN_LOADER, RUN_EMULATOR, RUN_SCRIPT, RUN_FALLBACK, RUN_N
 
 /* Reads the file's header. For ELF, interp gets PT_INTERP (empty when static);
  * for #!, interp gets the interpreter and arg its one argument (or empty). */
-static enum kind classify(const char *path, char *interp, size_t isz, char *arg, size_t asz, int *machine) {
+static enum kind classify(const char *path, char *interp, size_t isz, char *arg, size_t asz, int *machine, int *appimage) {
     int fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return RUN_AS_IS;
     unsigned char head[LINE_MAX_SCRIPT];
@@ -214,11 +252,16 @@ static enum kind classify(const char *path, char *interp, size_t isz, char *arg,
     enum kind k = RUN_NOEXEC;
     interp[0] = arg[0] = 0;
     *machine = EM_NONE;
+    *appimage = 0;
+    int is_program = 0;
     if (n >= 4 && memcmp(head, ELFMAG, SELFMAG) == 0) {
+        /* AppImage (type 1 and 2): "AI" and its type in the ELF header's padding. */
+        if (n >= 11 && head[8] == 'A' && head[9] == 'I' && (head[10] == 1 || head[10] == 2)) *appimage = 1;
         if (n >= (ssize_t)sizeof(Elf64_Ehdr) && head[EI_CLASS] == ELFCLASS64) {
             Elf64_Ehdr eh;
             memcpy(&eh, head, sizeof eh);
             *machine = eh.e_machine;
+            is_program = eh.e_type == ET_EXEC || eh.e_type == ET_DYN;
             for (int i = 0; i < eh.e_phnum && i < 64; i++) {
                 Elf64_Phdr ph;
                 if (pread(fd, &ph, sizeof ph, eh.e_phoff + (off_t)i * eh.e_phentsize) != sizeof ph) break;
@@ -232,7 +275,7 @@ static enum kind classify(const char *path, char *interp, size_t isz, char *arg,
             memcpy(&eh, head, sizeof eh);
             *machine = eh.e_machine;
         }
-        if (*machine == NATIVE_MACHINE) k = interp[0] ? RUN_LOADER : RUN_FALLBACK;
+        if (*machine == NATIVE_MACHINE) k = interp[0] ? RUN_LOADER : is_program ? RUN_STATIC : RUN_FALLBACK;
         else if (*machine == EM_X86_64 || *machine == EM_386) k = RUN_EMULATOR;
         else k = RUN_FALLBACK;
     } else if (n >= 2 && head[0] == '#' && head[1] == '!') {
@@ -265,8 +308,7 @@ struct plan {
     char arg[MAX_DEPTH][LINE_MAX_SCRIPT];
     char mapped[MAX_DEPTH][PATH_MAX];
     char emu[PATH_MAX];
-    char preload[2 * PATH_MAX + 32];
-    char preload_glibc[2 * PATH_MAX + 32];
+    char preload[WORLDS][2 * PATH_MAX + 32];
     char env_exe[PATH_MAX + 16];
     char env_argv0[PATH_MAX + 16];
 };
@@ -277,6 +319,10 @@ static int count(char *const v[]) {
     return n;
 }
 
+/* (snprintf truncating a too-long variable is fine: that's what the size is for.) */
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 /* Puts `lib` (a full path) first in the ':'-separated list `var` of envp, into buf. */
 static char *with_preload(char *const envp[], const char *var, const char *lib, char *buf, size_t size) {
     const char *cur = env_get(envp, var);
@@ -286,19 +332,24 @@ static char *with_preload(char *const envp[], const char *var, const char *lib, 
     return buf;
 }
 
-/* New environment: ddmask in LD_PRELOAD (Android's loader) and, when the glibc
- * build is there, in DDMASK_GLIBC_LD_PRELOAD (glibc's loader, native/glibc);
- * DDMASK_EXE/DDMASK_ARGV0 only when given. nenvp has room for count(envp) + 4. */
+static int is_var(const char *entry, const char *var) {
+    size_t n = strlen(var);
+    return strncmp(entry, var, n) == 0 && entry[n] == '=';
+}
+
+/* New environment: each of ddmask's builds that's there in its world's preload
+ * variable (LD_PRELOAD, DDMASK_GLIBC_LD_PRELOAD, DDMASK_MUSL_LD_PRELOAD);
+ * DDMASK_EXE/DDMASK_ARGV0 only when given. nenvp has room for count(envp) + WORLDS + 3. */
 static void build_env(char *const envp[], char **nenvp, struct plan *pl, int with_exe) {
     int j = 0;
     for (char *const *e = envp; e && *e; e++) {
-        if (strncmp(*e, "DDMASK_EXE=", 11) == 0 || strncmp(*e, "DDMASK_ARGV0=", 13) == 0) continue;
-        if (bionic_shim[0] && strncmp(*e, "LD_PRELOAD=", 11) == 0) continue;
-        if (glibc_shim[0] && strncmp(*e, GLIBC_PRELOAD_VAR "=", sizeof GLIBC_PRELOAD_VAR) == 0) continue;
-        nenvp[j++] = *e;
+        if (is_var(*e, "DDMASK_EXE") || is_var(*e, "DDMASK_ARGV0")) continue;
+        int ours = 0;
+        for (int w = 0; w < WORLDS; w++) if (shims[w][0] && is_var(*e, worlds[w].var)) ours = 1;
+        if (!ours) nenvp[j++] = *e;
     }
-    if (bionic_shim[0]) nenvp[j++] = with_preload(envp, "LD_PRELOAD", bionic_shim, pl->preload, sizeof pl->preload);
-    if (glibc_shim[0]) nenvp[j++] = with_preload(envp, GLIBC_PRELOAD_VAR, glibc_shim, pl->preload_glibc, sizeof pl->preload_glibc);
+    for (int w = 0; w < WORLDS; w++)
+        if (shims[w][0]) nenvp[j++] = with_preload(envp, worlds[w].var, shims[w], pl->preload[w], sizeof pl->preload[w]);
     if (with_exe) {
         if (pl->env_exe[0]) nenvp[j++] = pl->env_exe;
         if (pl->env_argv0[0]) nenvp[j++] = pl->env_argv0;
@@ -308,7 +359,7 @@ static void build_env(char *const envp[], char **nenvp, struct plan *pl, int wit
 
 /*
  * Works out how to start `path` with `argv`: fills *npath and nargv (room for
- * count(argv) + EXTRA_ARGS) and nenvp (room for count(envp) + 3). Returns 0,
+ * count(argv) + EXTRA_ARGS) and nenvp (room for count(envp) + WORLDS + 3). Returns 0,
  * or -1 with errno set when it can't be started.
  */
 static int plan_exec(const char *path, char *const argv[], char *const envp[],
@@ -336,11 +387,21 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
         if (depth >= MAX_DEPTH) { errno = ELOOP; return -1; }
         /* A file opened by fd (fexecve, execveat) may close on exec: name it by its real path. */
         const char *prog = strncmp(cur, "/proc/self/fd/", 14) == 0 ? strcpy(pl->real, resolved) : cur;
-        int machine;
+        int machine, appimage = 0;
         char *interp = pl->interp[depth], *arg = pl->arg[depth];
-        enum kind k = classify(resolved, interp, PATH_MAX, arg, LINE_MAX_SCRIPT, &machine);
+        enum kind k = classify(resolved, interp, PATH_MAX, arg, LINE_MAX_SCRIPT, &machine, &appimage);
         const char *runner = NULL;
-        switch (k) {
+        const char *argv0_opt = NULL; /* glibc's and musl's loaders take the program's argv[0] as --argv0 */
+        int keep_argv0 = 0;           /* ddload and the AppImage runner take: <program> <argv[0]> <args> */
+        /* An AppImage: unpacked (no FUSE on Android) and its AppRun started, by
+         * libdd_appimage.so; which runs the AppImage itself, to unpack it, with
+         * DDMASK_APPIMAGE_RAW=1: then it's just a program. */
+        const char *raw = env_get(envp, "DDMASK_APPIMAGE_RAW");
+        if (appimage && !(raw && *raw && *raw != '0') && self_dir[0]) {
+            snprintf(pl->emu, sizeof pl->emu, "%s/libdd_appimage.so", self_dir);
+            if (access(pl->emu, F_OK) == 0) { runner = pl->emu; keep_argv0 = 1; k = RUN_FALLBACK; }
+        }
+        switch (runner ? RUN_FALLBACK : k) {
         case RUN_AS_IS:
             *npath = cur;
             goto done;
@@ -352,9 +413,17 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
             if (access(runner, F_OK) != 0) runner = NULL; /* glibc's loader on Android... */
             if (runner) {
                 snprintf(pl->env_exe, sizeof pl->env_exe, "DDMASK_EXE=%s", resolved);
-                if ((size_t)snprintf(pl->env_argv0, sizeof pl->env_argv0, "DDMASK_ARGV0=%s", nargv[off]) >= sizeof pl->env_argv0)
+                if (is_world_loader(runner)) argv0_opt = nargv[off];
+                else if ((size_t)snprintf(pl->env_argv0, sizeof pl->env_argv0, "DDMASK_ARGV0=%s", nargv[off]) >= sizeof pl->env_argv0)
                     pl->env_argv0[0] = 0;
                 with_exe = 1;
+            }
+            break;
+        case RUN_STATIC:
+            /* No loader to start it through: ddmask's own (ddload.c). */
+            if (self_dir[0]) {
+                snprintf(pl->emu, sizeof pl->emu, "%s/libdd_static.so", self_dir);
+                if (access(pl->emu, F_OK) == 0) { runner = pl->emu; keep_argv0 = 1; }
             }
             break;
         case RUN_EMULATOR: {
@@ -380,6 +449,7 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
         }
         }
         if (!runner) {
+            keep_argv0 = 0;
             const char *fb = env_get(envp, "DDMASK_FALLBACK");
             if (fb && *fb) runner = fb;
             with_exe = 0;
@@ -390,8 +460,14 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
             errno = EACCES;
             return -1;
         }
-        /* runner program args... */
-        nargv[off] = (char *)prog;
+        /* runner [--argv0 name] program args... ; or runner program argv0 args... */
+        if (keep_argv0) {
+            nargv[--off] = (char *)prog;
+        } else if (argv0_opt) {
+            nargv[off] = (char *)prog;
+            nargv[--off] = (char *)argv0_opt;
+            nargv[--off] = "--argv0";
+        } else nargv[off] = (char *)prog;
         nargv[--off] = (char *)runner;
         logf_(envp, "%s: through %s", cur, runner);
         cur = runner;
@@ -409,7 +485,7 @@ done:
 static int dd_execve(const char *path, char *const argv[], char *const envp[]) {
     if (!path) { errno = EFAULT; return -1; }
     char *nargv[count(argv) + EXTRA_ARGS + 2];
-    char *nenvp[count(envp) + 5];
+    char *nenvp[count(envp) + WORLDS + 3];
     struct plan pl;
     const char *npath;
     if (plan_exec(path, argv, envp, &npath, nargv, nenvp, &pl) != 0) return -1;
@@ -526,7 +602,7 @@ EXPORT int execveat(int dirfd, const char *path, char *const argv[], char *const
 static int dd_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *fa,
                     const posix_spawnattr_t *attr, char *const argv[], char *const envp[]) {
     if (!real_posix_spawn) return ENOSYS;
-    size_t na = count(argv) + EXTRA_ARGS + 2, ne = count(envp) + 5;
+    size_t na = count(argv) + EXTRA_ARGS + 2, ne = count(envp) + WORLDS + 3;
     char **nargv = malloc(na * sizeof *nargv), **nenvp = malloc(ne * sizeof *nenvp);
     struct plan *pl = malloc(sizeof *pl);
     int r;
@@ -608,15 +684,11 @@ __attribute__((constructor)) static void ddmask_init(int argc, char **argv, char
         if (slash) *slash = 0; else self_dir[0] = 0;
     }
     if (self_dir[0]) {
-        snprintf(bionic_shim, sizeof bionic_shim, "%s/" BIONIC_SHIM, self_dir);
-        snprintf(glibc_shim, sizeof glibc_shim, "%s/" GLIBC_SHIM, self_dir);
-#ifdef DDMASK_GLIBC
-        if (access(bionic_shim, F_OK) != 0) bionic_shim[0] = 0;
-        snprintf(glibc_shim, sizeof glibc_shim, "%s", self_path);
-#else
-        if (access(glibc_shim, F_OK) != 0) glibc_shim[0] = 0;
-        snprintf(bionic_shim, sizeof bionic_shim, "%s", self_path);
-#endif
+        for (int w = 0; w < WORLDS; w++) {
+            if (w == SELF_WORLD) { snprintf(shims[w], PATH_MAX, "%s", self_path); continue; }
+            if ((size_t)snprintf(shims[w], PATH_MAX, "%s/%s", self_dir, worlds[w].shim) >= PATH_MAX
+                || access(shims[w], F_OK) != 0) shims[w][0] = 0;
+        }
     }
 
     /* Started through a loader by ddmask: take back the program's identity. */
@@ -627,10 +699,15 @@ __attribute__((constructor)) static void ddmask_init(int argc, char **argv, char
     }
     const char *a0 = getenv("DDMASK_ARGV0");
     if (a0) {
+        /* (musl calls constructors without arguments: argc and argv aren't there.) */
+#ifndef DDMASK_MUSL
         if (argc > 0 && argv) {
             char *copy = strdup(a0);
             if (copy) argv[0] = copy;
         }
+#else
+        (void)argc; (void)argv;
+#endif
         unsetenv("DDMASK_ARGV0");
     }
     if (exe_path[0]) {
