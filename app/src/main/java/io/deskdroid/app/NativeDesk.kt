@@ -1419,7 +1419,11 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // Stop (in the menu or the notification) ends the desktop; anything else
         // that destroys the window leaves it running in the background.
         // A monitor unplugged closes its window; the desktop goes on, back on the phone.
-        if (isFinishing && !external) NativeDesk.stop(this, "window closed")
+        // Only the current window: as the home app, Android opens a new desktop
+        // window as soon as Stop finishes this one, and this one's late onDestroy
+        // used to stop (and finish) the new one, over and over (the restart loop).
+        val current = NativeDesk.activity?.get().let { it == null || it === this }
+        if (isFinishing && !external && current && NativeDesk.running) NativeDesk.stop(this, "window closed")
         if (NativeDesk.activity?.get() === this) NativeDesk.activity = null
         super.onDestroy()
     }
