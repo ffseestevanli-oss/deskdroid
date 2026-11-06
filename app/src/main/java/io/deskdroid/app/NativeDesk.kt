@@ -148,6 +148,13 @@ object NativeDesk {
                     }
                     return
                 }
+                // The keyboard button on the panel: show or hide the phone's keyboard.
+                if (path == "deskdroid:keyboard") {
+                    Handler(Looper.getMainLooper()).post {
+                        touchpad?.get()?.toggleKeyboard() ?: (activity?.get() as? NativeDeskActivity)?.toggleSoftKeyboard()
+                    }
+                    return
+                }
                 // An Android app from Plasma's menu (writeAndroidApps).
                 if (path.startsWith("android-app:")) {
                     Handler(Looper.getMainLooper()).post { launchAndroidApp(c, path.removePrefix("android-app:")) }
@@ -563,6 +570,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             File(filesDir, ".local/share/applications/org.deskdroid.store.desktop").writeText(
                 "[Desktop Entry]\nType=Application\nName=App Store\nGenericName=Install KDE apps\n" +
                 "Icon=plasmadiscover\nExec=android-open deskdroid:store\nCategories=System;\n")
+            // The panel's keyboard button (an Icon widget on this file).
+            File(filesDir, ".local/share/applications/org.deskdroid.keyboard.desktop").writeText(
+                "[Desktop Entry]\nType=Application\nName=Keyboard\nGenericName=Show or hide the phone's keyboard\n" +
+                "Icon=input-keyboard-virtual\nExec=android-open deskdroid:keyboard\nNoDisplay=true\n")
             NativeDesk.watchOpenRequests(applicationContext)
             NativeDesk.refreshAndroidApps { writeAndroidApps(applicationContext) } // before plasmashell reads the menu (KWin starts first)
             watchAndroidApps()
@@ -1265,17 +1276,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         // Volume keys set the phone's volume, which is the desktop's sound too
         // (there's no KDE mixer yet): Android's own volume slider shows.
-        if (isVolumeKey(keyCode)) return super.onKeyDown(keyCode, e)
+        if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
         if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, true)
         return true
     }
 
-    private fun isVolumeKey(k: Int) =
-        k == KeyEvent.KEYCODE_VOLUME_UP || k == KeyEvent.KEYCODE_VOLUME_DOWN || k == KeyEvent.KEYCODE_VOLUME_MUTE
-
     override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) return true // handled in onKeyDown
-        if (isVolumeKey(keyCode)) return super.onKeyUp(keyCode, e)
+        if (VolumeKeys.isVolumeKey(keyCode)) return true
         if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
         return true
     }
@@ -1592,6 +1600,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
         surfaceView.requestFocus()
         imm.showSoftInput(surfaceView, android.view.inputmethod.InputMethodManager.SHOW_FORCED)
+    }
+
+    /** The panel's keyboard button: opens the phone's keyboard, or closes it if it's up. */
+    fun toggleSoftKeyboard() {
+        val up = surfaceView.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) == true
+        if (!up && menu.visibility == android.view.View.VISIBLE) showMenu(false)
+        softKeyboard(!up)
     }
 
     /** The phone's keyboard for a desktop text field (it follows the field's focus). */
@@ -1965,15 +1980,20 @@ class PhoneTouchpadActivity : Activity() {
 
     override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) return true
+        if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
         NativeDesk.nativeKey(keyCode, e.unicodeChar, true)
         return true
     }
 
     override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) return true
+        if (VolumeKeys.isVolumeKey(keyCode)) return true
         NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
         return true
     }
+
+    fun toggleKeyboard() =
+        softKeyboard(pad.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) != true)
 
     fun softKeyboard(show: Boolean) {
         val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)

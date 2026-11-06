@@ -142,7 +142,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         # naming) go back into their namespace folder, where KDE looks.
         linkrel="$rel"
         if [ "$dir" = . ]; then
-          for ns in kf6/packagestructure kf6/urifilters kf6/kiod kf6/kio_dnd kf6/kio kf6/kded kf6/parts kf6/thumbcreator \
+          for ns in kf6/packagestructure kf6/urifilters kf6/kiod kf6/kio_dnd kf6/kio kf6/kded kf6/parts kf6/thumbcreator kf6/kfileitemaction kf6/kfilemetadata \
                     kwin/effects/plugins kwin/plugins plasma/kcms/systemsettings_qwidgets plasma/kcms/systemsettings plasma/applets plasma/containmentactions plasma5support/dataengine org.kde.kdecoration3; do
             flatns="libplugins_${ns//\//_}_"
             case "$base" in "$flatns"*) linkrel="$ns/${base#"$flatns"}"; break ;; esac

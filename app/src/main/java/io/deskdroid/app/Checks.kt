@@ -56,6 +56,19 @@ object Checks {
         ctx.startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS))
     }
 
+    /** "Background usage" off (Settings › Apps › DeskDroid › App battery usage › Restricted). */
+    fun backgroundRestricted(ctx: Context): Boolean =
+        ctx.getSystemService(android.app.ActivityManager::class.java).isBackgroundRestricted
+
+    /** DeskDroid's App info, where App battery usage is. */
+    fun openAppInfo(ctx: Context) {
+        ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")))
+    }
+
+    fun openNotificationSettings(ctx: Context) {
+        ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
+    }
+
     fun notificationsAllowed(ctx: Context) =
         ctx.getSystemService(android.app.NotificationManager::class.java).areNotificationsEnabled()
 
