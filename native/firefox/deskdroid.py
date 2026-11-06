@@ -37,22 +37,29 @@ jobject cubeb_jni_get_context_instance() { return nullptr; }
 #endif
 """)
 
-# Wayland only and no D-Bus (as Termux): Gecko's "remote" (opening a link in
-# the running browser) then falls back to its X11 version. Leave that out:
-# a second start opens its own window instead of reusing the first.
+# Wayland only and no D-Bus (as Termux): Gecko's "remote" (a second start
+# hands its command line to the running browser) would fall back to its X11
+# version. DeskDroid's goes over a Unix socket instead (remote/), so a second
+# start opens a new window in the running browser rather than saying it's
+# already running.
+import shutil
+here = pathlib.Path(__file__).resolve().parent
 R = "toolkit/components/remote/"
+for f in ("nsSocketRemote.h", "nsSocketRemote.cpp"):
+    shutil.copy(here / "remote" / f, src / R / f)
 edit(R + "moz.build",
      '    else:\n        SOURCES += [\n            "nsGTKRemoteServer.cpp",',
-     '    elif CONFIG["MOZ_X11"]:  # DeskDroid\n        SOURCES += [\n            "nsGTKRemoteServer.cpp",')
+     '    elif not CONFIG["MOZ_X11"]:  # DeskDroid\n        SOURCES += ["nsSocketRemote.cpp"]\n'
+     '    else:\n        SOURCES += [\n            "nsGTKRemoteServer.cpp",')
 edit(R + "nsRemoteService.cpp",
      '#  else\n#    include "nsGTKRemoteServer.h"',
-     '#  elif defined(MOZ_X11)  // DeskDroid\n#    include "nsGTKRemoteServer.h"')
+     '#  elif !defined(MOZ_X11)  // DeskDroid\n#    include "nsSocketRemote.h"\n#  else\n#    include "nsGTKRemoteServer.h"')
 edit(R + "nsRemoteService.cpp",
-     '#  else\n  client = MakeUnique<nsXRemoteClient>(mStartupToken);\n#  endif',
-     '#  elif defined(MOZ_X11)\n  client = MakeUnique<nsXRemoteClient>(mStartupToken);\n#  else\n  return NS_ERROR_NOT_AVAILABLE;\n#  endif')
+     '#  else\n  client = MakeUnique<nsXRemoteClient>(mStartupToken);',
+     '#  elif !defined(MOZ_X11)  // DeskDroid\n  client = MakeUnique<nsSocketRemoteClient>(mStartupToken);\n#  else\n  client = MakeUnique<nsXRemoteClient>(mStartupToken);')
 edit(R + "nsRemoteService.cpp",
-     '#  else\n  mRemoteServer = MakeUnique<nsGTKRemoteServer>();\n#  endif',
-     '#  elif defined(MOZ_X11)\n  mRemoteServer = MakeUnique<nsGTKRemoteServer>();\n#  else\n  return;\n#  endif')
+     '#  else\n  mRemoteServer = MakeUnique<nsGTKRemoteServer>();',
+     '#  elif !defined(MOZ_X11)  // DeskDroid\n  mRemoteServer = MakeUnique<nsSocketRemoteServer>();\n#  else\n  mRemoteServer = MakeUnique<nsGTKRemoteServer>();')
 
 # Android runs programs only from the APK's library folder, so Firefox's
 # program is a link in its own folder to a file there, and /proc/self/exe

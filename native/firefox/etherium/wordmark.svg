@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" fill="context-fill light-dark(#20123a, #fbfbfe)" viewBox="0 0 372 99">
+  <!-- Etherium's name, for the About dialog and the new tab page. -->
+  <style>:root { color-scheme: light dark }</style>
+  <text x="4" y="76" font-family="sans-serif" font-size="80" font-weight="600">Etherium</text>
+</svg>

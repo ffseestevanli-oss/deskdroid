@@ -198,7 +198,16 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       echo "$ffroot" > "$WORK/ffdata/firefox/program.txt"
       install -m 755 "$HERE/firefox.sh" "$OUT/libdd_firefox-run.so"
       mkdir -p "$WORK/ffdata/share/applications"
-      printf '[Desktop Entry]\nType=Application\nName=Firefox\nGenericName=Web Browser\nComment=Browse the web (an unofficial build of Firefox)\nIcon=internet-web-browser\nExec=firefox %%u\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\n' \
+      # Etherium: Firefox under DeskDroid's own name and rainbow icon
+      # (native/firefox/etherium).
+      for png in "$HERE/../firefox/etherium"/etherium-*.png; do
+        size="${png##*-}"; size="${size%.png}"
+        mkdir -p "$WORK/ffdata/share/icons/hicolor/${size}x${size}/apps"
+        cp "$png" "$WORK/ffdata/share/icons/hicolor/${size}x${size}/apps/etherium.png"
+      done
+      mkdir -p "$WORK/ffdata/share/icons/hicolor/scalable/apps"
+      cp "$HERE/../firefox/etherium/etherium.svg" "$WORK/ffdata/share/icons/hicolor/scalable/apps/etherium.svg"
+      printf '[Desktop Entry]\nType=Application\nName=Etherium\nGenericName=Web Browser\nComment=Browse the web (built from Firefox, with nothing phoning home)\nIcon=etherium\nExec=firefox %%u\nStartupWMClass=firefox\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\nActions=new-window;new-private-window;\n\n[Desktop Action new-window]\nName=New Window\nExec=firefox --new-window\n\n[Desktop Action new-private-window]\nName=New Private Window\nExec=firefox --private-window\n' \
         > "$WORK/ffdata/share/applications/org.deskdroid.firefox.desktop"
       echo "   firefox: $ffroot, $(wc -l < "$WORK/firefox.txt") programs and libraries"
     fi
