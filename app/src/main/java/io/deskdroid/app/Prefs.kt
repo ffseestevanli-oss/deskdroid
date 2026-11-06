@@ -29,10 +29,10 @@ object Prefs {
     fun sessionType(c: Context) = prefs(c).getString("session_type", "x11")!!
     fun setSessionType(c: Context, type: String) = prefs(c).edit().putString("session_type", type).apply()
 
-    /** touchpad (the screen moves a pointer), direct (the finger is the mouse), or touch (a phone's: slide scrolls, tap clicks, hold for the right button or to drag). */
-    fun touchMode(c: Context) = prefs(c).getString("touch_mode", "touchpad")!!
-    val TOUCH_MODES = listOf("touchpad", "direct", "touch")
-    val TOUCH_MODE_LABELS = listOf("Touchpad", "Mouse", "Touch")
+    /** touchpad (the screen moves a pointer) or direct (a phone's touch: tap clicks, slide scrolls, hold for the right button or to drag). */
+    fun touchMode(c: Context) = prefs(c).getString("touch_mode", "touchpad")!!.let { if (it == "touch") "direct" else it }
+    val TOUCH_MODES = listOf("touchpad", "direct")
+    val TOUCH_MODE_LABELS = listOf("Touchpad", "Direct touch")
     fun setTouchMode(c: Context, mode: String) = prefs(c).edit().putString("touch_mode", mode).apply()
 
     /** Desktop scale: 1 = native pixels (default), 0 = from the display's density. */

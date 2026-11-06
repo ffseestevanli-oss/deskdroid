@@ -1221,14 +1221,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         val mode = Prefs.touchMode(this)
         when {
             e.isFromSource(InputDevice.SOURCE_MOUSE) -> mouse(e)
-            mode == "touch" -> {
+            // Direct touch: like a phone (TouchScreen).
+            mode == "direct" -> {
                 touchScreen.wheel = Prefs.scrollWheel(this)
                 touchScreen.onTouch(e)
-            }
-            // The same Touch mode setting as the desktop (Settings → Touch mode).
-            mode == "direct" -> {
-                val up = e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL
-                NativeDesk.nativePointer(e.x, e.y, if (up) 0 else 1)
             }
             else -> {
                 touchpad.wheel = Prefs.scrollWheel(this)
@@ -1662,6 +1658,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
         fun moveTo(x: Float, y: Float) { px = x; py = y }
 
+        /** The buttons held (bit 1 left, 2 right), from on-screen buttons, at the pointer. */
+        fun buttons(b: Int) { if (px >= 0) NativeDesk.nativePointer(px, py, b) }
+
         fun onTouch(e: MotionEvent, w: Float, h: Float) {
             if (px < 0) { px = w / 2; py = h / 2 }
             val n = e.pointerCount
@@ -1851,25 +1850,108 @@ class PhoneTouchpadActivity : Activity() {
             isFocusableInTouchMode = true
             setZOrderOnTop(false)
         }
-        val hint = TextView(this).apply {
-            text = "Touchpad · the desktop is on your monitor\nOne finger moves, tap clicks, two fingers scroll or right-click"
-            setTextColor(0x99FFFFFF.toInt())
-            textSize = 14f
-            gravity = android.view.Gravity.CENTER
-            setPadding(48, 48, 48, 48)
+        // The mockup (ui/mockups/Touchpad): a rainbow line, "On the big
+        // screen", the touch area with its grid and glow, Left and Right
+        // buttons, and keys a phone keyboard lacks.
+        val ui = io.deskdroid.app.ui.Ui(this)
+        val P = io.deskdroid.app.ui.Party
+        fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+        val header = ui.column(2) {
+            addView(ui.text("ON THE BIG SCREEN", 15f).apply { typeface = P.orbitron(context); letterSpacing = 0.06f })
+            addView(ui.text("${NativeDesk.surfaceW.toInt()} × ${NativeDesk.surfaceH.toInt()} · unplug to bring it back", 12f, P.MUTED))
         }
-        val keyboard = TextView(this).apply {
-            text = "⌨  Keyboard"
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            setPadding(48, 32, 48, 32)
+        val area = FrameLayout(this).apply {
+            addView(TouchpadArea(context), FrameLayout.LayoutParams(-1, -1))
+            addView(pad, FrameLayout.LayoutParams(1, 1)) // takes the keyboard's text
+            addView(ui.column(6) {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                addView(ui.text("☝", 34f, P.PINK).apply { gravity = android.view.Gravity.CENTER })
+                for (line in listOf("Tap to click", "Two-finger tap to right-click", "Two fingers to scroll · tap, then hold to drag"))
+                    addView(ui.text(line, 13f, P.MUTED).apply { gravity = android.view.Gravity.CENTER })
+            }, FrameLayout.LayoutParams(-2, -2, android.view.Gravity.CENTER))
+        }
+        fun bigButton(label: String, accent: Int, buttons: Int) = ui.text(label, 14f, P.TEXT, 700).apply {
+            gravity = android.view.Gravity.CENTER
+            letterSpacing = 0.08f
+            typeface = P.orbitron(context, 700)
+            minHeight = dp(64)
+            background = io.deskdroid.app.ui.ChamferDrawable(0f, fill = P.SURFACE, stroke = P.BORDER_SOFT, strokeWidth = dp(1).toFloat(),
+                cutTopLeft = false, cutBottomRight = false, accent = accent, accentEdge = android.view.Gravity.BOTTOM, accentWidth = dp(2).toFloat())
+            // Held while the finger is on it: a click, or a drag with the touchpad.
+            setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> { v.isPressed = true; touchpad.buttons(buttons) }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { v.isPressed = false; touchpad.buttons(0) }
+                }
+                true
+            }
+        }
+        // Modifiers latch: tap Ctrl, then the key; tap Ctrl again to let go.
+        val held = mutableSetOf<Int>()
+        fun key(label: String, accent: Int, code: Int, latch: Boolean) = ui.text(label, 12f, P.TEXT, 700).apply {
+            gravity = android.view.Gravity.CENTER
+            typeface = P.orbitron(context, 700)
+            minHeight = dp(48)
+            fun paint(on: Boolean) {
+                background = io.deskdroid.app.ui.ChamferDrawable(0f, fill = if (on) 0xFF24102A.toInt() else P.SURFACE,
+                    stroke = if (on) P.PINK else P.BORDER_SOFT, strokeWidth = dp(1).toFloat(), cutTopLeft = false, cutBottomRight = false,
+                    accent = accent, accentEdge = android.view.Gravity.BOTTOM, accentWidth = dp(2).toFloat())
+            }
+            paint(false)
+            setOnClickListener {
+                if (!latch) {
+                    NativeDesk.nativeKey(code, 0, true); NativeDesk.nativeKey(code, 0, false)
+                    // A plain key lets go of latched modifiers (Ctrl+Tab, then done).
+                } else if (code in held) {
+                    held -= code; NativeDesk.nativeKey(code, 0, false); paint(false)
+                } else {
+                    held += code; NativeDesk.nativeKey(code, 0, true); paint(true)
+                }
+            }
+        }
+        val keyboard = android.widget.ImageView(this).apply {
+            setImageDrawable(object : android.graphics.drawable.Drawable() {
+                val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    style = android.graphics.Paint.Style.STROKE; strokeWidth = dp(2).toFloat(); color = Color.WHITE
+                }
+                override fun draw(c: android.graphics.Canvas) {
+                    val w = bounds.width().toFloat(); val h = bounds.height().toFloat()
+                    val r = android.graphics.RectF(w * 0.3f, h * 0.36f, w * 0.7f, h * 0.64f)
+                    c.drawRoundRect(r, dp(2).toFloat(), dp(2).toFloat(), p)
+                    c.drawLine(w * 0.4f, h * 0.56f, w * 0.6f, h * 0.56f, p)
+                }
+                override fun setAlpha(a: Int) {}
+                override fun setColorFilter(f: android.graphics.ColorFilter?) {}
+                @Suppress("OVERRIDE_DEPRECATION") override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+            })
+            background = io.deskdroid.app.ui.ChamferDrawable(0f, rainbowFill = true, cutTopLeft = false, cutBottomRight = false)
+            minimumHeight = dp(48)
             setOnClickListener { softKeyboard(true) }
         }
+        val content = ui.column(10) {
+            setPadding(dp(16), dp(20), dp(16), dp(16))
+            addView(header, LinearLayout.LayoutParams(-1, -2))
+            addView(area, LinearLayout.LayoutParams(-1, 0, 1f))
+            addView(ui.row(8) {
+                addView(ui.weight(bigButton("LEFT", P.CYAN, 1)))
+                addView(ui.weight(bigButton("RIGHT", P.PINK, 2)))
+            }, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.row(6) {
+                addView(ui.weight(key("ESC", P.RED, KeyEvent.KEYCODE_ESCAPE, false)))
+                addView(ui.weight(key("TAB", P.ORANGE, KeyEvent.KEYCODE_TAB, false)))
+                addView(ui.weight(key("CTRL", P.YELLOW, KeyEvent.KEYCODE_CTRL_LEFT, true)))
+                addView(ui.weight(key("ALT", P.GREEN, KeyEvent.KEYCODE_ALT_LEFT, true)))
+                addView(ui.weight(key("META", P.CYAN, KeyEvent.KEYCODE_META_LEFT, true)))
+                addView(ui.weight(keyboard))
+            }, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.text("Got a Bluetooth mouse and keyboard? This screen can go dark.", 12f, P.DIM).apply {
+                gravity = android.view.Gravity.CENTER
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
         setContentView(FrameLayout(this).apply {
-            setBackgroundColor(0xFF101018.toInt())
-            addView(pad, FrameLayout.LayoutParams(-1, -1))
-            addView(hint, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER))
-            addView(keyboard, FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP or android.view.Gravity.END))
+            setBackgroundColor(P.BG)
+            addView(content, FrameLayout.LayoutParams(-1, -1))
+            addView(io.deskdroid.app.ui.RainbowStrip(context), FrameLayout.LayoutParams(-1, dp(4)))
         })
         displays.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
     }
@@ -1911,7 +1993,7 @@ class PhoneTouchpadActivity : Activity() {
 }
 
 /**
- * Touch mode: the screen works like a phone's, on the desktop's mouse. A tap
+ * Direct touch: the screen works like a phone's, on the desktop's mouse. A tap
  * clicks where it lands; a slide scrolls what's under the finger (the content
  * follows it, as wheel steps or smoothly, per Scroll behavior); touch and
  * hold, then lift, is the right button; touch and hold, then move, drags with
@@ -2018,5 +2100,31 @@ class TouchScreen(private val view: android.view.View) {
 
     companion object {
         const val LONG_PRESS_MS = 450L
+    }
+}
+
+/** The phone-as-touchpad screen's touch area: a faint grid, a purple glow, a border with a cut corner. */
+class TouchpadArea(c: android.content.Context) : android.view.View(c) {
+    private val d = c.resources.displayMetrics.density
+    private val grid = android.graphics.Paint().apply { color = 0x14FFFFFF; strokeWidth = d }
+    private val glow = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val border = io.deskdroid.app.ui.ChamferDrawable(18 * d, fill = 0xFF0B0B14.toInt(),
+        stroke = io.deskdroid.app.ui.Party.BORDER, strokeWidth = d, cutTopLeft = false)
+
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        border.setBounds(0, 0, width, height)
+        border.draw(canvas)
+        canvas.save()
+        canvas.clipRect(d, d, w - d, h - d)
+        glow.shader = android.graphics.RadialGradient(w / 2, h / 2, maxOf(w, h) * 0.55f,
+            intArrayOf(0x558B5CFF, 0x008B5CFF), null, android.graphics.Shader.TileMode.CLAMP)
+        canvas.drawRect(0f, 0f, w, h, glow)
+        val step = 24 * d
+        var x = step
+        while (x < w) { canvas.drawLine(x, 0f, x, h, grid); x += step }
+        var y = step
+        while (y < h) { canvas.drawLine(0f, y, w, y, grid); y += step }
+        canvas.restore()
     }
 }
