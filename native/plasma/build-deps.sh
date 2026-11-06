@@ -1112,6 +1112,10 @@ build_appstream() {
   local s; s="$(unpack https://www.freedesktop.org/software/appstream/releases/AppStream-1.2.2.tar.xz AppStream-1.2.2.tar.xz)"
   # Its tarball has one more folder level.
   [ -e "$s/meson.build" ] || s="$(dirname "$(ls "$s"/*/meson.build | head -1)")"
+  # Its data folder (metainfo, translation rules) needs AppStream on the
+  # build machine when cross-building; the library doesn't use it.
+  sed -i "/^subdir('data\/')$/d" "$s/meson.build"
+  if grep -q "^subdir('data/')" "$s/meson.build"; then return 1; fi
   NINJA_KEEP_GOING=1 meson_cross "$s" -Dstemming=false -Dsystemd=false -Dvapi=false -Dqt=false -Dcompose=false \
     -Dapt-support=false -Dgir=false -Dtools=false -Dzstd-support=false -Dblake3-support=false
     -Ddisplay-detection=none -Ddocs=false -Dapidocs=false \
@@ -1157,6 +1161,15 @@ n = len(s)
 s = re.sub(r"\nsplash = custom_target\('gimp-splash.png',.*?install: true\)\n", "\n# DeskDroid: no splash (rendered by running GIMP)\n", s, count=1, flags=re.S)
 assert len(s) < n, "splash target not found"
 open(p, "w").write(s)
+EOF
+  # A check that runs a test program (Pango's Thai line breaking, for a
+  # warning only): skipped when the build can't run Android programs.
+  python3 - "$s/meson.build" <<'EOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = "if cc.run('''\n  #include <pango/pango.h>"
+assert s.count(old) == 1, "Pango check not found"
+open(p, "w").write(s.replace(old, "if meson.can_run_host_binaries() and cc.run('''\n  #include <pango/pango.h>"))
 EOF
   local stub="$WORK/gimp-stub"; mkdir -p "$stub"
   for n in gimp-console-3.2 gimp-3.2; do printf '#!/bin/sh\nexit 0\n' > "$stub/$n"; chmod +x "$stub/$n"; done
