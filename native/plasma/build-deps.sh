@@ -1117,7 +1117,7 @@ build_appstream() {
   sed -i "/^subdir('data\/')$/d" "$s/meson.build"
   if grep -q "^subdir('data/')" "$s/meson.build"; then return 1; fi
   NINJA_KEEP_GOING=1 meson_cross "$s" -Dstemming=false -Dsystemd=false -Dvapi=false -Dqt=false -Dcompose=false \
-    -Dapt-support=false -Dgir=false -Dtools=false -Dzstd-support=false -Dblake3-support=false
+    -Dapt-support=false -Dgir=false -Dtools=false -Dzstd-support=false -Dblake3-support=false \
     -Ddisplay-detection=none -Ddocs=false -Dapidocs=false \
     -Dinstall-docs=false -Dman=false -Dbash-completion=false
   test -e "$PREFIX/lib/pkgconfig/appstream.pc"
