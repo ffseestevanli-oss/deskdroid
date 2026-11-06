@@ -1,0 +1,21 @@
+{
+  "policies": {
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisablePocket": true,
+    "DisableFeedbackCommands": true,
+    "DisableDefaultBrowserAgent": true,
+    "CaptivePortal": false,
+    "NetworkPrediction": false,
+    "ExtensionUpdate": false,
+    "FirefoxHome": {"SponsoredTopSites": false, "SponsoredStories": false, "Stories": false},
+    "FirefoxSuggest": {"SponsoredSuggestions": false, "ImproveSuggest": false, "WebSuggestions": false},
+    "UserMessaging": {"ExtensionRecommendations": false, "FeatureRecommendations": false, "MoreFromMozilla": false, "SkipOnboarding": true},
+    "ExtensionSettings": {
+      "uBlock0@raymondhill.net": {
+        "installation_mode": "normal_installed",
+        "install_url": "file://@DISTRIBUTION@/extensions/uBlock0@raymondhill.net.xpi"
+      }
+    }
+  }
+}

@@ -1,0 +1,134 @@
+# DeskDroid: plasma-workspace's top-level CMakeLists.txt, cut down to
+# plasmashell, libkworkspace, and the digital clock with what it needs.
+# The rest of plasma-workspace (KRunner,
+# ksmserver, settings pages, applets...) comes later, piece by piece.
+cmake_minimum_required(VERSION 3.16)
+
+project(plasma-workspace)
+set(PROJECT_VERSION "6.4.5")
+string(REPLACE "." ";" VERSION_LIST ${PROJECT_VERSION})
+list(GET VERSION_LIST 0 PROJECT_VERSION_MAJOR)
+list(GET VERSION_LIST 1 PROJECT_VERSION_MINOR)
+list(GET VERSION_LIST 2 PROJECT_VERSION_PATCH)
+
+set(PROJECT_DEP_VERSION "6.4.5")
+set(QT_MIN_VERSION "6.8.0")
+set(KF6_MIN_VERSION "6.14.0")
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(ECM ${KF6_MIN_VERSION} REQUIRED NO_MODULE)
+set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+include(KDEInstallDirs)
+include(KDECMakeSettings)
+include(KDECompilerSettings NO_POLICY_SCOPE)
+include(CMakePackageConfigHelpers)
+include(WriteBasicConfigVersionFile)
+include(CheckIncludeFiles)
+include(FeatureSummary)
+include(ECMOptionalAddSubdirectory)
+include(ECMQtDeclareLoggingCategory)
+include(ECMQueryQt)
+include(ECMConfiguredInstall)
+include(ECMGenerateDBusServiceFile)
+include(ECMFindQmlModule)
+include(ECMGenerateExportHeader)
+include(ECMGenerateQmlTypes)
+include(ECMDeprecationSettings)
+include(ECMQmlModule)
+
+find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Core Concurrent DBus Gui Quick Qml Widgets WaylandClient ShaderTools)
+
+find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS
+    Config CoreAddons Crash DBusAddons GlobalAccel GuiAddons I18n IconThemes KIO
+    Notifications Package Service Solid StatusNotifierItem Svg WidgetsAddons
+    WindowSystem XmlGui ColorScheme)
+find_package(KF6Declarative ${KF6_MIN_VERSION} REQUIRED) # KF6::CalendarEvents
+find_package(KF6ItemModels ${KF6_MIN_VERSION} REQUIRED) # libtaskmanager
+find_package(KF6NewStuff ${KF6_MIN_VERSION} REQUIRED) # Add Widgets (shellprivate)
+find_package(KF6TextWidgets ${KF6_MIN_VERSION} REQUIRED)
+find_package(KF6Runner ${KF6_MIN_VERSION} REQUIRED) # the application menu (kicker)
+find_package(PlasmaActivitiesStats ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(Plasma ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(Plasma5Support ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(PlasmaQuick ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(KWayland ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(PlasmaActivities ${PROJECT_DEP_VERSION} REQUIRED)
+find_package(LayerShellQt ${PROJECT_DEP_VERSION} CONFIG REQUIRED)
+find_package(PlasmaWaylandProtocols 1.6 REQUIRED)
+find_package(Wayland REQUIRED COMPONENTS Client)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(DBus dbus-1 REQUIRED IMPORTED_TARGET) # the task manager's D-Bus QML module
+
+set(HAVE_X11 0)
+set(HAVE_KTEXTEDITOR 0)
+set(HAVE_APPSTREAMQT FALSE)
+set(HAVE_ICU FALSE)
+# kscreenlocker (not built) installs this interface; plasmashell only calls it.
+set(SCREENSAVER_DBUS_INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/org.freedesktop.ScreenSaver.xml")
+set(PLASMA_RELATIVE_DATA_INSTALL_DIR "plasma")
+
+include(ConfigureChecks.cmake)
+include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+
+ecm_set_disabled_deprecation_versions(
+    QT 5.15.2
+    KF 5.98.0
+)
+
+configure_file(config-workspace.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-workspace.h)
+configure_file(config-X11.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-X11.h)
+configure_file(config-appstream.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-appstream.h)
+configure_file(config-KDECI_BUILD.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-KDECI_BUILD.h)
+
+add_definitions(-DQT_NO_URL_CAST_FROM_STRING)
+
+add_subdirectory(libkworkspace)
+add_subdirectory(shell)
+# Plasma's digital clock and the QML modules it imports.
+add_subdirectory(components/workspace)
+add_subdirectory(components/calendar)
+add_subdirectory(components/timezoneselector)
+add_subdirectory(applets/digital-clock)
+add_subdirectory(applets/panelspacer)
+# Windows and launchers (the task manager's library), and the icon widget
+# that starts an app from the panel.
+add_subdirectory(libtaskmanager)
+add_subdirectory(applets/icon)
+# The task manager's QML modules: media players (MPRIS) for its tooltips,
+# and D-Bus calls from QML. The applet itself is plasma-desktop's
+# (build_plasma_desktop_taskmanager).
+add_subdirectory(libkmpris)
+add_subdirectory(components/dbus)
+# Plasma's wallpapers: Image (pick a picture, with its settings page in
+# Configure Desktop and Wallpaper), Slideshow and Plain Color.
+add_subdirectory(wallpapers)
+# The time data engine the clock reads from (with plasma-workspace's
+# dataengines/CMakeLists.txt's settings: data engines aren't ported to them).
+# Editing the desktop and panels: the Add Widgets sidebar's QML module, and
+# the right-click menu (Add Widgets, Enter Edit Mode, panel settings).
+add_subdirectory(components/shellprivate)
+add_subdirectory(containmentactions/contextmenu)
+# The application menu's models, and the hover filter its pages use.
+add_subdirectory(applets/kicker)
+add_subdirectory(components/trianglemousefilter)
+# The desktop containment's widget layout (org.kde.desktopcontainment).
+add_subdirectory(components/containmentlayoutmanager)
+# End Session: KDE's logout screen (an app, ksmserver-logout-greeter), the
+# Breeze look-and-feel package whose Logout.qml it shows, and the QML
+# modules that imports.
+add_subdirectory(components/sessionsprivate)
+add_subdirectory(lookandfeel)
+add_subdirectory(logout-greeter)
+remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_TO_ASCII -DQT_NO_CAST_FROM_BYTEARRAY)
+add_subdirectory(dataengines/time)
+
+ecm_qt_install_logging_categories(
+    EXPORT PLASMAWORKSPACE
+    FILE plasma-workspace.categories
+    DESTINATION ${KDE_INSTALL_LOGGINGCATEGORIESDIR}
+)
+
+feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

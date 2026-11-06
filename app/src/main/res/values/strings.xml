@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DeskDroid</string>
+    <string name="power_menu_service_description">Lets the desktop\'s Restart or Power Off button open Android\'s power menu. DeskDroid reads nothing on your screen.</string>
+    <string name="power_menu_service_label">DeskDroid power menu</string>
 </resources>

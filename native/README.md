@@ -19,6 +19,8 @@ F-Droid builds every APK from source, so DeskDroid ships no prebuilt binaries.
 (stream-decompress the system image) and `ddtool verify <pubkey> <file> <sig>`
 (check its minisign signature, prehashed `ED` format only).
 
+`ddmask/` is ours: see `ddmask/README.md`. `glibc/` and `musl/` build glibc and musl for it from upstream sources: see `glibc/README.md` and `musl/README.md`.
+
 `gpureport/gpureport.c` is ours: prints the phone's OpenGL ES, ANGLE and
 Vulkan driver details for Settings → GPU report, including the Vulkan
 extensions GPU forwarding (Venus) depends on.
@@ -40,6 +42,13 @@ of memfd, AHardwareBuffer memory, DXTn texture decoding). Our change to Termux's
 0007: the default socket is `/tmp/.virgl_test`. Our change to 0010: keep
 detecting `timespec_get`, which API 29 has. 0011 is guarded by
 `DESKDROID_VENUS_AHB`; 0012 adds a missing `VKAPI_ATTR`.
+
+`nativedesk/` is ours: the native desktop test (Settings → Native desktop
+test, `NativeDesk.kt`), the first step of running Plasma as Android code
+(`docs/native-plasma.md`). `compositor.c` (JNI, `libnativedesk.so`) draws
+windows into an Android surface with the phone's own EGL/GLES driver;
+`testclient.c` (`libnativedesk_client.so`) is a stand-in app that renders into
+AHardwareBuffers and hands them over with native fences (`protocol.h`).
 
 `talloc/shim/replace.h` is ours: a small stand-in for Samba's `lib/replace`, so
 talloc builds without Samba's waf configure step.
@@ -64,6 +73,10 @@ Outputs (`app/build/generated/nativeTools/lib/arm64-v8a/`):
 - `libproot-loader.so`: proot's loader (found through `PROOT_LOADER`)
 - `libtalloc.so`: talloc shared library proot links against
 - `libddtool.so`: the installer helper above
+- `libddmask.so`: preloaded into the desktop, starts the app's own programs through Android's linker (`ddmask/README.md`)
+- `libdd_static.so`, `libdd_appimage.so`: ddmask's loader for static programs and its AppImage runner (`ddmask/README.md`)
+- `libdd_ld-musl.so`, `libddmask_musl.so`: musl (loader and C library in one) and ddmask for musl programs (`musl/README.md`)
+- `libdd_ld-glibc.so`, `libddmask_glibc.so`, `libdd_glibc.so`: glibc's loader, ddmask for glibc programs, and glibc's libraries (zipped), so ddmask runs ordinary Linux programs (`glibc/README.md`)
 - `libgpureport.so`: the GPU report tool (NDK builds only)
 - `libvirgl_test_server.so`, `libvirgl_render_server.so`: the Venus server, dma-buf build (NDK builds only)
 - `libvirgl_test_server_ahb.so`, `libvirgl_render_server_ahb.so`: the AHardwareBuffer build

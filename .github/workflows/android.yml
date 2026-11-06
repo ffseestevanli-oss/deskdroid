@@ -18,6 +18,27 @@ jobs:
       # Termux:X11 and its X server sources (xserver, pixman, ...) build from source.
       - name: Fetch submodules
         run: git submodule update --init --recursive --jobs 8 --depth 1
+      # ddmask (native/ddmask), tested on the runner with glibc's loader standing in for Android's.
+      - name: Test ddmask
+        run: native/ddmask/test/run.sh
+      # glibc for ddmask (native/glibc): built with the cross compiler, kept in a
+      # cache keyed on its sources, tested under qemu.
+      - name: Install the glibc cross compiler
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-aarch64-linux-gnu g++-aarch64-linux-gnu bison gawk qemu-user
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/deskdroid/glibc
+          key: glibc-${{ hashFiles('native/glibc/build.sh', 'native/glibc/patch.py') }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/deskdroid/musl
+          key: musl-${{ hashFiles('native/musl/build.sh', 'native/musl/patch.py') }}
+      - name: Build and test glibc and musl
+        run: |
+          native/glibc/build.sh "$RUNNER_TEMP/libc"
+          native/glibc/test/run.sh "$RUNNER_TEMP/libc"
+          native/musl/build.sh "$RUNNER_TEMP/libc"
+          native/musl/test/run.sh "$RUNNER_TEMP/libc"
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -31,6 +52,62 @@ jobs:
       # The Venus server (native/virgl) builds with meson.
       - name: Install meson and ninja
         run: pipx install meson==1.12.1 && pipx install ninja
+      # Native desktop test, stage 2 (docs/native-plasma.md): Qt's prebuilt
+      # Android libraries for the Qt demo. Test-only; nothing else uses Qt.
+      - uses: actions/cache@v4
+        with:
+          path: ~/Qt
+          key: qt-6.8.3-android-arm64
+      - name: Install Qt for Android
+        run: |
+          if [ ! -d ~/Qt/6.8.3/android_arm64_v8a ]; then
+            pipx install aqtinstall
+            aqt install-qt linux desktop 6.8.3 linux_gcc_64 -O ~/Qt
+            aqt install-qt linux android 6.8.3 android_arm64_v8a -O ~/Qt
+          fi
+          echo "DESKDROID_QT_ANDROID=$HOME/Qt/6.8.3/android_arm64_v8a" >> "$GITHUB_ENV"
+          echo "DESKDROID_QT_HOST=$HOME/Qt/6.8.3/gcc_64" >> "$GITHUB_ENV"
+      # Stage 3: DeskDroid's own Qt with KWin, from the Native Plasma deps
+      # workflow's cache (plasma.yml; same paths, or the cache doesn't match).
+      # When it has KWin, the APK uses that Qt and bundles KWin.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/plasma-prefix
+            ~/.cache/deskdroid/plasma
+          key: plasma-deps-apk-${{ github.run_id }}
+          restore-keys: plasma-deps-
+      - name: Use DeskDroid's own Qt and KWin when built
+        run: |
+          if [ -e ~/plasma-prefix/lib/libkwin_wayland.so ]; then
+            sudo apt-get install -y -q patchelf zip libglib2.0-bin
+            echo "DESKDROID_QT_ANDROID=$HOME/plasma-prefix" >> "$GITHUB_ENV"
+            echo "Bundling KWin with DeskDroid's own Qt"
+          else
+            echo "No KWin build in the cache yet: Qt's prebuilt libraries, no KWin"
+          fi
+      # The app store's apps from other repositories (native/store/apps.json),
+      # each from the newest commit of its branch, built into that Qt prefix;
+      # build.sh packages them for the store. One failing doesn't fail the APK.
+      - name: Build the app store's apps
+        continue-on-error: true
+        run: |
+          if [ "$DESKDROID_QT_ANDROID" != "$HOME/plasma-prefix" ]; then echo "No DeskDroid Qt prefix: no store apps"; exit 0; fi
+          sudo apt-get install -y -q librsvg2-bin
+          ndk="$ANDROID_HOME/ndk/$(sed -n 's/.*ndkVersion = "\(.*\)".*/\1/p' app/build.gradle.kts)"
+          QT_HOST_PATH="$DESKDROID_QT_HOST" native/store/build-apps.sh ~/plasma-prefix "$ndk"
+      # Etherium (Firefox; firefox.yml publishes it), packaged for the app store when there is one.
+      - name: Fetch Firefox
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release download firefox-build -p firefox.tar.xz -D ~/firefox-pkg; then
+            echo "DESKDROID_FIREFOX=$HOME/firefox-pkg/firefox.tar.xz" >> "$GITHUB_ENV"
+            ls -la ~/firefox-pkg
+          else
+            echo "No Firefox build published yet"
+          fi
       - uses: actions/cache@v4
         with:
           path: |
@@ -44,6 +121,7 @@ jobs:
           -PdeskdroidRootfsBaseUrl=https://github.com/${{ github.repository }}/releases/download/rootfs-latest/
           -PdeskdroidImagePublicKey="${{ vars.MINISIGN_PUBLIC_KEY }}"
           -PdeskdroidBuildNumber=${{ github.run_number }}
+          -PdeskdroidStoreBaseUrl=https://github.com/${{ github.repository }}/releases/download/${{ github.event_name == 'pull_request' && format('store-pr-{0}', github.event.pull_request.number) || 'store-latest' }}/
       # Fail the build if the APK wouldn't install: bad signature or manifest.
       - name: Check the APK
         run: |
@@ -56,6 +134,18 @@ jobs:
           for f in libvirgl_test_server libvirgl_render_server libvirgl_test_server_ahb libvirgl_render_server_ahb libgpureport; do
             unzip -l "$apk" | grep -q "lib/arm64-v8a/$f.so" || { echo "missing $f.so (Venus)"; exit 1; }
           done
+          for f in libnativedesk libnativedesk_client libnativedesk_qt libQt6Core_arm64-v8a libQt6Quick_arm64-v8a; do
+            unzip -l "$apk" | grep -q "lib/arm64-v8a/$f.so" || { echo "missing $f.so (native desktop test)"; exit 1; }
+          done
+          # With Plasma: its default apps (folders in Dolphin, text in KWrite...) in KWin's data.
+          if unzip -l "$apk" | grep -q "lib/arm64-v8a/libplasmashell.so"; then
+            unzip -p "$apk" lib/arm64-v8a/libkwin_data.so > "$RUNNER_TEMP/kwin_data.zip"
+            unzip -l "$RUNNER_TEMP/kwin_data.zip" | grep -q " share/applications/mimeapps.list$" || { echo "missing mimeapps.list (default apps)"; exit 1; }
+            # KDE knows a file type (and so its apps and defaults) only from share/mime/<type>.xml.
+            for t in inode/directory text/plain application/pdf; do
+              unzip -l "$RUNNER_TEMP/kwin_data.zip" | grep -q " share/mime/$t.xml$" || { echo "missing share/mime/$t.xml (default apps)"; exit 1; }
+            done
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: deskdroid-debug-apk
@@ -79,4 +169,51 @@ jobs:
               while read -r old; do gh release delete-asset apk-latest "$old" --yes; done
           else
             gh release create apk-latest "$name" --title "DeskDroid APK (latest debug build)" --notes "$notes" --latest
+          fi
+      # Pull requests from this repo get their own pre-release (apk-pr-N), so a
+      # test build can be installed from a phone without GitHub's artifact zips.
+      # The app store's catalog and packages (Store.kt): store-latest for main,
+      # store-pr-N for a pull request's test builds, which point there.
+      - name: Publish the app store
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          dir=app/build/generated/nativeTools/store
+          if [ ! -s "$dir/index.json" ]; then echo "No store packages in this build"; exit 0; fi
+          cat "$dir/index.json"
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            tag="store-pr-${{ github.event.pull_request.number }}"; pre=--prerelease
+          else
+            tag=store-latest; pre=
+          fi
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "${{ github.event.pull_request.head.sha || github.sha }}" $pre --latest=false \
+              --title "DeskDroid app store ($tag)" --notes "Apps for DeskDroid's native desktop, installed from its App Store. Not meant to be downloaded by hand."
+          fi
+          # The packages first, the catalog last: a phone reading the catalog
+          # meanwhile still finds the packages it names.
+          gh release upload "$tag" $(ls "$dir"/* | grep -v '/index.json$') --clobber
+          gh release upload "$tag" "$dir/index.json" --clobber
+
+      - name: Publish as the apk-pr-N pre-release
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="apk-pr-${{ github.event.pull_request.number }}"
+          name="deskdroid-pr${{ github.event.pull_request.number }}-build-${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/debug/*.apk "$name"
+          notes="Test build ${{ github.run_number }} (debug) of pull request #${{ github.event.pull_request.number }} (${{ github.event.pull_request.head.sha }}). Not a release: install $name only to try this change; it installs over other builds."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes "$notes" --prerelease --latest=false
+            gh release upload "$tag" "$name" --clobber
+            gh release view "$tag" --json assets -q '.assets[].name' | grep '\.apk$' | grep -vx "$name" |
+              while read -r old; do gh release delete-asset "$tag" "$old" --yes; done
+          else
+            gh release create "$tag" "$name" --target "${{ github.event.pull_request.head.sha }}" \
+              --title "DeskDroid test build for PR #${{ github.event.pull_request.number }}" \
+              --notes "$notes" --prerelease --latest=false
           fi

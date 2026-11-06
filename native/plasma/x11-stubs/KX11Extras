@@ -1,0 +1,46 @@
+// DeskDroid: KWindowSystem's X11-only KX11Extras, as do-nothing stand-ins.
+// KDE code calls these only when KWindowSystem::isPlatformX11(), which is
+// never true here (Wayland only), but still has to compile and link.
+#pragma once
+#include <netwm_def.h>
+#include <QList>
+#include <QPixmap>
+#include <QRect>
+#include <QString>
+#include <QStringList>
+#include <QWindow>
+
+class KX11Extras
+{
+public:
+    static KX11Extras *self() { static KX11Extras s; return &s; }
+    static QList<WId> windows() { return {}; }
+    static bool hasWId(WId) { return false; }
+    static QList<WId> stackingOrder() { return {}; }
+    static WId activeWindow() { return 0; }
+    static void activateWindow(WId, long = 0) { }
+    static void forceActiveWindow(WId, long = 0) { }
+    static void forceActiveWindow(QWindow *, long = 0) { }
+    static bool compositingActive() { return true; }
+    static int currentDesktop() { return 1; }
+    static int numberOfDesktops() { return 1; }
+    static void setCurrentDesktop(int) { }
+    static void setOnAllDesktops(WId, bool) { }
+    static void setOnDesktop(WId, int) { }
+    static void setOnActivities(WId, const QStringList &) { }
+    static QPixmap icon(WId, int = -1, int = -1, bool = false) { return {}; }
+    static void minimizeWindow(WId) { }
+    static void unminimizeWindow(WId) { }
+    static QRect workArea(int = -1) { return {}; }
+    static QRect workArea(const QList<WId> &, int = -1) { return {}; }
+    static QString desktopName(int) { return {}; }
+    static void setDesktopName(int, const QString &) { }
+    static bool mapViewport() { return false; }
+    static void setExtendedStrut(WId, qreal, qreal, qreal, qreal, qreal, qreal, qreal, qreal, qreal, qreal, qreal, qreal) { }
+    static void setStrut(WId, qreal, qreal, qreal, qreal) { }
+    static void setType(WId, NET::WindowType) { }
+    static void clearState(WId, NET::States) { }
+    static void setState(WId, NET::States) { }
+    static bool showingDesktop() { return false; }
+    static void setShowingDesktop(bool) { }
+};

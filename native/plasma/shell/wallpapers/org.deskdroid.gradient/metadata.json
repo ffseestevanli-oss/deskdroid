@@ -1,0 +1,9 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Id": "org.deskdroid.gradient",
+        "License": "GPL-2.0+",
+        "Name": "Gradient"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

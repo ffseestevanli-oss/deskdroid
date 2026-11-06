@@ -22,6 +22,11 @@ android {
             "String", "ROOTFS_BASE_URL",
             "\"${project.findProperty("deskdroidRootfsBaseUrl")}\""
         )
+        // The app store's catalog and packages (Store.kt), a release CI publishes.
+        buildConfigField(
+            "String", "STORE_BASE_URL",
+            "\"${project.findProperty("deskdroidStoreBaseUrl") ?: "https://github.com/ffseestevanli-oss/deskdroid/releases/download/store-latest/"}\""
+        )
         buildConfigField(
             "String", "IMAGE_PUBLIC_KEY",
             "\"${project.findProperty("deskdroidImagePublicKey") ?: ""}\""
@@ -57,6 +62,14 @@ dependencies {
     // has appcompat as an implementation dependency, so name it here too.
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("org.apache.commons:commons-compress:1.27.1")
+    // Native desktop test, stage 2: the Java side of Qt for Android, which
+    // QtHost.kt's Qt demo needs (Qt Quick's library registers natives on
+    // QtQuickView when it loads). Only in builds made with Qt (native/nativedesk/build.sh).
+    System.getenv("DESKDROID_QT_ANDROID")?.let { qt ->
+        // Every Qt module's Java side (Quick, Multimedia, TextToSpeech...): a
+        // module's library fails to load (JNI_OnLoad) without its classes.
+        implementation(fileTree("$qt/jar") { include("Qt6Android*.jar") })
+    }
 }
 
 // proot, its loader, talloc, ddtool, the GPU report tool and the virgl server,

@@ -1,0 +1,104 @@
+diff --git a/Source/Tools/FEXInterpreter/FEXInterpreter.cpp b/Source/Tools/FEXInterpreter/FEXInterpreter.cpp
+index 52bdba1..39e8a78 100644
+--- a/Source/Tools/FEXInterpreter/FEXInterpreter.cpp
++++ b/Source/Tools/FEXInterpreter/FEXInterpreter.cpp
+@@ -63,6 +63,7 @@ $end_info$
+ #include <thread>
+ #include <unistd.h>
+ #include <utility>
++#include <string_view>
+ 
+ #include <sys/sysinfo.h>
+ #include <signal.h>
+@@ -383,7 +384,36 @@ static int StealFEXFDFromEnv(const char* Env) {
+   return FEXFD;
+ }
+ 
++// DeskDroid: the desktop's LD_PRELOAD (ddmask) and LD_LIBRARY_PATH (the
++// APK's library folder) hold Android libraries. FEX itself doesn't read them
++// (DeskDroid's glibc has its own variables), but x86 programs would: their
++// loader complains about each one. Drop them when they're only Android's.
++static bool DeskDroidOnlyAndroid(const char* List, bool Preload) {
++  if (!List || !*List) return false;
++  std::string_view L {List};
++  while (!L.empty()) {
++    auto End = L.find_first_of(Preload ? ": " : ":");
++    auto Item = L.substr(0, End);
++    if (!Item.empty() && !(Preload ? Item.find("libddmask") != std::string_view::npos : Item.starts_with("/data/app/"))) {
++      return false;
++    }
++    if (End == std::string_view::npos) break;
++    L.remove_prefix(End + 1);
++  }
++  return true;
++}
++
++static void DeskDroidCleanEnvironment() {
++  if (DeskDroidOnlyAndroid(getenv("LD_PRELOAD"), true)) {
++    unsetenv("LD_PRELOAD");
++  }
++  if (DeskDroidOnlyAndroid(getenv("LD_LIBRARY_PATH"), false)) {
++    unsetenv("LD_LIBRARY_PATH");
++  }
++}
++
+ int main(int argc, char** argv, char** const envp) {
++  DeskDroidCleanEnvironment();
+   auto SBRKPointer = FEX::SBRKAllocations::DisableSBRKAllocations();
+   FEXCore::Allocator::GLIBCScopedFault GLIBFaultScope;
+ 
+diff --git a/Source/Tools/LinuxEmulation/LinuxSyscalls/Syscalls.cpp b/Source/Tools/LinuxEmulation/LinuxSyscalls/Syscalls.cpp
+index a7a432b..1086f13 100644
+--- a/Source/Tools/LinuxEmulation/LinuxSyscalls/Syscalls.cpp
++++ b/Source/Tools/LinuxEmulation/LinuxSyscalls/Syscalls.cpp
+@@ -58,6 +58,8 @@ $end_info$
+ #include <signal.h>
+ #include <system_error>
+ #include <syscall.h>
++#include <limits.h>
++#include <unistd.h>
+ #include <sys/mman.h>
+ #include <sys/utsname.h>
+ #include <thread>
+@@ -196,6 +198,23 @@ static fextl::string GetShebangInterpFilename(const fextl::string& Filename) {
+   return Interp;
+ }
+ 
++// DeskDroid: Android only execs files from the APK and the system, so FEX
++// and the programs it starts run through ddmask (preloaded into FEX), which
++// wraps the C library's exec calls: exec through execveat(), not the raw
++// system call. FEX starts itself again by its real path, which ddmask gives
++// readlink("/proc/self/exe"); /proc/self/exe is the loader FEX runs under.
++static int DeskDroidExecveat(int dirfd, const char* path, char* const* argv, char* const* envp, int flags) {
++  if (strcmp(path, "/proc/self/exe") == 0) {
++    static char Self[PATH_MAX];
++    ssize_t n = readlink("/proc/self/exe", Self, sizeof(Self) - 1);
++    if (n > 0) {
++      Self[n] = 0;
++      path = Self;
++    }
++  }
++  return ::execveat(dirfd, path, argv, envp, flags);
++}
++
+ uint64_t ExecveHandler(FEXCore::Core::CpuStateFrame* Frame, const char* pathname, char* const* argv, char* const* envp, ExecveAtArgs Args) {
+   auto SyscallHandler = FEX::HLE::_SyscallHandler;
+   Frame->Thread->CTX->FlushAndCloseCodeMap();
+@@ -408,7 +427,7 @@ uint64_t ExecveHandler(FEXCore::Core::CpuStateFrame* Frame, const char* pathname
+   }
+ 
+   if (IsBinfmtCompatible || IsOtherELF || IsForeignShebang) {
+-    Result = ::syscall(SYS_execveat, Args.dirfd, Filename.c_str(), argv, EnvpPtr, Args.flags);
++    Result = DeskDroidExecveat(Args.dirfd, Filename.c_str(), argv, EnvpPtr, Args.flags);
+     CloseSeccompFD();
+     CloseFDExecFD();
+     SYSCALL_ERRNO();
+@@ -458,7 +477,7 @@ uint64_t ExecveHandler(FEXCore::Core::CpuStateFrame* Frame, const char* pathname
+     ExecveArgs.emplace_back(nullptr);
+   }
+ 
+-  Result = ::syscall(SYS_execveat, Args.dirfd, "/proc/self/exe", const_cast<char* const*>(ExecveArgs.data()), EnvpPtr, Args.flags);
++  Result = DeskDroidExecveat(Args.dirfd, "/proc/self/exe", const_cast<char* const*>(ExecveArgs.data()), EnvpPtr, Args.flags);
+   CloseSeccompFD();
+   CloseFDExecFD();
+ 

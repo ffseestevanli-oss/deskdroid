@@ -1,0 +1,22 @@
+name: App store watcher
+
+# The app store ships fixed releases, twice a year like Debian and Ubuntu:
+# native/store/apps.json pins each app to a commit, and only a change to it
+# changes the store (the APK build on main rebuilds and publishes it). Once a
+# week this lists, in the run's summary, the apps whose branch has moved past
+# their pin, ready for the next release. It never changes the store.
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: List apps with commits newer than this release
+        run: native/store/watch.sh

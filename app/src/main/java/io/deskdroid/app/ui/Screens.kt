@@ -319,13 +319,20 @@ class InstallingScreen(a: Activity, n: Navigator) : Screen(a, n) {
 class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private lateinit var childStatus: TextView
     private lateinit var batteryStatus: TextView
+    private lateinit var usageStatus: TextView
+    private lateinit var notesStatus: TextView
     private lateinit var filesStatus: TextView
+    // Opened again later (Settings, or Home's warning): Back instead of the setup's Continue.
+    private val again = Prefs.setupDone(a)
 
     override fun build() = page(listOf(Triple(0.85f, 0.2f, Party.GREEN))) {
         addView(ui.column(6) {
             addView(ui.row {
-                addView(ui.kicker("Step 3 / 3 · "))
-                addView(ui.kicker("Installed", Party.GREEN))
+                if (again) addView(ui.kicker("Battery + background"))
+                else {
+                    addView(ui.kicker("Setup · "))
+                    addView(ui.kicker("Battery", Party.GREEN))
+                }
             })
             addView(ui.heading("Don't let Android kill the party"))
             addView(ui.text("Android shuts down apps that run lots of programs. A desktop does exactly that.", 14f, Party.MUTED))
@@ -357,11 +364,27 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
         }, LinearLayout.LayoutParams(-1, -2))
         addView(ui.accentRow(Party.CYAN, Party.CARD) {
             addView(ui.weight(ui.column(2) {
-                addView(ui.text("Background + notifications", 15f, Party.TEXT, 700))
+                addView(ui.text("Battery optimization", 15f, Party.TEXT, 700))
                 batteryStatus = ui.text("", 13f, Party.MUTED)
                 addView(batteryStatus)
             }))
-            setOnClickListener { fixBattery() }
+            setOnClickListener { if (!Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c) else Checks.openAppInfo(c) }
+        }, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.accentRow(Party.GREEN, Party.CARD) {
+            addView(ui.weight(ui.column(2) {
+                addView(ui.text("Background usage", 15f, Party.TEXT, 700))
+                usageStatus = ui.text("", 13f, Party.MUTED)
+                addView(usageStatus)
+            }))
+            setOnClickListener { Checks.openAppInfo(c) }
+        }, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.accentRow(Party.PINK, Party.CARD) {
+            addView(ui.weight(ui.column(2) {
+                addView(ui.text("Status notification", 15f, Party.TEXT, 700))
+                notesStatus = ui.text("", 13f, Party.MUTED)
+                addView(notesStatus)
+            }))
+            setOnClickListener { fixNotifications() }
         }, LinearLayout.LayoutParams(-1, -2))
         addView(ui.accentRow(Party.PURPLE, Party.CARD) {
             addView(ui.weight(ui.column(2) {
@@ -381,8 +404,11 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
             "Fingerprint or PIN to open DeskDroid.", Prefs.lockDesktop(c)) { on -> Prefs.setLockDesktop(c, on) },
             LinearLayout.LayoutParams(-1, -2))
         spacer()
-        addView(ui.primaryButton("Continue") { finish() }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.linkButton("Skip for now", Party.MUTED) { finish() }, LinearLayout.LayoutParams(-1, -2))
+        if (again) addView(ui.primaryButton("Done") { nav.back() }, LinearLayout.LayoutParams(-1, -2))
+        else {
+            addView(ui.primaryButton("Continue") { finish() }, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.linkButton("Skip for now", Party.MUTED) { finish() }, LinearLayout.LayoutParams(-1, -2))
+        }
     }
 
     override fun onShow() = refresh()
@@ -397,12 +423,19 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
         }
         val battery = Checks.batteryUnrestricted(c)
         val notes = Checks.notificationsAllowed(c)
-        batteryStatus.text = when {
-            battery && notes -> "All set"
-            !battery -> "Tap to turn battery optimization off"
-            else -> "Tap to allow the status notification"
+        val restricted = Checks.backgroundRestricted(c)
+        batteryStatus.text = if (battery) "Off. Android won't put the desktop to sleep to save battery."
+            else "On. Tap and choose Allow, or Android may stop the desktop while it runs in the background."
+        batteryStatus.setTextColor(if (battery) Party.GREEN else Party.ORANGE)
+        usageStatus.text = when {
+            restricted -> "Restricted. Tap, then App battery usage › Unrestricted."
+            battery -> "Unrestricted. To check: App battery usage in App info."
+            else -> "Tap, then App battery usage › Unrestricted (Allow background usage on)."
         }
-        batteryStatus.setTextColor(if (battery && notes) Party.GREEN else Party.MUTED)
+        usageStatus.setTextColor(if (battery && !restricted) Party.GREEN else Party.MUTED)
+        notesStatus.text = if (notes) "Allowed. The desktop keeps a notification while it runs, so Android keeps it alive."
+            else "Tap to allow it. Without it Android may stop the desktop sooner."
+        notesStatus.setTextColor(if (notes) Party.GREEN else Party.MUTED)
         val files = Storage.granted(c)
         filesStatus.text = if (files) "All set. Your phone's storage shows up on the desktop as a drive called Phone."
             else "Tap to allow All files access, so the desktop can open and save files on your phone"
@@ -426,10 +459,15 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
             .setPositiveButton("OK", null).show()
     }
 
-    private fun fixBattery() {
-        if (!Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c)
-        else if (android.os.Build.VERSION.SDK_INT >= 33)
+    private fun fixNotifications() {
+        if (Checks.notificationsAllowed(c)) return
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            !c.shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS) &&
+            c.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            !Prefs.askedNotifications(c)) {
+            Prefs.setAskedNotifications(c)
             c.requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 0)
+        } else Checks.openNotificationSettings(c)
     }
 
     private fun finish() {
@@ -443,7 +481,8 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private lateinit var monitorInfo: LinearLayout
     private lateinit var status: TextView
     private lateinit var startButton: TextView
-    private lateinit var filesValue: TextView
+    private var filesValue: TextView? = null
+    private var batteryValue: TextView? = null
     private val statusListener: (String) -> Unit = { refreshStatus() }
 
     override fun build() = page(listOf(Triple(0.15f, 0.25f, Party.PURPLE)), top = 48) {
@@ -487,20 +526,14 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
 
         addView(ui.column(8) {
             addView(ui.text("QUICK SETTINGS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-            addView(settingRow("Touch mode", if (Prefs.touchMode(c) == "direct") "Direct touch" else "Touchpad") {
-                nav.go(SettingsScreen(activity, nav))
-            })
-            addView(settingRow("Graphics", GpuProfile.describe(GpuProfile.resolve(Prefs.gpuMode(c), Paths(c)))
-                .let { if (Prefs.gpuMode(c) == "auto") "Automatic · $it" else it }
-                .let { if (Prefs.sessionType(c) == "wayland") "Wayland · $it" else it }) {
-                nav.go(SettingsScreen(activity, nav))
-            })
-            addView(settingRow("System", "${Paths(c).installedEdition ?: "?"} edition") {
+            addView(settingRow("Touch mode", Prefs.TOUCH_MODE_LABELS[maxOf(0, Prefs.TOUCH_MODES.indexOf(Prefs.touchMode(c)))]) {
                 nav.go(SettingsScreen(activity, nav))
             })
             addView(settingRow("Phone files", "") {
                 if (Storage.granted(c)) nav.go(SettingsScreen(activity, nav)) else Storage.request(activity)
             }.also { filesValue = it.getChildAt(it.childCount - 1) as TextView })
+            addView(settingRow("Battery", "") { nav.go(KeepRunningScreen(activity, nav)) }
+                .also { batteryValue = it.getChildAt(it.childCount - 1) as TextView })
         }, LinearLayout.LayoutParams(-1, -2))
         renderMonitor()
     }
@@ -528,16 +561,24 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
         monitorInfo.addView(ui.text("Full screen on the monitor. Phone touchpad mode and DeX-style windows come next.", 12f, Party.MUTED))
     }
 
+    private fun isHomeApp(): Boolean {
+        val home = android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME)
+        return c.packageManager.resolveActivity(home, 0)?.activityInfo?.packageName == c.packageName
+    }
+
     private fun startOrOpen() {
+        if (io.deskdroid.app.NativeDesk.running || isHomeApp()) return
         val display = if (onMonitor) externalDisplay()?.displayId ?: Display.DEFAULT_DISPLAY else Display.DEFAULT_DISPLAY
-        SessionService.start(c, display)
+        io.deskdroid.app.NativeSession.start(c, display)
     }
 
     override fun onShow() {
         AppLog.statusListener = statusListener
         refreshStatus()
         renderMonitor()
-        filesValue.text = if (Storage.granted(c)) "Shared ›" else "Not shared · tap to allow ›"
+        filesValue?.text = if (Storage.granted(c)) "Shared ›" else "Not shared · tap to allow ›"
+        batteryValue?.text = if (Checks.batteryUnrestricted(c) && !Checks.backgroundRestricted(c)) "Unrestricted ›" else "Optimized · tap to fix ›"
+        batteryValue?.setTextColor(if (Checks.batteryUnrestricted(c) && !Checks.backgroundRestricted(c)) Party.MUTED else Party.ORANGE)
     }
 
     override fun onHide() {
@@ -545,9 +586,19 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
     }
 
     private fun refreshStatus() {
-        val running = SessionService.running
+        val running = io.deskdroid.app.NativeDesk.running
         status.text = if (running) "LIVE" else "READY"
-        startButton.text = if (running) "OPEN DESKTOP" else "START DESKTOP"
+        // Running already, or DeskDroid is the home app (Home opens the desktop):
+        // the button is greyed out.
+        val home = isHomeApp()
+        startButton.text = when {
+            running -> "DESKTOP RUNNING"
+            home -> "PRESS HOME FOR THE DESKTOP"
+            else -> "START DESKTOP"
+        }
+        startButton.isEnabled = !running && !home
+        startButton.isClickable = !running && !home
+        startButton.alpha = if (running || home) 0.4f else 1f
     }
 }
 
@@ -560,87 +611,28 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.heading("Settings", 22f))
 
         addView(ui.text("TOUCH MODE", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        addView(Segmented(ui, listOf("Touchpad", "Direct touch"), if (Prefs.touchMode(c) == "direct") 1 else 0) { i ->
-            Prefs.setTouchMode(c, if (i == 1) "direct" else "touchpad")
-            DesktopDefaults.applyTouchMode(c)
+        addView(Segmented(ui, Prefs.TOUCH_MODE_LABELS, maxOf(0, Prefs.TOUCH_MODES.indexOf(Prefs.touchMode(c)))) { i ->
+            Prefs.setTouchMode(c, Prefs.TOUCH_MODES[i])
         }.view, LinearLayout.LayoutParams(-1, -2))
 
-        addView(ui.text("DESKTOP SCALE", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val scales = listOf(1f, 1.25f, 1.5f, 0f)
-        addView(Segmented(ui, listOf("100%", "125%", "150%", "Auto"), scales.indexOf(Prefs.scale(c)).coerceAtLeast(0)) { i ->
-            Prefs.setScale(c, scales[i])
-        }.view, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("Applies the next time the desktop starts. Zoom in the desktop's side drawer enlarges " +
-            "everything on top of this. Auto picks from your screen's density.", 13f, Party.MUTED))
-
-        addView(ui.text("DESKTOP SESSION", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val sessions = listOf("x11", "wayland")
-        addView(Segmented(ui, listOf("Plasma X11", "Wayland (experimental)"),
-            sessions.indexOf(Prefs.sessionType(c)).coerceAtLeast(0)) { i ->
-            Prefs.setSessionType(c, sessions[i])
-        }.view, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("Applies the next time the desktop starts. Wayland runs Plasma's Wayland session inside the " +
-            "display server. KWin draws the desktop in software there; apps use the graphics setting below. It needs a system image " +
-            "that includes it; older images start X11 instead. Light and Full editions only.", 13f, Party.MUTED))
-
-        addView(ui.text("GRAPHICS", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val modes = listOf("auto", "venus", "llvmpipe", "nocomp", "turnip")
-        val labels = listOf("Automatic", "GPU via Venus (experimental)", "Software (llvmpipe)", "Software, effects off",
-            "Adreno (Turnip + Zink)")
-        val gpuGroup = ui.column(6)
-        fun renderGpu() {
-            gpuGroup.removeAllViews()
-            modes.forEachIndexed { i, m ->
-                val on = Prefs.gpuMode(c) == m
-                gpuGroup.addView(ui.text(labels[i], 14f, if (on) Party.TEXT else Party.MUTED, if (on) 700 else 400).apply {
-                    setPadding(c.dp(14), c.dp(10), c.dp(14), c.dp(10))
-                    background = ChamferDrawable(0f, fill = if (on) Party.CARD_ON else Party.SURFACE,
-                        stroke = if (on) Party.PINK else null, strokeWidth = c.dp(1f), cutTopLeft = false, cutBottomRight = false)
-                    setOnClickListener { Prefs.setGpuMode(c, m); renderGpu() }
-                }, LinearLayout.LayoutParams(-1, -2))
-            }
-        }
-        renderGpu()
-        addView(gpuGroup, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("VENUS GPU MEMORY", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
-        val memModes = listOf("auto", "dmabuf", "ahb")
-        addView(Segmented(ui, listOf("Automatic", "dma-buf", "AHardwareBuffer"),
-            memModes.indexOf(Prefs.venusMemory(c)).coerceAtLeast(0)) { i ->
-            Prefs.setVenusMemory(c, memModes[i])
-        }.view, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.switchRow(null, "Desktop effects on the GPU", "Venus mode only. Off keeps KWin on software " +
-            "rendering, which is the stable choice; apps use the GPU either way.", Prefs.gpuDesktop(c)) {
-            Prefs.setGpuDesktop(c, it)
-        }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("Changes apply the next time the desktop starts. Automatic uses Turnip on Adreno and software " +
-            "rendering on other GPUs. Venus gives Linux apps Vulkan and OpenGL (through Zink) on Mali and PowerVR " +
-            "GPUs. If apps crash or draw garbage there, try the other GPU memory mode.", 12f, Party.MUTED))
+        addView(ui.outlineButton("Battery + background", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
+            LinearLayout.LayoutParams(-1, -2))
         addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
 
-        addView(ui.switchRow(null, "Start on phone boot", "Desktop starts in the background after you unlock.", Prefs.autoStart(c)) {
-            Prefs.setAutoStart(c, it)
-            if (it && !Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c)
-        }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.switchRow(null, "Lock my desktop", "Fingerprint or PIN to open DeskDroid.", Prefs.lockDesktop(c)) {
-            Prefs.setLockDesktop(c, it)
-        }, LinearLayout.LayoutParams(-1, -2))
         addView(ui.text("PHONE FILES", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
         files = ui.outlineButton("", Party.PURPLE, Party.PURPLE) { Storage.request(activity) }
         addView(files, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.text("With All files access, your phone's storage shows up on the desktop like a USB drive: " +
-            "Phone and Camera in Dolphin's sidebar, at ${Storage.MOUNT} (also /sdcard). The Linux home folder " +
-            "stays separate. Android's own folder is hidden; Show hidden files in Dolphin reveals it. Applies " +
-            "the next time the desktop starts.", 13f, Party.MUTED))
-        addView(ui.outlineButton("Background limits", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
-            LinearLayout.LayoutParams(-1, -2))
-        addView(ui.outlineButton("Reinstall the system", Party.RED, Party.RED) { confirmReinstall() },
-            LinearLayout.LayoutParams(-1, -2))
+        addView(ui.text("With All files access, the desktop's Documents, Downloads, Pictures, Music and Videos " +
+            "are your phone's own folders, so files show up in Android apps too. The rest of the desktop's " +
+            "home folder (settings and app data) stays private to DeskDroid. Applies the next time the " +
+            "desktop starts.", 13f, Party.MUTED))
+
 
         addView(ui.text("LOG", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
         addView(ui.outlineButton("Save log to Downloads", Party.CYAN, Party.CYAN) { saveLog() },
             LinearLayout.LayoutParams(-1, -2))
-        log = ui.text(AppLog.text(), 11f, Party.MUTED).apply {
+        log = ui.text(logTail(AppLog.text()), 11f, Party.MUTED).apply {
             typeface = android.graphics.Typeface.MONOSPACE
             setTextIsSelectable(true)
         }
@@ -673,23 +665,15 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         android.widget.Toast.makeText(c, msg, android.widget.Toast.LENGTH_LONG).show()
     }
 
-    private val logListener: (String) -> Unit = { log.text = it }
+    // The last lines only: the whole log (thousands of lines) made this page slow
+    // to open and scroll. Save log has all of it.
+    private fun logTail(text: String) = text.takeLast(12_000).substringAfter('\n')
+    private val logListener: (String) -> Unit = { log.text = logTail(it) }
     override fun onShow() {
         AppLog.listener = logListener
         files.text = if (Storage.granted(c)) "Phone storage shared ✓ · manage" else "Share phone storage"
     }
     override fun onHide() { if (AppLog.listener === logListener) AppLog.listener = null }
-
-    private fun confirmReinstall() {
-        AlertDialog.Builder(c)
-            .setTitle("Reinstall the system?")
-            .setMessage("Downloads a fresh image. Your home folder is kept; apps you installed are removed.")
-            .setPositiveButton("Reinstall") { _, _ ->
-                SessionService.stop(c)
-                nav.replace(InstallScreen(activity, nav))
-            }
-            .setNegativeButton("Cancel", null).show()
-    }
 }
 
 /** What the phone's GPU drivers offer (native/gpureport), to copy or share when reporting GPU problems. */
