@@ -336,19 +336,36 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             // Back from the background: the desktop kept running, show it again.
             started = NativeDesk.nativeStart(holder.surface)
             AppLog.i(if (started) "Native desktop: back on screen" + (if (external) " (monitor)" else "") else "Native desktop: couldn't show it again")
-            if (started) { tookSurface(); main.post(tick) }
+            if (started) { stats.visibility = android.view.View.GONE; tookSurface(); main.post(tick) }
             return
         }
+        firstStart(holder, 0)
+    }
+
+    /**
+     * The compositor's first start. Right after an update the old process can
+     * still hold the compositor's socket for a moment, so a failed start is
+     * tried again for a few seconds before the error shows.
+     */
+    private fun firstStart(holder: SurfaceHolder, attempt: Int) {
+        if (!holder.surface.isValid || NativeDesk.running) return
         started = NativeDesk.nativeStart(holder.surface)
-        if (started) tookSurface()
-        NativeDesk.running = started
-        if (started) startForegroundService(android.content.Intent(this, NativeDeskService::class.java))
-        AppLog.i(if (started) "Native desktop test started" else "Native desktop test couldn't start (see logcat: nativedesk)")
         if (!started) {
+            if (attempt < 15) {
+                if (attempt == 0) AppLog.i("Native desktop test couldn't start yet, trying again (see logcat: nativedesk)")
+                main.postDelayed({ firstStart(holder, attempt + 1) }, 400)
+                return
+            }
+            AppLog.i("Native desktop test couldn't start (see logcat: nativedesk)")
             stats.visibility = android.view.View.VISIBLE
             stats.text = "The native compositor couldn't start on this GPU."
             return
         }
+        stats.visibility = android.view.View.GONE
+        tookSurface()
+        NativeDesk.running = true
+        startForegroundService(android.content.Intent(this, NativeDeskService::class.java))
+        AppLog.i("Native desktop test started" + if (attempt > 0) " (try ${attempt + 1})" else "")
         if (File(applicationInfo.nativeLibraryDir, "libkwin_wayland.so").exists()) {
             // Stage 3: KWin is the desktop, fullscreen on the compositor.
             startKWin()
