@@ -141,6 +141,10 @@ jobs:
           if unzip -l "$apk" | grep -q "lib/arm64-v8a/libplasmashell.so"; then
             unzip -p "$apk" lib/arm64-v8a/libkwin_data.so > "$RUNNER_TEMP/kwin_data.zip"
             unzip -l "$RUNNER_TEMP/kwin_data.zip" | grep -q " share/applications/mimeapps.list$" || { echo "missing mimeapps.list (default apps)"; exit 1; }
+            # KDE knows a file type (and so its apps and defaults) only from share/mime/<type>.xml.
+            for t in inode/directory text/plain application/pdf; do
+              unzip -l "$RUNNER_TEMP/kwin_data.zip" | grep -q " share/mime/$t.xml$" || { echo "missing share/mime/$t.xml (default apps)"; exit 1; }
+            done
           fi
       - uses: actions/upload-artifact@v4
         with:

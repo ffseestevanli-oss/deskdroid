@@ -410,6 +410,13 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       else
         echo "   gsettings: no schemas in the prefix, or no glib-compile-schemas"
       fi
+      # KDE's MIME types (share/mime), written again here: the prefix's lost
+      # them to update-mime-database (mime-types.py). Without them no file or
+      # folder has a default app, and Open With choices aren't remembered.
+      fdo=/usr/share/mime/packages/freedesktop.org.xml
+      [ -e "$fdo" ] || sudo apt-get install -y shared-mime-info >/dev/null
+      python3 "$HERE/mime-types.py" "$WORK/shell/share/mime" "$fdo" \
+        $(ls "$DESKDROID_QT_ANDROID"/share/mime/packages/*.xml 2>/dev/null | grep -v '/freedesktop.org.xml$')
       (cd "$WORK/shell" && zip -qr -X "$OUT/libkwin_data.so" share)
       for root in "${qmlroots[@]}"; do
         (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
@@ -419,7 +426,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       [ -d "$WORK/gtkshare" ] && (cd "$WORK/gtkshare" && zip -qr -X "$OUT/libkwin_data.so" share)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
-        $(ls -d share/applications share/mime share/kxmlgui5 share/config.kcfg share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
+        $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
         -x $(for a in "${store_apps[@]}" "${store_programs[@]}"; do echo "share/applications/*$a*"; done))
     fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
