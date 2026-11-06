@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- DeskDroid: GTK's "image-missing" icon for GIMP (GTK aborts when a
+       theme has none; Android has no Adwaita theme to supply it). -->
+  <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="#f6f5f4" stroke="#77767b"/>
+  <path d="M4 4l8 8M12 4l-8 8" stroke="#c01c28" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

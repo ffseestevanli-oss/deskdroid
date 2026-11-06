@@ -281,6 +281,21 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
           # Script plug-ins (Python, JavaScript, Lua) have no interpreter on the phone.
           find "$P/lib/gimp" -type f -print0 | while IFS= read -r -d '' f; do
             [ "$(head -c 2 "$f" | tr -d '\0')" = '#!' ] && rm -f "$f"; true; done
+          # GTK aborts when an icon is missing and the theme has no
+          # "image-missing" either; on Linux Adwaita supplies it, here GIMP's
+          # own themes get one (native/nativedesk/gimp).
+          for theme in "$P"/share/gimp/3.0/icons/*/; do
+            for d in "$theme"*x*/apps; do
+              [ -d "$d" ] || continue
+              size="${d%/apps}"; size="${size##*/}"; size="${size%%x*}"
+              src="$HERE/gimp/image-missing-$size.png"
+              [ -e "$src" ] || src="$HERE/gimp/image-missing-24.png"
+              cp "$src" "$d/image-missing.png"
+              # Its own window icon, which it looks for under its build's prefix.
+              icon="$DESKDROID_QT_ANDROID/share/icons/hicolor/${size}x${size}/apps/gimp.png"
+              [ -e "$icon" ] && cp "$icon" "$d/gimp.png"
+            done
+          done
           echo bin/gimp-3.2 > "$pkg/program.txt"
           printf '%s\n' GIMP3_DATADIR=@PROGRAM@/share/gimp/3.0 GIMP3_PLUGINDIR=@PROGRAM@/lib/gimp/3.0 \
             GIMP3_SYSCONFDIR=@PROGRAM@/etc/gimp/3.0 BABL_PATH=@PROGRAM@/lib/babl-0.1 GEGL_PATH=@PROGRAM@/lib/gegl-0.4 \
