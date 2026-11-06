@@ -1214,7 +1214,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
 
     private val touchpad = Touchpad()
-    private val touchScreen by lazy { TouchScreen(this) }
+    private val touchScreen by lazy { TouchScreen(surfaceView) }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (!started) return false
