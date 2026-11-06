@@ -59,6 +59,9 @@ object NativeDesk {
     @JvmStatic @androidx.annotation.Keep
     fun onIme(show: Boolean) {
         Handler(Looper.getMainLooper()).post {
+            // Manual keyboard (the default): a text field doesn't open it, only the menu does.
+            val c = touchpad?.get() ?: activity?.get()
+            if (show && c != null && !Prefs.autoKeyboard(c)) return@post
             // On a monitor the keyboard belongs to the phone's touchpad screen.
             touchpad?.get()?.softKeyboard(show) ?: (activity?.get() as? NativeDeskActivity)?.softKeyboard(show)
         }
@@ -278,6 +281,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             addView(stats, FrameLayout.LayoutParams(-2, -2))
             addView(buildMenu(), FrameLayout.LayoutParams(-1, -1))
         })
+        applyKeepAwake()
         // Dodge display cutouts: tell KWin which screen edges the camera cutout
         // and rounded corners hide, again whenever they move (rotation).
         window.decorView.setOnApplyWindowInsetsListener { v, insets ->
@@ -1118,6 +1122,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 Prefs.setDodgeCutouts(context, i == 1)
                 sendSafeArea()
             }.view, LinearLayout.LayoutParams(-1, -2))
+            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Keyboard: manual", "Automatic"),
+                if (Prefs.autoKeyboard(context)) 1 else 0) { i ->
+                Prefs.setAutoKeyboard(context, i == 1)
+            }.view, LinearLayout.LayoutParams(-1, -2))
+            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Screen may sleep", "Keep awake"),
+                if (Prefs.keepAwake(context)) 1 else 0) { i ->
+                Prefs.setKeepAwake(context, i == 1)
+                applyKeepAwake()
+            }.view, LinearLayout.LayoutParams(-1, -2))
             val grid = listOf(
                 ui.tile("Keyboard", io.deskdroid.app.ui.Party.CYAN) { showMenu(false); toggleKeyboard() },
                 scaleTile,
@@ -1139,6 +1152,12 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         menu.addView(panel, FrameLayout.LayoutParams(dp(304), -1, android.view.Gravity.END))
         return menu
+    }
+
+    /** The menu's Keep awake: the screen stays on while the desktop shows. */
+    protected open fun applyKeepAwake() {
+        val flag = android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        if (Prefs.keepAwake(this)) window.addFlags(flag) else window.clearFlags(flag)
     }
 
     private fun scaleLabel() = Prefs.nativeScale(this).let { if (it == 0f) "Scale: auto" else "Scale ${"%.2f".format(it).trimEnd('0').trimEnd('.')}×" }
@@ -1320,6 +1339,8 @@ class ExternalDeskActivity : NativeDeskActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
+
+    override fun applyKeepAwake() {} // always on (above)
 }
 
 /**

@@ -29,7 +29,14 @@ class NativeDeskService : Service() {
 
     private fun notification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Plasma desktop", NotificationManager.IMPORTANCE_LOW))
+        // As the phone's home app the desktop is always there: its notification
+        // goes in a minimal channel (no status bar icon, folded at the bottom).
+        val home = packageManager.resolveActivity(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+        )?.activityInfo?.packageName == packageName
+        val channel = if (home) CHANNEL_HOME else CHANNEL
+        if (home) nm.createNotificationChannel(NotificationChannel(CHANNEL_HOME, "Plasma desktop (home app)", NotificationManager.IMPORTANCE_MIN))
+        else nm.createNotificationChannel(NotificationChannel(CHANNEL, "Plasma desktop", NotificationManager.IMPORTANCE_LOW))
         val show = PendingIntent.getActivity(
             this, 10, Intent(this, NativeDeskActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE
@@ -38,7 +45,7 @@ class NativeDeskService : Service() {
             this, 11, Intent(this, NativeDeskService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE
         )
-        return Notification.Builder(this, CHANNEL)
+        return Notification.Builder(this, channel)
             .setContentTitle("DeskDroid")
             .setContentText("Plasma desktop running · tap to open")
             .setSmallIcon(R.drawable.ic_notification)
@@ -51,6 +58,7 @@ class NativeDeskService : Service() {
     companion object {
         const val ACTION_STOP = "io.deskdroid.app.NATIVE_STOP"
         private const val CHANNEL = "nativedesk"
+        private const val CHANNEL_HOME = "nativedesk-home"
         private const val ID = 4
     }
 }

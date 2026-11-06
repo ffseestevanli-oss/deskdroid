@@ -44,6 +44,14 @@ object Prefs {
     fun dodgeCutouts(c: Context) = prefs(c).getBoolean("dodge_cutouts", true)
     fun setDodgeCutouts(c: Context, on: Boolean) = prefs(c).edit().putBoolean("dodge_cutouts", on).apply()
 
+    /** The phone's keyboard opens by itself for a desktop text field (else only from the menu). */
+    fun autoKeyboard(c: Context) = prefs(c).getBoolean("auto_keyboard", false)
+    fun setAutoKeyboard(c: Context, on: Boolean) = prefs(c).edit().putBoolean("auto_keyboard", on).apply()
+
+    /** The screen stays on while the desktop is showing. */
+    fun keepAwake(c: Context) = prefs(c).getBoolean("keep_awake", false)
+    fun setKeepAwake(c: Context, on: Boolean) = prefs(c).edit().putBoolean("keep_awake", on).apply()
+
     fun setupDone(c: Context) = prefs(c).getBoolean("setup_done", false)
     fun setSetupDone(c: Context, on: Boolean) = prefs(c).edit().putBoolean("setup_done", on).apply()
 
