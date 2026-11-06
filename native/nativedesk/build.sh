@@ -382,6 +382,10 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       # DeskDroid's wallpaper (the Debian desktop's), the default without the phone's.
       mkdir -p "$WORK/shell/share/wallpapers"
       cp -r "$HERE/../plasma/shell/images/DeskDroid" "$WORK/shell/share/wallpapers/"
+      # Default apps (folders in Dolphin, text in KWrite...), where KDE reads
+      # the system's mimeapps.list from: XDG_DATA_DIRS/applications.
+      mkdir -p "$WORK/shell/share/applications"
+      cp "$HERE/mimeapps.list" "$WORK/shell/share/applications/mimeapps.list"
       (cd "$WORK/shell" && zip -qr -X "$OUT/libkwin_data.so" share)
       for root in "${qmlroots[@]}"; do
         (cd "$root" && find qml -type f ! -name '*.so' ! -name '*.qmltypes' ! -name '*.metainfo' \
