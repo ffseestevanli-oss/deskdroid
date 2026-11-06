@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Lock emblems on files the app can read and write.
 
+(Second part, at the end: local files ask access() instead.)
+
 KFileItem decides whether a file is readable/writable from its owner and
 group: for a file owned by someone else, it asks whether the user is in the
 file's group through KUser::groups() (getgrouplist). Bionic only reports the
@@ -39,4 +41,11 @@ static bool deskdroidInGroup(gid_t gid)
     return false;
 }
 """, 1)
+# Shared storage (/storage/emulated, a FUSE file system) reports owners and
+# groups the app's process doesn't match even with its real groups, so for
+# local files ask the kernel (access(), through QFileInfo) instead of
+# guessing from owner, group and mode.
+old = "        const auto uidOfItem = userId();\n"
+assert t.count(old) == 2, "uid checks"
+t = t.replace(old, "        const auto uidOfItem = d->m_bIsLocalUrl ? -1 : userId();\n")
 open(p, "w").write(t)

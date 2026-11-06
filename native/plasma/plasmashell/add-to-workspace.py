@@ -68,6 +68,15 @@ edit("components/shellprivate/plasmaappletitemmodel.cpp",
      'if (!plugin.isValid() || plugin.rawData().value(u"NoDisplay").toBool()',
      'if (!plugin.isValid() || plugin.name().isEmpty() /* DeskDroid */ || plugin.rawData().value(u"NoDisplay").toBool()')
 
+# Add Widgets → Get New Widgets → Install Widget From Local File: after
+# showing its file dialog it emits shouldClose, which closes Add Widgets and
+# deletes the menu whose click handler is still running; Qt then aborts
+# plasmashell ("destroyed while one of its QML signal handlers is in
+# progress"). Close it once the click is over.
+edit("components/shellprivate/widgetexplorer.cpp",
+     "    dialog->show();\n\n    Q_EMIT shouldClose();",
+     "    dialog->show();\n\n    QMetaObject::invokeMethod(this, &WidgetExplorer::shouldClose, Qt::QueuedConnection); // DeskDroid")
+
 # MPRIS for the task manager, without its KDED module (no kded here).
 edit("libkmpris/CMakeLists.txt", "add_subdirectory(kded)", "# add_subdirectory(kded)")
 

@@ -602,6 +602,7 @@ build_kio() {
   grep -q "kioworker LIBRARY DESTINATION" "$s/src/kioworker/CMakeLists.txt"
   python3 "$HERE/patches/kio/preview-plugins.py" "$s"
   python3 "$HERE/patches/kio/fileitem-groups.py" "$s"
+  python3 "$HERE/patches/kio/diroperator-path.py" "$s"
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DWITH_WAYLAND=ON
 }
@@ -1228,13 +1229,6 @@ build_plasma_desktop_packages() {
   # Add Widgets) under DeskDroid's shell; its own files go over these.
   python3 "$HERE/patches/desktoppackage/shell-from-desktop.py" "$s" "$PREFIX/share/plasma/shells/org.deskdroid.desktop"
   test -e "$PREFIX/share/plasma/shells/org.deskdroid.desktop/contents/configuration/PanelConfiguration.qml"
-  # Add Widgets → Get New Widgets → Install from Local File: its file dialog
-  # runs a nested event loop inside the menu's click handler, the menu is
-  # deleted meanwhile and Qt aborts plasmashell ("destroyed while one of its
-  # QML signal handlers is in progress"). Run the action after the click.
-  local we="$PREFIX/share/plasma/shells/org.deskdroid.desktop/contents/explorer/WidgetExplorer.qml"
-  sed -i 's/^\( *\)onClicked: model.trigger()$/\1onClicked: model => { const action = model; Qt.callLater(() => action.trigger()) }/' "$we"
-  grep -q "Qt.callLater(() => action.trigger())" "$we"
   # The application menu.
   rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff"
   cp -r "$s/applets/kickoff/package" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff"
