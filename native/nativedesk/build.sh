@@ -80,6 +80,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # The ones from other repositories (native/store/apps.json) are built into
     # the prefix by native/store/build-apps.sh first.
     store_apps=(gwenview kate kcalc konsole $(jq -r '.apps[].id' "$HERE/../store/apps.json" 2>/dev/null))
+    # Store apps that are whole folders of programs and libraries, packaged below too.
+    store_programs=()
+    [ -x "$DESKDROID_QT_ANDROID/bin/gimp-3.2" ] && store_programs+=(gimp)
     for app in dolphin kioworker ksmserver-logout-greeter kwrite; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
@@ -105,6 +108,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       install -m 755 "$HERE/qtapp.sh" "$OUT/libdd_qtapp.so"
       # Open with Android app: bin/android-open (android-open.sh).
       install -m 755 "$HERE/android-open.sh" "$OUT/libdd_android-open.so"
+      # The app store's programs (GIMP...): bin/<app> (store-program.sh).
+      install -m 755 "$HERE/store-program.sh" "$OUT/libdd_store-program.so"
       echo "   apps: ${apps[*]}"
     fi
     # Plugins (Qt's Wayland client, KDE's and KWin's), also flat in the
@@ -282,6 +287,76 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         "$app" "${title:-$app}" "$summary" "${version:-}" "$size" "$sha" "$app" "$app" "$source")")
       echo "   store: $app ($(du -h "$STORE_OUT/$app.zip" | cut -f1), ${#own[@]} libraries)"
     done
+    # Store programs: a folder (program/) with the app's programs, its plug-ins
+    # and modules, the libraries they need that the APK doesn't have (lib/,
+    # under the APK's naming) and its data, started through Android's linker
+    # (store-program.sh, with program.txt and program.env); its menu entry and
+    # icons (share/) as for the other apps.
+    for app in "${store_programs[@]}"; do
+      pkg="$WORK/store/$app"; rm -rf "$pkg"; P="$pkg/program"; mkdir -p "$P/bin" "$P/lib" "$pkg/share"
+      case "$app" in
+        gimp)
+          # GIMP finds its data, plug-ins and settings through these (not its
+          # build's paths); babl and GEGL their modules. Its plug-ins are
+          # programs too: an interpreter file runs every ELF one through the linker.
+          install -m 755 "$DESKDROID_QT_ANDROID/bin/gimp-3.2" "$P/bin/gimp-3.2"
+          for d in lib/gimp lib/babl-0.1 lib/gegl-0.4 share/gimp etc/gimp share/mypaint-data; do
+            [ -e "$DESKDROID_QT_ANDROID/$d" ] && mkdir -p "$(dirname "$P/$d")" && cp -a "$DESKDROID_QT_ANDROID/$d" "$P/$d"
+          done
+          # Script plug-ins (Python, JavaScript, Lua) have no interpreter on the phone.
+          find "$P/lib/gimp" -type f -print0 | while IFS= read -r -d '' f; do
+            [ "$(head -c 2 "$f" | tr -d '\0')" = '#!' ] && rm -f "$f"; true; done
+          mkdir -p "$P/lib/gimp/3.0/interpreters"
+          printf ':elf:M::\\x7fELF::/system/bin/linker64:\n' > "$P/lib/gimp/3.0/interpreters/deskdroid.interp"
+          echo bin/gimp-3.2 > "$pkg/program.txt"
+          printf '%s\n' GIMP3_DATADIR=@PROGRAM@/share/gimp/3.0 GIMP3_PLUGINDIR=@PROGRAM@/lib/gimp/3.0 \
+            GIMP3_SYSCONFDIR=@PROGRAM@/etc/gimp/3.0 BABL_PATH=@PROGRAM@/lib/babl-0.1 GEGL_PATH=@PROGRAM@/lib/gegl-0.4 \
+            GDK_BACKEND=wayland > "$pkg/program.env"
+          ;;
+      esac
+      (cd "$DESKDROID_QT_ANDROID" && for d in share/applications/*"$app"*.desktop share/icons/hicolor/*/apps/*"$app"*.png share/metainfo/*"$app"*; do
+        [ -e "$d" ] && mkdir -p "$pkg/$(dirname "$d")" && cp -r "$d" "$pkg/$d"
+      done; true)
+      # Its menu entry runs bin/<app>.
+      sed -i -e "s/^Exec=[^ ]*/Exec=$app/" -e '/^TryExec=/d' "$pkg"/share/applications/*.desktop 2>/dev/null || true
+      # Every ELF file in it, then the libraries they need, as for the other apps.
+      mapfile -t own < <(find "$P" -type f -print0 | while IFS= read -r -d '' f; do
+        [ "$(head -c 4 "$f" | od -An -c | tr -d ' ')" = '177ELF' ] && echo "$f"; done)
+      todo=("${own[@]}")
+      while [ ${#todo[@]} -gt 0 ]; do
+        f="${todo[0]}"; todo=("${todo[@]:1}")
+        for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
+          [ -e "$sysroot/$API/$(unversioned "$lib")" ] || [ -e "$sysroot/$(unversioned "$lib")" ] && continue
+          name="$(bundlename "$lib")"
+          [ -e "$OUT/$name" ] || [ -e "$P/lib/$name" ] && continue
+          src="$DESKDROID_QT_ANDROID/lib/$lib"
+          if [ ! -e "$src" ]; then echo "   ? $lib (for $app, not in the prefix)"; continue; fi
+          install -m 644 "$src" "$P/lib/$name"
+          own+=("$P/lib/$name"); todo+=("$P/lib/$name")
+        done
+      done
+      for f in "${own[@]}"; do
+        args=()
+        for lib in $("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'); do
+          name="$(bundlename "$lib")"
+          [ "$name" != "$lib" ] && { [ -e "$OUT/$name" ] || [ -e "$P/lib/$name" ]; } && args+=(--replace-needed "$lib" "$name")
+        done
+        soname="$("$BIN/llvm-readelf" -d "$f" | sed -n 's/.*Library soname: \[\([^]]*\)\].*/\1/p')"
+        [ -n "$soname" ] && [ "$(dirname "$f")" = "$P/lib" ] && [ "$soname" != "$(basename "$f")" ] && args+=(--set-soname "$(basename "$f")")
+        [ ${#args[@]} -gt 0 ] && patchelf --page-size 16384 "${args[@]}" "$f"
+        "$BIN/llvm-strip" --strip-unneeded "$f"
+      done
+      desktop="$(ls "$pkg"/share/applications/*.desktop 2>/dev/null | head -1)"
+      title="$(sed -n 's/^Name=//p' "$desktop" | head -1)"; summary="$(sed -n 's/^GenericName=//p' "$desktop" | head -1)"
+      version="$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' "$pkg"/share/metainfo/*"$app"* 2>/dev/null | head -1)"
+      echo "$app" > "$pkg/app.txt"
+      rm -f "$STORE_OUT/$app.zip"; (cd "$pkg" && zip -qr -X "$STORE_OUT/$app.zip" .)
+      size="$(stat -c %s "$STORE_OUT/$app.zip")"; sha="$(sha256sum "$STORE_OUT/$app.zip" | cut -d' ' -f1)"
+      cp "$(ls "$pkg"/share/icons/hicolor/128x128/apps/*"$app"*.png "$pkg"/share/icons/hicolor/*/apps/*"$app"*.png 2>/dev/null | head -1)" "$STORE_OUT/$app.png" 2>/dev/null || true
+      store_entries+=("$(printf '{"id":"%s","name":"%s","summary":"%s","version":"%s","size":%s,"sha256":"%s","file":"%s.zip","icon":"%s.png"}' \
+        "$app" "${title:-$app}" "$summary" "${version:-}" "$size" "$sha" "$app" "$app")")
+      echo "   store: $app ($(du -h "$STORE_OUT/$app.zip" | cut -f1), program, ${#own[@]} programs and libraries)"
+    done
     (IFS=,; echo "{\"version\":1,\"apps\":[${store_entries[*]}]}") > "$STORE_OUT/index.json"
     # Data KWin reads at run time (keyboard layouts, its own files), as a zip
     # named like a library so it ships the same way; the app unpacks it.
@@ -306,7 +381,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
         $(ls -d share/applications share/mime share/kxmlgui5 share/config.kcfg share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
-        -x $(for a in "${store_apps[@]}"; do echo "share/applications/*$a*"; done))
+        -x $(for a in "${store_apps[@]}" "${store_programs[@]}"; do echo "share/applications/*$a*"; done))
     fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
   fi
