@@ -1,0 +1,97 @@
+#!/system/bin/sh
+# Steam (experimental) on DeskDroid's native desktop: Valve's x86 Steam client
+# through FEX-Emu. Written into files/x86/bin by the app (X86.kt) at each
+# desktop start; the "Steam (experimental)" menu entry runs it.
+#   deskdroid-steam [STEAM ARGS]   sets up on first use, then starts Steam
+#   deskdroid-steam --reinstall    downloads FEX and the x86 system again
+# The first start opens a Konsole window: the app downloads FEX-Emu and the
+# x86 system (about 1.2 GB, 4 GB unpacked), then Valve's Steam bootstrap.
+# Logs: files/x86/steam.log (Steam) and files/x86/install.log (setup).
+#
+# This half runs on Android's shell; steam-x86.sh is the x86 half, run by
+# FEX's x86 bash from the x86 system.
+
+X86=$(cd "$(dirname "$0")/.." && pwd)
+FEX=$X86/fex/bin/FEXInterpreter
+LOG=$X86/steam.log
+STEAMDIR=$HOME/.local/share/Steam
+export DESKDROID_X86="$X86" FEX_ROOTFS="$X86/rootfs" DDMASK_X86_64="$FEX" DDMASK_I386="$FEX"
+
+say() { echo "deskdroid-steam: $*"; }
+ready() { [ -f "$X86/ready" ] && [ -e "$FEX" ]; }
+steam_ready() { [ -f "$STEAMDIR/steam.sh" ]; }
+x86() { "$FEX" /bin/bash "$X86/bin/steam-x86.sh" "$@"; }
+
+# Asks the app for FEX and the x86 system, and shows its progress.
+install_x86() {
+  rm -f "$X86/install.state"
+  mkdir -p "$HOME/open-requests"
+  t="$HOME/open-requests/.x86-$$"
+  echo "deskdroid:x86-install" > "$t" && mv "$t" "$HOME/open-requests/x86-$$.req"
+  shown=0 waited=0
+  while :; do
+    if [ -f "$X86/install.log" ]; then
+      lines=$(wc -l < "$X86/install.log")
+      [ "$lines" -gt "$shown" ] && tail -n +$((shown + 1)) "$X86/install.log" | head -n $((lines - shown))
+      shown=$lines
+    fi
+    state=$(cat "$X86/install.state" 2>/dev/null)
+    case "$state" in
+      done*) return 0 ;;
+      failed*) return 1 ;;
+      "")
+        waited=$((waited + 1))
+        [ $waited -gt 15 ] && { say "DeskDroid didn't answer (is the desktop running?)"; return 1; } ;;
+    esac
+    sleep 2
+  done
+}
+
+setup() {
+  if ! ready || [ "${1:-}" = force ]; then
+    say "Steam runs on x86 Linux. DeskDroid runs it with FEX-Emu, in an x86 system"
+    say "(Ubuntu 24.04 for x86): about 1.2 GB to download and 4 GB on the phone."
+    echo
+    install_x86 || return 1
+    echo
+  fi
+  steam_ready || x86 setup || return 1
+}
+
+case "${1:-}" in
+  -h | --help)
+    sed -n '5,6p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0 ;;
+  --reinstall)
+    shift
+    rm -f "$X86/ready"
+    if [ -t 1 ]; then setup force; exit; fi
+    exec konsole --hide-menubar -p tabtitle="Setting up Steam" -e "$0" --setup ;;
+  --setup)
+    # In the Konsole window from below.
+    shift
+    if setup; then
+      echo
+      say "done, starting Steam (it updates itself first, which takes a while)"
+      # Out of Konsole's session, so closing the window doesn't end Steam.
+      if command -v setsid >/dev/null; then setsid "$0" "$@" </dev/null >/dev/null 2>&1 &
+      else nohup "$0" "$@" </dev/null >/dev/null 2>&1 &
+      fi
+      sleep 5
+      exit 0
+    fi
+    echo
+    say "setup failed (see above). Start Steam again to retry. Press Enter to close."
+    read -r _
+    exit 1 ;;
+esac
+
+if ! ready || ! steam_ready; then
+  if [ -t 1 ]; then
+    setup || exit 1
+  else
+    exec konsole --hide-menubar -p tabtitle="Setting up Steam" -e "$0" --setup "$@"
+  fi
+fi
+echo "=== $(date) deskdroid-steam: $(uname -srm), FEX $(cat "$X86/fex/share/deskdroid-fex/version" 2>/dev/null)" >>"$LOG"
+x86 run "$@" >>"$LOG" 2>&1

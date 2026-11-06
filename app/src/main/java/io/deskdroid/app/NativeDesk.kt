@@ -148,6 +148,12 @@ object NativeDesk {
                     }
                     return
                 }
+                // Steam (experimental) and other x86 programs: FEX and its x86 system,
+                // downloaded the first time (X86.kt; deskdroid-steam asks for it).
+                if (path == "deskdroid:x86-install") {
+                    X86.installAsync(c)
+                    return
+                }
                 // An Android app from Plasma's menu (writeAndroidApps).
                 if (path.startsWith("android-app:")) {
                     Handler(Looper.getMainLooper()).post { launchAndroidApp(c, path.removePrefix("android-app:")) }
@@ -674,6 +680,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             File(config, "plasmashellrc").delete()
             stamp.writeText(layoutVersion)
         }
+        X86.prepare(this) // Steam (experimental) in the menu, and the x86 system's /etc
         val bin = linkApps(libs, data)
         try {
             val p = ProcessBuilder(
@@ -778,6 +785,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (lib.exists() && !File(filesDir, "ddmask-off").exists()) {
             env["LD_PRELOAD"] = lib.path
             try { glibcRuntime(libs) } catch (e: Exception) { AppLog.i("Native desktop test: glibc runtime: $e") }
+            X86.env(this, env) // x86 programs through FEX, once it's installed
         }
     }
 
