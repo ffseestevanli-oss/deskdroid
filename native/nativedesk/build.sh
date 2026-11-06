@@ -272,7 +272,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         gimp)
           # GIMP finds its data, plug-ins and settings through these (not its
           # build's paths); babl and GEGL their modules. Its plug-ins are
-          # programs too: an interpreter file runs every ELF one through the linker.
+          # programs too, which GIMP starts plainly: ddmask (native/ddmask,
+          # preloaded into the desktop's apps) runs them through the linker.
           install -m 755 "$DESKDROID_QT_ANDROID/bin/gimp-3.2" "$P/bin/gimp-3.2"
           for d in lib/gimp lib/babl-0.1 lib/gegl-0.4 share/gimp etc/gimp share/mypaint-data; do
             [ -e "$DESKDROID_QT_ANDROID/$d" ] && mkdir -p "$(dirname "$P/$d")" && cp -a "$DESKDROID_QT_ANDROID/$d" "$P/$d"
@@ -280,8 +281,6 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
           # Script plug-ins (Python, JavaScript, Lua) have no interpreter on the phone.
           find "$P/lib/gimp" -type f -print0 | while IFS= read -r -d '' f; do
             [ "$(head -c 2 "$f" | tr -d '\0')" = '#!' ] && rm -f "$f"; true; done
-          mkdir -p "$P/lib/gimp/3.0/interpreters"
-          printf ':elf:M::\\x7fELF::/system/bin/linker64:\n' > "$P/lib/gimp/3.0/interpreters/deskdroid.interp"
           echo bin/gimp-3.2 > "$pkg/program.txt"
           printf '%s\n' GIMP3_DATADIR=@PROGRAM@/share/gimp/3.0 GIMP3_PLUGINDIR=@PROGRAM@/lib/gimp/3.0 \
             GIMP3_SYSCONFDIR=@PROGRAM@/etc/gimp/3.0 BABL_PATH=@PROGRAM@/lib/babl-0.1 GEGL_PATH=@PROGRAM@/lib/gegl-0.4 \
