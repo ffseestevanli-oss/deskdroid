@@ -21,18 +21,21 @@ OUT="$(mkdir -p "$1" && cd "$1" && pwd)"
 MIRROR=https://deb.debian.org/debian
 SUITE=trixie
 ROOTS="flatpak gpg gpgconf libgcc-s1 libstdc++6 ca-certificates"
-CROSS="${CROSS:-aarch64-linux-gnu-}"
+# DESKDROID_FLATPAK_DEBARCH=amd64 (with CROSS=) builds it for a desktop
+# machine, for ../glibc/test/android-sim.sh.
+DEBARCH="${DESKDROID_FLATPAK_DEBARCH:-arm64}"
+CROSS="${CROSS-aarch64-linux-gnu-}"
 command -v "${CROSS}gcc" >/dev/null || { echo "flatpak: no ${CROSS}gcc, skipped" >&2; exit 0; }
 command -v dpkg-deb >/dev/null || { echo "flatpak: no dpkg-deb, skipped" >&2; exit 0; }
 
-key="$(cat "$HERE/build.sh" "$HERE/debs.py" "$HERE/unlink.py" | sha256sum | cut -c1-16)"
+key="$( { cat "$HERE/build.sh" "$HERE/debs.py" "$HERE/unlink.py"; echo "$DEBARCH"; } | sha256sum | cut -c1-16)"
 CACHE="${DESKDROID_FLATPAK_CACHE:-$HOME/.cache/deskdroid/flatpak}/$key"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 if [ ! -e "$CACHE/.done" ]; then
-  echo "== flatpak (Debian $SUITE arm64)"
-  curl -sSfL -o "$WORK/Packages.xz" "$MIRROR/dists/$SUITE/main/binary-arm64/Packages.xz"
+  echo "== flatpak (Debian $SUITE $DEBARCH)"
+  curl -sSfL -o "$WORK/Packages.xz" "$MIRROR/dists/$SUITE/main/binary-$DEBARCH/Packages.xz"
   xz -d "$WORK/Packages.xz"
   python3 -I "$HERE/debs.py" "$WORK/Packages" "$MIRROR" $ROOTS > "$WORK/list"
   mkdir -p "$WORK/debs" "$WORK/root"

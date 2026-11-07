@@ -60,13 +60,31 @@ script that runs `qemu-aarch64 libdd_ld-glibc.so` (ddmask's job on the
 phone), added Flathub, installed KCalc with its runtime and GL driver from
 Flathub (aarch64), and ran it on DeskDroid's glibc 2.42.
 
+Android's rules for apps, on x86_64 (`../glibc/test/android-sim.sh`): the
+app's seccomp policy (from bionic's lists) and SELinux's "no hard links in
+app data", the APK's library folder and app files where Android puts them,
+the zips unpacked without file modes. It runs every step Discover takes:
+add Flathub, fetch its catalog (where Discover reads it), install KCalc,
+list installed apps and updates, run KCalc, update, remove. All passed
+(2026-11-07), install triggers included.
+
+What Android changes, and how it's handled:
+
+| Android | Effect | Handled by |
+|---|---|---|
+| No hard links in app data (`EACCES`) | OSTree creates files as `O_TMPFILE` and links them in; checkout hard-links from the repo | ddflatpak: `O_TMPFILE` fails with `EOPNOTSUPP` (OSTree then writes named temp files), `link`/`linkat` `EACCES` becomes `EPERM` (OSTree copies instead) |
+| seccomp kills on calls it blocks (set_robust_list, rseq...) | "Bad system call" | glibc: `SIGSYS` returns `ENOSYS`; no clone3/rseq; set_robust_list only where it worked (`../glibc`) |
+| Can't exec files in app data | gpg, the triggers, flatpak itself | ddmask (glibc build) runs them through the APK's loader; `flatpak.sh` too, when started without ddmask (Discover) |
+| Zips unpack without modes | the shell won't start them | `flatpak.sh` sets them (globs, not `find`) |
+| No user namespaces | no bubblewrap | `nobwrap.sh` for triggers, ddflatpak for `flatpak run` |
+
 ## Limits
 
 - Programs that make raw system calls (static Go), and glibc's own
   internal reads, see the real paths, not the mapped ones.
 - GPU: Flathub's Mesa doesn't know Android's GPU, so apps draw on the CPU
   (llvmpipe, or SwiftShader in Electron) for now.
-- Install triggers (desktop database, icon cache) mostly can't run; the
-  menu reads the exported entries anyway.
+- Without hard links, each app and runtime is stored twice (OSTree's repo
+  and the checkout): KCalc with its KDE runtime takes about 6 GB.
 - Portals (file chooser, notifications through Flatpak) aren't there; apps
   fall back to their own dialogs.

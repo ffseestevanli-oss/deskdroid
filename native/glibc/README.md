@@ -54,6 +54,11 @@ program runs through the loader, reads the app's `/etc/passwd`, gets
 `libddmask_glibc.so` loads and gives it its own name and `/proc/self/exe`.
 CI runs it on every APK build.
 
+`test/android-sim.sh` runs DeskDroid's flatpak under Android's rules for
+apps on x86_64 (`DESKDROID_GLIBC_ARCH=x86_64 CROSS= build.sh`): see
+`../flatpak/README.md`. On x86_64 the `SIGSYS` handler names its own signal
+return (`SA_RESTORER`); ARM64's kernel has one.
+
 ## Limits
 
 - The folder is fixed. Android's first user has the app's files at
