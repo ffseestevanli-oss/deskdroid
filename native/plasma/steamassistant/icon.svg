@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="rb" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF3B5C"/><stop offset="0.17" stop-color="#FF9F1C"/>
+      <stop offset="0.33" stop-color="#FFE14D"/><stop offset="0.5" stop-color="#3DFF8B"/>
+      <stop offset="0.67" stop-color="#2EC5FF"/><stop offset="0.83" stop-color="#8B5CFF"/>
+      <stop offset="1" stop-color="#FF4FD8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.25" r="0.9">
+      <stop offset="0" stop-color="#3a1240"/><stop offset="1" stop-color="#07070D"/>
+    </radialGradient>
+  </defs>
+  <path d="M6 26 L26 6 H122 V102 L102 122 H6 Z" fill="url(#glow)" stroke="url(#rb)" stroke-width="6" stroke-linejoin="round"/>
+  <!-- a game controller -->
+  <path d="M30 58 C30 48 37 44 46 44 H82 C91 44 98 48 98 58 L103 84 C105 94 95 99 88 91 L80 82 H48 L40 91 C33 99 23 94 25 84 Z" fill="url(#rb)"/>
+  <rect x="40" y="58" width="16" height="5" rx="1.5" fill="#07070D"/>
+  <rect x="45.5" y="52.5" width="5" height="16" rx="1.5" fill="#07070D"/>
+  <circle cx="80" cy="56" r="4" fill="#07070D"/>
+  <circle cx="88" cy="64" r="4" fill="#07070D"/>
+  <!-- the "train" arrow: x86 taught to ARM -->
+  <path d="M50 30 H78 L72 24 M78 30 L72 36" fill="none" stroke="#F2F2F7" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

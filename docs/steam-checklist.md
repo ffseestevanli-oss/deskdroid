@@ -7,6 +7,50 @@ Steam moved to the ARM64 client, started directly without steam.sh (the
 approach [steamclienttermux](https://github.com/huntergdavis/steamclienttermux)
 proved under proot).
 
+## Steam Installation Assistant (native desktop)
+
+`native/plasma/steamassistant/` is DeskDroid's own Kirigami app,
+`bin/steam-assistant` ("Steam Installation Assistant" in the menu, Games and
+System), in the phone app's party look (`qml/Party.qml` mirrors
+`ui/Party.kt`; Orbitron and Chakra Petch come from the app's assets). The
+Steam menu entry opens it while Steam isn't set up, instead of Konsole.
+
+- **Welcome**: what FEX-Emu is; Set up Steam, or Continue without Steam
+  (straight to the tools, which stay locked until FEX-Emu is installed).
+- **Install**: runs `deskdroid-steam --install` and turns its output (X86.kt's
+  install.log, then steam-x86.sh's bootstrap download) into the segmented
+  rainbow LOADING bar; View verbose shows the output itself. On success:
+  Launch Steam, or the tools.
+- **Tools** ("Ah! Welcome back! You've unlocked new options!" the first time
+  after an install), in the phone app's tile grid:
+  - FEX Tools: Manage Proton (prefixes in `steamapps/compatdata` and
+    DeskDroid's own `~/.local/share/deskdroid-wine/default`: open, winecfg,
+    delete), Run a Desktop (x86-64) application (`--run-x86`), Run a
+    Windows (x86-64) application (`--run-windows`, Proton from Steam's
+    library), Manage Software (Steam's games: play, uninstall; Wine's
+    Add/Remove Programs).
+  - Steam Tools: Force Steam Update (removes `package/`), Soft Reset (sign-ins:
+    loginusers.vdf, ssfn*, local.vdf, registry.vdf), Hard Reset (Steam's own
+    --reset: all but steamapps and userdata), Uninstall (Steam only, or Purge:
+    Steam, FEX-Emu, the x86 system, and the assistant back to Welcome).
+  - Download from…: where FEX-Emu comes from (`~/.config/deskdroid-fex-url`,
+    read by X86.kt: a folder URL and/or `NAME=URL` lines), and whether the FEX
+    add-on APK (`fexpack/`, `io.deskdroid.fex`) is installed; X86.kt copies FEX
+    from the add-on when it is, signed with DeskDroid's key.
+
+### On the device (assistant)
+
+- [ ] Steam (experimental) opens the assistant the first time; the
+      assistant's own menu entry opens it any time.
+- [ ] Welcome shows the rainbow title, Orbitron and Chakra Petch.
+- [ ] Set up Steam: the bar moves through Fetching/Assembling FEX-Emu, the
+      x86 system, then Steam; View verbose shows the log.
+- [ ] Without a FEX download host: the error says so, and points at the
+      add-on and Download from….
+- [ ] With the FEX add-on installed: "Copying FEX-Emu from the FEX add-on".
+- [ ] Tools: Launch Steam; each Steam tool asks first, then reports.
+- [ ] Purge returns to Welcome; Continue without Steam goes to the tools.
+
 ## Native desktop (no proot): Steam through FEX, experimental
 
 The native desktop has no Debian system and no proot, so Steam runs the way

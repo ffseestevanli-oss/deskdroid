@@ -4,8 +4,18 @@
 # desktop start; the "Steam (experimental)" menu entry runs it.
 #   deskdroid-steam [STEAM ARGS]   sets up on first use, then starts Steam
 #   deskdroid-steam --reinstall    downloads FEX and the x86 system again
-# The first start opens a Konsole window: the app downloads FEX-Emu and the
-# x86 system (about 1.2 GB, 4 GB unpacked), then Valve's Steam bootstrap.
+# The first start opens the Steam Installation Assistant (steam-assistant,
+# native/plasma/steamassistant), or a Konsole window without it: the app
+# downloads FEX-Emu and the x86 system (about 1.2 GB, 4 GB unpacked), then
+# Valve's Steam bootstrap.
+#
+# The assistant drives the rest through these (no window, output on stdout):
+#   --status              fex=0|1, steam=0|1 (one per line)
+#   --install             sets up FEX, the x86 system and Steam's bootstrap
+#   --tool NAME           update | soft-reset | hard-reset | uninstall | purge
+#   --run-x86 FILE [ARGS] an x86-64 (or x86) Linux program through FEX
+#   --run-windows FILE    a Windows program through Steam's Proton (or Wine)
+#   --wine-tool NAME [PREFIX]  winecfg | uninstaller | explorer in a prefix
 # Logs: files/x86/steam.log (Steam) and files/x86/install.log (setup).
 #
 # This half runs on Android's shell; steam-x86.sh is the x86 half, run by
@@ -58,10 +68,69 @@ setup() {
   steam_ready || x86 setup || return 1
 }
 
+# Steam's own data outside STEAMDIR: ~/.steam links and the login registry.
+steam_tool() {
+  case "$1" in
+    update)
+      # Steam downloads its client again at the next start (package/ holds
+      # what it downloaded and which version it has).
+      steam_ready || { say "Steam isn't installed"; return 1; }
+      rm -rf "$STEAMDIR/package"
+      say "Steam will download its client again the next time it starts" ;;
+    soft-reset)
+      # Sign-ins: saved accounts, their login tokens and Steam Guard files.
+      rm -f "$STEAMDIR/config/loginusers.vdf" "$STEAMDIR"/ssfn* "$STEAMDIR/local.vdf" \
+        "$HOME/.steam/registry.vdf" "$HOME/.steam/steam/registry.vdf"
+      rm -rf "$STEAMDIR/config/htmlcache" "$HOME/.local/share/Steam/config/htmlcache"
+      say "signed out: Steam asks for your account the next time it starts" ;;
+    hard-reset)
+      # Like steam.sh --reset: everything but the games (steamapps) and the
+      # players' own data (userdata), then the bootstrap again.
+      steam_ready || { say "Steam isn't installed"; return 1; }
+      ready || { say "FEX-Emu isn't installed"; return 1; }
+      x86 reset ;;
+    uninstall)
+      rm -rf "$STEAMDIR" "$HOME/.steam"
+      say "Steam removed (FEX-Emu and the x86 system stay)" ;;
+    purge)
+      rm -rf "$STEAMDIR" "$HOME/.steam" "$X86/fex" "$X86/rootfs" "$X86/fex.new" "$X86/rootfs.new" \
+        "$X86/ready" "$X86/install.state" "$X86/install.log" "$HOME/.local/share/deskdroid-wine" \
+        "$HOME/.config/deskdroid-steam-assistant.conf"
+      say "Steam, FEX-Emu and the x86 system removed" ;;
+    *) say "unknown tool: $1"; return 2 ;;
+  esac
+}
+
 case "${1:-}" in
   -h | --help)
     sed -n '5,6p' "$0" | sed 's/^# \{0,1\}//'
     exit 0 ;;
+  --status)
+    if ready; then echo fex=1; else echo fex=0; fi
+    if steam_ready; then echo steam=1; else echo steam=0; fi
+    exit 0 ;;
+  --install)
+    shift
+    setup || exit 1
+    say "Steam is installed"
+    exit 0 ;;
+  --tool)
+    steam_tool "${2:-}"
+    exit ;;
+  --run-x86)
+    shift
+    ready || { say "FEX-Emu isn't installed (Steam Installation Assistant)"; exit 1; }
+    [ -n "${1:-}" ] || { say "usage: deskdroid-steam --run-x86 FILE [ARGS]"; exit 2; }
+    echo "=== $(date) deskdroid-steam: x86 program $1" >>"$X86/apps.log"
+    x86 exec "$@" >>"$X86/apps.log" 2>&1
+    exit ;;
+  --run-windows | --wine-tool)
+    mode=$1; shift
+    ready || { say "FEX-Emu isn't installed (Steam Installation Assistant)"; exit 1; }
+    [ -n "${1:-}" ] || { say "usage: deskdroid-steam $mode FILE|TOOL [PREFIX]"; exit 2; }
+    echo "=== $(date) deskdroid-steam: Windows program $*" >>"$X86/apps.log"
+    if [ "$mode" = --run-windows ]; then x86 wine "$@"; else x86 wine-tool "$@"; fi >>"$X86/apps.log" 2>&1
+    exit ;;
   --reinstall)
     shift
     rm -f "$X86/ready"
@@ -89,6 +158,9 @@ esac
 if ! ready || ! steam_ready; then
   if [ -t 1 ]; then
     setup || exit 1
+  elif command -v steam-assistant >/dev/null; then
+    # The Steam Installation Assistant sets up and offers to start Steam.
+    exec steam-assistant
   else
     exec konsole --hide-menubar -p tabtitle="Setting up Steam" -e "$0" --setup "$@"
   fi

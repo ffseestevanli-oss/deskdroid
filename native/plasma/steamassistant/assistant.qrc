@@ -1,0 +1,26 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icon.svg</file>
+        <file>fonts/Orbitron.ttf</file>
+        <file>fonts/ChakraPetch-Regular.ttf</file>
+        <file>fonts/ChakraPetch-SemiBold.ttf</file>
+        <file>fonts/ChakraPetch-Bold.ttf</file>
+        <file>qml/qmldir</file>
+        <file>qml/Party.qml</file>
+        <file>qml/Chamfer.qml</file>
+        <file>qml/PartyButton.qml</file>
+        <file>qml/RainbowBar.qml</file>
+        <file>qml/RainbowText.qml</file>
+        <file>qml/Tile.qml</file>
+        <file>qml/PartyPage.qml</file>
+        <file>qml/BackHeader.qml</file>
+        <file>qml/PartyDialog.qml</file>
+        <file>qml/Main.qml</file>
+        <file>qml/WelcomePage.qml</file>
+        <file>qml/InstallPage.qml</file>
+        <file>qml/ToolsPage.qml</file>
+        <file>qml/PrefixesPage.qml</file>
+        <file>qml/SoftwarePage.qml</file>
+        <file>qml/SettingsPage.qml</file>
+    </qresource>
+</RCC>

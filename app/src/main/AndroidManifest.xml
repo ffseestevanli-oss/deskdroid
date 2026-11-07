@@ -17,6 +17,8 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- FEX-Emu as an add-on APK (fexpack/, X86.kt). -->
+        <package android:name="io.deskdroid.fex" />
     </queries>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />

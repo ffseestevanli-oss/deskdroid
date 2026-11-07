@@ -1,0 +1,9 @@
+singleton Party 1.0 Party.qml
+Chamfer 1.0 Chamfer.qml
+PartyButton 1.0 PartyButton.qml
+RainbowBar 1.0 RainbowBar.qml
+RainbowText 1.0 RainbowText.qml
+Tile 1.0 Tile.qml
+PartyPage 1.0 PartyPage.qml
+BackHeader 1.0 BackHeader.qml
+PartyDialog 1.0 PartyDialog.qml
