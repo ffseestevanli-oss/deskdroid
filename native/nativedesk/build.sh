@@ -84,14 +84,14 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Apps in DeskDroid's app store instead of the APK: packaged below.
     # The ones from other repositories (native/store/apps.json) are built into
     # the prefix by native/store/build-apps.sh first.
-    store_apps=(gwenview kate kcalc konsole $(jq -r '.apps[].id' "$HERE/../store/apps.json" 2>/dev/null))
+    store_apps=(gwenview kate kcalc $(jq -r '.apps[].id' "$HERE/../store/apps.json" 2>/dev/null))
     # Store apps that are whole folders of programs and libraries, packaged below too.
     store_programs=()
     [ -x "$DESKDROID_QT_ANDROID/bin/gimp-3.2" ] && store_programs+=(gimp)
     # Etherium (Firefox, native/firefox, published by firefox.yml) is in the
     # store too, run through ddmask like GIMP.
     [ -n "${DESKDROID_FIREFOX:-}" ] && [ -e "$DESKDROID_FIREFOX" ] && store_programs+=(firefox)
-    for app in dolphin kioworker ksmserver-logout-greeter kwrite systemsettings; do
+    for app in dolphin kioworker konsole ksmserver-logout-greeter kwrite systemsettings; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
       bundled+=("$OUT/libdd_$app.so"); apps+=("$app")
@@ -331,7 +331,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
           done
           mkdir -p "$pkg/share/icons/hicolor/scalable/apps" "$pkg/share/applications" "$pkg/share/metainfo"
           cp "$eth/etherium.svg" "$pkg/share/icons/hicolor/scalable/apps/firefox-etherium.svg"
-          printf '[Desktop Entry]\nType=Application\nName=Etherium\nGenericName=Web Browser\nComment=Browse the web (built from Firefox, with nothing phoning home)\nIcon=firefox-etherium\nExec=firefox %%u\nStartupWMClass=firefox\nCategories=Network;WebBrowser;\nMimeType=text/html;application/xhtml+xml;application/pdf;x-scheme-handler/http;x-scheme-handler/https;\nActions=new-window;new-private-window;\n\n[Desktop Action new-window]\nName=New Window\nExec=firefox --new-window\n\n[Desktop Action new-private-window]\nName=New Private Window\nExec=firefox --private-window\n' \
+          printf '[Desktop Entry]\nType=Application\nName=Etherium\nGenericName=Web Browser\nComment=Browse the web (built from Firefox, with nothing phoning home)\nIcon=firefox-etherium\nExec=firefox %%u\nStartupWMClass=firefox-default\nCategories=Network;WebBrowser;\nMimeType=text/html;application/xhtml+xml;application/pdf;x-scheme-handler/http;x-scheme-handler/https;\nActions=new-window;new-private-window;\n\n[Desktop Action new-window]\nName=New Window\nExec=firefox --new-window\n\n[Desktop Action new-private-window]\nName=New Private Window\nExec=firefox --private-window\n' \
             > "$pkg/share/applications/org.deskdroid.firefox.desktop"
           version="$(sed -n 's/^Version=//p' "$P/application.ini" | head -1)"
           printf '<?xml version="1.0" encoding="UTF-8"?>\n<component type="desktop-application">\n  <id>org.deskdroid.firefox</id>\n  <name>Etherium</name>\n  <releases><release version="%s"/></releases>\n</component>\n' \
@@ -398,9 +398,13 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" $(ls -d share/plasma share/kf6 share/desktop-directories share/deskdroid/menus 2>/dev/null))
       rm -rf "$WORK/shell" && mkdir -p "$WORK/shell/share/plasma"
       cp -r "$HERE/../plasma/shell/shells" "$HERE/../plasma/shell/plasmoids" "$HERE/../plasma/shell/wallpapers" "$WORK/shell/share/plasma/"
-      # DeskDroid's wallpaper (the Debian desktop's), the default without the phone's.
+      # Wallpapers: DeskDroid's own (the Debian desktop's), the default, and a
+      # few of Plasma's (breeze's Next, plasma-workspace-wallpapers), shrunk to
+      # 4K and phone sizes (native/plasma/shell/images/README.md).
       mkdir -p "$WORK/shell/share/wallpapers"
-      cp -r "$HERE/../plasma/shell/images/DeskDroid" "$WORK/shell/share/wallpapers/"
+      for w in "$HERE/../plasma/shell/images"/*/; do
+        [ -e "$w/metadata.json" ] && cp -r "${w%/}" "$WORK/shell/share/wallpapers/"
+      done
       # Default apps (folders in Dolphin, text in KWrite...), where KDE reads
       # the system's mimeapps.list from: XDG_DATA_DIRS/applications.
       mkdir -p "$WORK/shell/share/applications"
@@ -433,7 +437,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       [ -d "$WORK/gtkshare" ] && (cd "$WORK/gtkshare" && zip -qr -X "$OUT/libkwin_data.so" share)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
-        $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
+        $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/knotifications6 share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
         -x $(for a in "${store_apps[@]}" "${store_programs[@]}"; do echo "share/applications/*$a*"; done))
     fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
