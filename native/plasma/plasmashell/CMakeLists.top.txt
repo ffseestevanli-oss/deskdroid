@@ -97,6 +97,11 @@ add_subdirectory(applets/panelspacer)
 # that starts an app from the panel.
 add_subdirectory(libtaskmanager)
 add_subdirectory(applets/icon)
+# The system tray, its menus (libdbusmenuqt) and the StatusNotifierWatcher
+# (a kded module elsewhere; plasmashell loads it here, see add-to-workspace.py).
+add_subdirectory(libdbusmenuqt)
+add_subdirectory(statusnotifierwatcher)
+add_subdirectory(applets/systemtray)
 # The task manager's QML modules: media players (MPRIS) for its tooltips,
 # and D-Bus calls from QML. The applet itself is plasma-desktop's
 # (build_plasma_desktop_taskmanager).

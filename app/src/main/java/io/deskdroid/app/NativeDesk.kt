@@ -642,6 +642,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             File(filesDir, ".local/share/applications/org.deskdroid.keyboard.desktop").writeText(
                 "[Desktop Entry]\nType=Application\nName=Keyboard\nGenericName=Show or hide the phone's keyboard\n" +
                 "Icon=input-keyboard-virtual\nExec=android-open deskdroid:keyboard\nNoDisplay=true\n")
+            PhoneInfo.write(applicationContext) // System Settings › About This Phone
             NativeDesk.watchOpenRequests(applicationContext)
             NativeDesk.refreshAndroidApps { writeAndroidApps(applicationContext) } // before plasmashell reads the menu (KWin starts first)
             watchAndroidApps()
