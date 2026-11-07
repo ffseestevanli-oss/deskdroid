@@ -809,6 +809,15 @@ build_kcm_componentchooser() {
   find "$PREFIX/plugins" -name '*kcm_componentchooser*' | grep -q .
 }
 inputs_kcm_componentchooser() { cat "$HERE"/componentchooser/*; }
+# System › About This Phone (aboutphone/): DeskDroid's own page, in place of
+# kinfocenter's About this System.
+build_kcm_aboutphone() {
+  local s="$WORK/src/aboutphone"
+  rm -rf "$s" && mkdir -p "$WORK/src" && cp -r "$HERE/aboutphone" "$s"
+  kde_cmake "$s"
+  find "$PREFIX/plugins" -name '*kcm_aboutphone*' | grep -q .
+}
+inputs_kcm_aboutphone() { cat "$HERE"/aboutphone/* "$HERE"/aboutphone/ui/*; }
 # Thumbnails (Dolphin, the wallpaper picker): kio-extras' thumbnail worker
 # and its thumbnailers only; the rest of kio-extras isn't needed.
 build_kio_extras() {
@@ -1397,7 +1406,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
      curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp
-     systemsettings kcm_componentchooser)
+     systemsettings kcm_componentchooser kcm_aboutphone)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/*.* "$HERE"/kwin-nativedesk/CMakeLists.txt "$HERE/../nativedesk/protocol.h" "$HERE/ahb/deskdroid_ahb.h"; }

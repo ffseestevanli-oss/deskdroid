@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Description": "Android version, memory, kernel and build of this phone",
+        "Icon": "smartphone",
+        "Name": "About This Phone"
+    },
+    "X-KDE-Keywords": "about,phone,android,version,kernel,memory,ram,rom,build,system,information",
+    "X-KDE-System-Settings-Parent-Category": "system-administration",
+    "X-KDE-Weight": 1
+}

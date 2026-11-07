@@ -52,8 +52,9 @@ var tasks = panel.addWidget("org.kde.plasma.icontasks");
 tasks.currentConfigGroup = ["General"];
 tasks.writeConfig("launchers", pinned);
 
-// The keyboard button (opens the phone's keyboard), the phone's battery
-// (DeskDroid's widget), then the clock.
+// Plasma's system tray (apps' tray icons), the keyboard button (opens the
+// phone's keyboard), the phone's battery (DeskDroid's widget), then the clock.
+panel.addWidget("org.kde.plasma.systemtray");
 var keyboard = panel.addWidget("org.kde.plasma.icon");
 keyboard.currentConfigGroup = ["General"];
 keyboard.writeConfig("url", "file://" + files + "/.local/share/applications/org.deskdroid.keyboard.desktop");

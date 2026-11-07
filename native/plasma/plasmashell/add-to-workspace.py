@@ -38,6 +38,19 @@ edit("shell/main.cpp", "    QApplication app(argc, argv);\n",
      "    QApplication app(argc, argv);\n"
      "    app.setProperty(\"org.kde.KActivities.core.disableAutostart\", true);\n")
 edit("shell/main.cpp", "int main(int argc, char *argv[])", "int plasmashellMain(int argc, char *argv[])")
+# No kded: the system tray's StatusNotifierWatcher (a kded module) runs in
+# plasmashell, under the D-Bus name kded would give it.
+edit("shell/main.cpp", "#include <KDBusService>\n",
+     "#include <KDBusService>\n#include <KDEDModule>\n#include <KPluginFactory>\n#include <KPluginMetaData>\n#include <QTimer>\n")
+edit("shell/main.cpp", "    app.setProperty(\"org.kde.KActivities.core.disableAutostart\", true);\n",
+     "    app.setProperty(\"org.kde.KActivities.core.disableAutostart\", true);\n"
+     "    QTimer::singleShot(0, &app, [] {\n"
+     "        const auto md = KPluginMetaData::findPluginById(QStringLiteral(\"kf6/kded\"), QStringLiteral(\"statusnotifierwatcher\"));\n"
+     "        auto r = KPluginFactory::instantiatePlugin<KDEDModule>(md, qApp);\n"
+     "        if (!r) { qWarning() << \"DeskDroid: no StatusNotifierWatcher:\" << r.errorText; return; }\n"
+     "        if (!QDBusConnection::sessionBus().registerService(QStringLiteral(\"org.kde.StatusNotifierWatcher\")))\n"
+     "            qWarning() << \"DeskDroid: couldn't take org.kde.StatusNotifierWatcher\";\n"
+     "    });\n")
 
 # The digital clock's city names come from ICU's C++ API, which Android
 # doesn't offer to apps: the last part of the zone id stands in for now.
