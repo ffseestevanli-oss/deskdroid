@@ -439,6 +439,18 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
         $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/knotifications6 share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor share/libdiscover $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
         -x $(for a in "${store_apps[@]}" "${store_programs[@]}"; do echo "share/applications/*$a*"; done))
+      # No TryExec in the menu entries: KDE hides an entry whose TryExec
+      # isn't on PATH where the app database is built, which here isn't
+      # where bin/<app> lives (Konsole's entry has one, so Konsole was missing).
+      rm -rf "$WORK/tryexec" && mkdir -p "$WORK/tryexec/share/applications"
+      for d in $(grep -l '^TryExec=' "$DESKDROID_QT_ANDROID"/share/applications/*.desktop 2>/dev/null); do
+        n="$(basename "$d")"; skip=
+        for a in "${store_apps[@]}" "${store_programs[@]}"; do case "$n" in *"$a"*) skip=1 ;; esac; done
+        [ -n "$skip" ] && continue
+        sed '/^TryExec=/d' "$d" > "$WORK/tryexec/share/applications/$n"
+        echo "   menu: $n without TryExec"
+      done
+      (cd "$WORK/tryexec" && zip -qr -X "$OUT/libkwin_data.so" share)
     fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"
   fi
