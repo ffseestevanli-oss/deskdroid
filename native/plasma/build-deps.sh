@@ -1245,6 +1245,51 @@ build_appstream() {
     -Dinstall-docs=false -Dman=false -Dbash-completion=false
   test -e "$PREFIX/lib/pkgconfig/appstream.pc"
 }
+# AppStream's Qt library, which Discover reads app catalogs with
+# (appstream-qt/CMakeLists.txt: Meson's Qt module can't find this Qt).
+build_appstream_qt() {
+  local s; s="$(unpack https://www.freedesktop.org/software/appstream/releases/AppStream-1.2.2.tar.xz AppStream-1.2.2.tar.xz)"
+  [ -e "$s/qt/pool.cpp" ] || s="$(dirname "$(dirname "$(ls "$s"/*/qt/pool.cpp | head -1)")")"
+  local b; b="$(mktemp -d)"; cp -r "$HERE/appstream-qt/." "$b"
+  kde_cmake "$b" -DASQT_SRC="$s/qt"
+  test -e "$PREFIX/lib/cmake/AppStreamQt/AppStreamQtConfig.cmake"
+}
+inputs_appstream_qt() { cat "$HERE"/appstream-qt/*; }
+# C++ coroutines for Qt, which Discover is written with.
+build_qcoro() {
+  local s; s="$(unpack https://github.com/qcoro/qcoro/archive/refs/tags/v0.12.0.tar.gz qcoro-0.12.0.tar.gz)"
+  kde_cmake "$s" -DUSE_QT_VERSION=6 -DBUILD_SHARED_LIBS=ON -DQCORO_WITH_QTDBUS=ON -DQCORO_BUILD_EXAMPLES=OFF -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QML=OFF -DQCORO_WITH_QTQUICK=OFF -DQCORO_WITH_QTTEST=OFF
+  test -e "$PREFIX/lib/libQCoro6DBus.so"
+}
+# Sharing menus; Discover's app pages have a Share button.
+build_purpose() { kf purpose; }
+# Discover, as a library QtHost starts (apps/as-library.py), with one backend:
+# DeskDroid's (discover/DeskDroidBackend), Flathub through the flatpak command.
+# Discover's own Flatpak backend needs libflatpak's system helper (D-Bus,
+# polkit); store.kde.org add-ons (KNS) and the updates page in System Settings
+# are left out for now.
+build_discover() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/discover-$PLASMA_VERSION.tar.xz" "discover-$PLASMA_VERSION.tar.xz")"
+  cp -r "$HERE/discover/DeskDroidBackend" "$s/libdiscover/backends/"
+  echo 'add_subdirectory(DeskDroidBackend)' >> "$s/libdiscover/backends/CMakeLists.txt"
+  sed -i 's|^   add_subdirectory(KNSBackend)$||' "$s/libdiscover/backends/CMakeLists.txt"
+  ! grep -q '^   add_subdirectory(KNSBackend)' "$s/libdiscover/backends/CMakeLists.txt"
+  # as-library.py wants add_executable(<target>) on its own.
+  sed -i -e 's|^add_executable(plasma-discover ${plasma_discover_SRCS}$|add_executable(plasma-discover)\ntarget_sources(plasma-discover PRIVATE ${plasma_discover_SRCS}|' \
+    -e '/^add_executable(Plasma::Discover ALIAS plasma-discover)$/d' "$s/discover/CMakeLists.txt"
+  python3 "$HERE/apps/as-library.py" "$s" discover/CMakeLists.txt plasma-discover discover/main.cpp
+  sed -i -e 's/^find_program(DPKG dpkg)$//' -e 's/^find_program(RPM rpm)$//' "$s/discover/CMakeLists.txt"
+  sed -i -e 's/^    add_subdirectory(kcm)$//' -e 's/^    add_subdirectory(notifier)$//' "$s/CMakeLists.txt"
+  unandroid "$s"
+  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__" -DBUILD_FlatpakBackend=OFF -DBUILD_SnapBackend=OFF -DBUILD_FwupdBackend=OFF
+  # Its libraries go in lib/plasma-discover (found by RPATH on Linux); the APK
+  # build takes what apps need from lib/.
+  cp -f "$PREFIX"/lib/plasma-discover/libDiscover*.so "$PREFIX/lib/"
+  test -e "$PREFIX/lib/libplasma-discover.so"
+  test -e "$PREFIX/lib/libDiscoverCommon.so"
+  find "$PREFIX/plugins" -name '*deskdroid-backend.so' | grep -q .
+}
+inputs_discover() { cat "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp "$HERE"/discover/DeskDroidBackend/*; }
 # The library only (Script-Fu calls GIMP through it); no typelibs, which
 # would mean running Android programs on the build machine.
 build_gobject_introspection() {
@@ -1448,7 +1493,8 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
      curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp
-     systemsettings kcm_componentchooser kcm_aboutphone kcms_workspace kcms_kwin kcms_desktop)
+     systemsettings kcm_componentchooser kcm_aboutphone kcms_workspace kcms_kwin kcms_desktop
+     appstream_qt qcoro purpose discover)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/*.* "$HERE"/kwin-nativedesk/CMakeLists.txt "$HERE/../nativedesk/protocol.h" "$HERE/ahb/deskdroid_ahb.h"; }
