@@ -357,11 +357,13 @@ build_ffmpeg() {
   dec+=",alac,flac,vorbis,opus,wavpack,ape,tta,wmav1,wmav2,wmapro,wmalossless,ac3,eac3,dca,truehd,mlp"
   dec+=",mpc7,mpc8,pcm_*,adpcm_*,dsd_*,mjpeg,png"
   local dmx="mp3,aac,flac,ogg,mov,matroska,wav,w64,aiff,ape,wv,tta,asf,ac3,eac3,dts,truehd,mlp,dsf,caf,au,mpc,mpc8"
+  # Hidden symbols: the aarch64 assembly addresses FFmpeg's tables PC-relative,
+  # which lld refuses against an exportable symbol inside Qt's shared plugin.
   rm -rf "$PREFIX/ffmpeg"
   (cd "$s" && PKG_CONFIG_LIBDIR="$PREFIX/ffmpeg/lib/pkgconfig" ./configure \
     --prefix="$PREFIX/ffmpeg" --target-os=android --arch=aarch64 --cpu=armv8-a --enable-cross-compile \
     --cc="$CC" --cxx="$CXX" --nm="$BIN/llvm-nm" --ar="$BIN/llvm-ar" --ranlib="$BIN/llvm-ranlib" --strip="$BIN/llvm-strip" \
-    --enable-static --disable-shared --enable-pic --disable-programs --disable-doc \
+    --enable-static --disable-shared --enable-pic --extra-cflags=-fvisibility=hidden --disable-programs --disable-doc \
     --disable-avdevice --disable-avfilter --disable-postproc --disable-network \
     --disable-autodetect --enable-pthreads --enable-zlib --enable-jni \
     --disable-everything --enable-decoder="$dec" --enable-demuxer="$dmx" \
