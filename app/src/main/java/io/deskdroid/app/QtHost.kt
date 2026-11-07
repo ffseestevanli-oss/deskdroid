@@ -27,18 +27,31 @@ object QtHost {
             System.out.flush()
             Runtime.getRuntime().halt(70)
         }
+        val app = File(args[1]).isAbsolute || args[1].startsWith("libdd_")
         // Qt's Java side makes Handlers on the main Looper (Qt Multimedia's
-        // QtAudioDeviceManager), which an app_process doesn't have.
+        // QtAudioDeviceManager), which an app_process doesn't have. Apps get one
+        // that runs on its own thread, like an Android app's UI thread beside
+        // Qt's: Android's MediaPlayer delivers "prepared", "position" and
+        // errors through it, so a Looper nobody runs leaves every song at 0:00.
+        // KWin and plasmashell keep an idle one on their own thread.
         if (android.os.Looper.getMainLooper() == null) {
-            @Suppress("DEPRECATION")
-            android.os.Looper.prepareMainLooper()
+            if (app) startMainLooper() else {
+                @Suppress("DEPRECATION")
+                android.os.Looper.prepareMainLooper()
+            }
         }
         giveQtClassLoader()
-        // Apps (not KWin or plasmashell) get an Android Context: Qt Multimedia's
-        // Android backend plays through Android's MediaPlayer and AudioManager,
-        // which need one. QtCore reads it from QtNative when it loads, so first.
-        val app = File(args[1]).isAbsolute || args[1].startsWith("libdd_")
-        if (app) giveQtContext()
+        if (app) {
+            // Qt Multimedia's own messages (backend, player states, audio
+            // output) go to DeskDroid's log, unless the app sets its own rules.
+            try { android.system.Os.setenv("QT_LOGGING_RULES", "qt.multimedia.*=true", false) } catch (e: Throwable) { println("QtHost: no multimedia logging ($e)") }
+            // Apps (not KWin or plasmashell) get an Android Context: Qt Multimedia's
+            // Android backend plays through Android's MediaPlayer and AudioManager,
+            // which need one. QtCore reads it from QtNative when it loads, so first.
+            // Made on the main Looper's thread: ActivityThread makes a Handler
+            // on the Looper of the thread that constructs it.
+            onMainLooper { giveQtContext() }
+        }
         // Core first: only the library passed to System.load gets JNI_OnLoad.
         load(File(libs, "libc++_shared.so"))
         load(File(libs, "libQt6Core_arm64-v8a.so"))
@@ -110,6 +123,28 @@ object QtHost {
             }
             left = failed
         }
+    }
+
+    /** Starts the process's main Looper on a thread of its own, and waits until it runs. */
+    private fun startMainLooper() {
+        val ready = java.util.concurrent.CountDownLatch(1)
+        Thread({
+            @Suppress("DEPRECATION")
+            android.os.Looper.prepareMainLooper()
+            ready.countDown()
+            android.os.Looper.loop()
+        }, "android-main").apply { isDaemon = true }.start()
+        ready.await()
+        println("QtHost: Android main Looper running on its own thread")
+    }
+
+    /** Runs [block] on the main Looper's thread and waits for it. */
+    private fun onMainLooper(block: () -> Unit) {
+        val looper = android.os.Looper.getMainLooper()
+        if (looper == null || looper == android.os.Looper.myLooper()) return block()
+        val done = java.util.concurrent.CountDownLatch(1)
+        android.os.Handler(looper).post { try { block() } finally { done.countDown() } }
+        done.await()
     }
 
     private var service: android.app.Service? = null
