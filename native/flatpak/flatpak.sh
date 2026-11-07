@@ -47,7 +47,16 @@ fix_exports() {
 }
 
 cli() {
-  [ -x "$CLI/usr/bin/flatpak" ] || [ -f "$CLI/usr/bin/flatpak" ] || die "flatpak isn't unpacked yet (start the desktop once)"
+  [ -f "$CLI/usr/bin/flatpak" ] || die "flatpak isn't unpacked yet (start the desktop once)"
+  # The app unpacks this zip without file modes, and the shell won't run a
+  # program without its execute bit (ddmask never sees the exec): set them on
+  # Flatpak's programs and helpers (gpg, ostree's, flatpak-*), again after
+  # each unpack.
+  if [ ! -x "$CLI/usr/bin/flatpak" ]; then
+    for d in "$CLI/usr/bin" "$CLI/usr/libexec" "$CLI/usr/lib/$TRIPLE/gnupg" "$CLI/usr/lib/gnupg"; do
+      [ -d "$d" ] && find "$d" -type f -exec chmod 755 {} +
+    done
+  fi
   export DDFLATPAK_RUNTIME="$CLI/usr" DDFLATPAK_MOUNTS="/etc/ssl=$CLI/etc/ssl;/usr/etc=$CLI/etc"
   export DDMASK_GLIBC_LD_LIBRARY_PATH="$GLIBC_LIB:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib"
   export FLATPAK_BWRAP="$L/libdd_nobwrap.so" GIO_USE_VFS=local GSETTINGS_BACKEND=memory
