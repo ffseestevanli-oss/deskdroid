@@ -128,8 +128,8 @@ PartyPage {
                     Layout.fillWidth: true
                 }
                 Text {
-                    visible: /HTTP 404|HTTP 403|isn't published|FEX add-on/.test(page.error)
-                    text: "DeskDroid's FEX-Emu build has no download home yet. Install the FEX add-on APK, or point \"Download from\" at a folder that has it."
+                    visible: /HTTP 404|HTTP 403|isn't published|FEX \.zip/.test(page.error)
+                    text: "DeskDroid's FEX-Emu build has no download home yet. Install from the FEX .zip (deskdroid-fex-….zip) if you have it on your phone, or point \"Download from\" at a folder that has it."
                     font.family: Party.body; font.pixelSize: 14
                     color: Party.muted
                     wrapMode: Text.WordWrap
@@ -159,6 +159,13 @@ PartyPage {
                 primary: true
                 text: "Try again"
                 onClicked: page.begin()
+            }
+            PartyButton {
+                visible: page.phase === "failed"
+                text: "Install from a .zip…"
+                accent: Party.green
+                implicitHeight: 56
+                onClicked: applicationWindow().chooseZip(true)
             }
             PartyButton {
                 visible: page.phase === "failed"

@@ -84,6 +84,12 @@ PartyPage {
                 }
             }
             PartyButton {
+                text: "Install from a .zip…"
+                accent: Party.cyan
+                implicitHeight: 56
+                onClicked: applicationWindow().chooseZip(true)
+            }
+            PartyButton {
                 text: "Continue without Steam"
                 accent: Party.border
                 implicitHeight: 56
@@ -94,7 +100,7 @@ PartyPage {
             }
         }
         Text {
-            text: "About 1.2 GB to download and 4 GB on your phone for FEX-Emu and its x86 system, then Steam itself. Continuing without Steam takes you straight to the tools; you can set Steam up from there any time."
+            text: "About 1.2 GB to download and 4 GB on your phone for FEX-Emu and its x86 system, then Steam itself. Got the FEX .zip on your phone? Install from it and FEX-Emu doesn't need a download. Continuing without Steam takes you straight to the tools; you can set Steam up from there any time."
             font.family: Party.body; font.pixelSize: 13
             color: Party.dim
             wrapMode: Text.WordWrap

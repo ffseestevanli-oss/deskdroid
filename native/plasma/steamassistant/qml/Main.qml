@@ -2,6 +2,7 @@
 // install) until Steam is set up or skipped, then the tools.
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import "."
 
@@ -69,6 +70,25 @@ Kirigami.ApplicationWindow {
     Component { id: welcomePage; WelcomePage {} }
     Component { id: installPage; InstallPage {} }
     Component { id: toolsPage; ToolsPage {} }
+
+    // "Install from a .zip": FEX-Emu (and maybe the x86 system) from a file
+    // on the phone, fex/zip.sh's. Then the install, when asked.
+    property bool installAfterZip: false
+    function chooseZip(install) { installAfterZip = install; zipDialog.open() }
+    FileDialog {
+        id: zipDialog
+        title: "Choose the FEX .zip"
+        nameFilters: ["FEX .zip (*.zip)", "All files (*)"]
+        currentFolder: "file:///storage/emulated/0/Download"
+        onAccepted: {
+            backend.fexZip = selectedFile.toString()
+            root.showPassiveNotification("FEX-Emu will install from " + backend.fexZip.split("/").pop())
+            if (root.installAfterZip) {
+                backend.skipped = false
+                root.showInstall(true)
+            }
+        }
+    }
 
     function showWelcome() { pageStack.clear(); pageStack.push(welcomePage) }
     function showInstall(autoStart) { pageStack.clear(); pageStack.push(installPage, { autoStart: autoStart }) }

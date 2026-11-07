@@ -22,7 +22,8 @@ class Backend : public QObject
     // Where FEX downloads from (~/.config/deskdroid-fex-url), empty = the default.
     Q_PROPERTY(QString fexSource READ fexSource WRITE setFexSource NOTIFY fexSourceChanged)
     Q_PROPERTY(QString defaultFexSource READ defaultFexSource CONSTANT)
-    Q_PROPERTY(bool fexAddon READ fexAddon CONSTANT)
+    // A FEX .zip on the phone to install from (~/.config/deskdroid-fex-zip), empty = none.
+    Q_PROPERTY(QString fexZip READ fexZip WRITE setFexZip NOTIFY fexSourceChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -37,7 +38,8 @@ public:
     QString fexSource() const;
     void setFexSource(const QString &url);
     QString defaultFexSource() const;
-    bool fexAddon() const;
+    QString fexZip() const;
+    void setFexZip(const QString &path);
 
     Q_INVOKABLE void refresh();
     // Sets up FEX-Emu, the x86 system and Steam: line(), progress(), finished().

@@ -40,10 +40,10 @@ struct Stage {
 };
 const Stage kStages[] = {
     {"Downloading FEX-Emu", 0.00, 0.04, "Fetching FEX-Emu"},
-    {"Copying FEX-Emu", 0.00, 0.04, "Fetching FEX-Emu"},
+    {"Unzipping FEX-Emu", 0.00, 0.04, "Unzipping FEX-Emu"},
     {"Unpacking FEX-Emu", 0.04, 0.06, "Assembling FEX-Emu"},
     {"Downloading the x86 system", 0.06, 0.45, "Fetching the x86 system"},
-    {"Copying the x86 system", 0.06, 0.45, "Fetching the x86 system"},
+    {"Unzipping the x86 system", 0.06, 0.45, "Unzipping the x86 system"},
     {"Unpacking the x86 system", 0.45, 0.80, "Assembling the x86 system"},
     {"The x86 system", 0.80, 0.80, "The x86 system is up to date"},
     {"Ready", 0.82, 0.82, "FEX-Emu is ready"},
@@ -132,11 +132,28 @@ QString Backend::defaultFexSource() const
     return QString::fromLatin1(kDefaultSource);
 }
 
-bool Backend::fexAddon() const
+QString Backend::fexZip() const
 {
-    // The FEX add-on APK, installed and signed like DeskDroid: X86.kt notes it
-    // at each desktop start.
-    return QFileInfo::exists(x86Dir() + QStringLiteral("/addon"));
+    QFile f(configFile(QStringLiteral("deskdroid-fex-zip")));
+    if (!f.open(QIODevice::ReadOnly))
+        return QString();
+    return QString::fromUtf8(f.readAll()).trimmed();
+}
+
+void Backend::setFexZip(const QString &path)
+{
+    // X86.kt reads the path and unzips FEX (and the x86 system, when it's in there) from it.
+    const QString file = localPath(path.trimmed());
+    const QString config = configFile(QStringLiteral("deskdroid-fex-zip"));
+    if (file.isEmpty()) {
+        QFile::remove(config);
+    } else {
+        QDir().mkpath(home() + QStringLiteral("/.config"));
+        QFile f(config);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+            f.write(file.toUtf8() + '\n');
+    }
+    Q_EMIT fexSourceChanged();
 }
 
 void Backend::refresh()

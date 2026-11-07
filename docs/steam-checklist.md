@@ -34,9 +34,12 @@ Steam menu entry opens it while Steam isn't set up, instead of Konsole.
     --reset: all but steamapps and userdata), Uninstall (Steam only, or Purge:
     Steam, FEX-Emu, the x86 system, and the assistant back to Welcome).
   - Download from…: where FEX-Emu comes from (`~/.config/deskdroid-fex-url`,
-    read by X86.kt: a folder URL and/or `NAME=URL` lines), and whether the FEX
-    add-on APK (`fexpack/`, `io.deskdroid.fex`) is installed; X86.kt copies FEX
-    from the add-on when it is, signed with DeskDroid's key.
+    read by X86.kt: a folder URL and/or `NAME=URL` lines), and the FEX .zip.
+  - Install from a .zip… (Welcome, a failed install, Download from…): a file
+    on the phone made by `fex/zip.sh` (the release's files, stored), whose
+    path goes in `~/.config/deskdroid-fex-zip`; X86.kt unzips FEX from it, and
+    the x86 system too when the zip has it (`deskdroid-fex-with-x86-system.zip`
+    in the fex-latest release), checking each against its .sha256.
 
 ### On the device (assistant)
 
@@ -46,8 +49,9 @@ Steam menu entry opens it while Steam isn't set up, instead of Konsole.
 - [ ] Set up Steam: the bar moves through Fetching/Assembling FEX-Emu, the
       x86 system, then Steam; View verbose shows the log.
 - [ ] Without a FEX download host: the error says so, and points at the
-      add-on and Download from….
-- [ ] With the FEX add-on installed: "Copying FEX-Emu from the FEX add-on".
+      .zip and Download from….
+- [ ] Install from a .zip… with deskdroid-fex-FEX-2610.zip in Download:
+      "Installing from …", then "Unzipping FEX-Emu".
 - [ ] Tools: Launch Steam; each Steam tool asks first, then reports.
 - [ ] Purge returns to Welcome; Continue without Steam goes to the tools.
 
