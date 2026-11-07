@@ -30,31 +30,6 @@ jobs:
           path: out/*
           compression-level: 0
 
-  # The FEX add-on APK (fexpack/): the same FEX as an APK, for sharing it
-  # where there's no release to download from.
-  addon:
-    needs: build
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          name: deskdroid-fex
-          path: fex-out
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Build the add-on APK
-        run: |
-          ./gradlew --no-daemon -p fexpack assembleDebug -PfexDir="$PWD/fex-out" -PdeskdroidBuildNumber=${{ github.run_number }}
-          mkdir -p out && cp fexpack/build/outputs/apk/debug/deskdroid-fex-debug.apk out/deskdroid-fex-addon.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: deskdroid-fex-addon
-          path: out/*
-          compression-level: 0
-
   rootfs:
     runs-on: ubuntu-24.04
     steps:
@@ -68,14 +43,22 @@ jobs:
           compression-level: 0
 
   publish:
-    needs: [build, addon, rootfs]
+    needs: [build, rootfs]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
+      # The same files as .zips the Steam Installation Assistant installs
+      # from: FEX alone, and FEX with the x86 system (nothing to download).
+      - name: FEX .zips
+        run: |
+          fex/zip.sh out "$PWD/deskdroid-fex.zip" --no-rootfs
+          fex/zip.sh out "$PWD/deskdroid-fex-with-x86-system.zip"
+          mv deskdroid-fex.zip deskdroid-fex-with-x86-system.zip out/
       - name: Publish as the fex-latest release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,4 +1,4 @@
-// Where FEX-Emu comes from: the FEX add-on APK, or a download folder
+// Where FEX-Emu comes from: a FEX .zip on the phone, or a download folder
 // (~/.config/deskdroid-fex-url, read by the app's X86.kt).
 import QtQuick
 import QtQuick.Controls as QQC2
@@ -25,24 +25,44 @@ PartyPage {
         }
         Item {
             Layout.fillWidth: true
-            implicitHeight: addonText.implicitHeight + 28
+            implicitHeight: zipCol.implicitHeight + 28
             Chamfer { anchors.fill: parent; cut: 12; cutTopLeft: false; fillColor: Party.surface }
-            Rectangle { width: 3; height: parent.height; color: backend.fexAddon ? Party.green : Party.border }
-            Text {
-                id: addonText
+            Rectangle { width: 3; height: parent.height; color: backend.fexZip ? Party.green : Party.border }
+            ColumnLayout {
+                id: zipCol
                 anchors.fill: parent
                 anchors.margins: 14
                 anchors.leftMargin: 20
-                text: backend.fexAddon
-                    ? "The FEX add-on APK is installed: FEX-Emu comes from it, no download needed."
-                    : "FEX add-on APK: not installed. Install \"DeskDroid FEX\" (the deskdroid-fex APK) and FEX-Emu comes from it instead of a download. Start the desktop again after installing it."
-                font.family: Party.body; font.pixelSize: 15
-                color: Party.text
-                wrapMode: Text.WordWrap
+                spacing: 10
+                Text {
+                    text: backend.fexZip
+                        ? "Installing from the FEX .zip " + backend.fexZip + ": no download for what's in it."
+                        : "FEX .zip: none chosen. With DeskDroid's FEX .zip (deskdroid-fex-….zip) on your phone, FEX-Emu installs from it instead of a download; the zip with the x86 system in it needs no download at all."
+                    font.family: Party.body; font.pixelSize: 15
+                    color: Party.text
+                    wrapMode: Text.WrapAnywhere
+                    Layout.fillWidth: true
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    PartyButton {
+                        compact: true
+                        text: backend.fexZip ? "Choose another .zip…" : "Choose a .zip…"
+                        accent: Party.green
+                        onClicked: applicationWindow().chooseZip(false)
+                    }
+                    PartyButton {
+                        visible: backend.fexZip !== ""
+                        compact: true
+                        text: "Download instead"
+                        onClicked: backend.fexZip = ""
+                    }
+                }
             }
         }
         Text {
-            text: "Otherwise it downloads from this folder. Each file is the folder's address plus its name (deskdroid-fex-arm64.tar.zst, deskdroid-x86-rootfs.tar.zst and their .sha256 files). For a host with one link per file, add NAME=LINK lines; NAME.sha256= also takes the checksum itself."
+            text: "Without a .zip it downloads from this folder. Each file is the folder's address plus its name (deskdroid-fex-arm64.tar.zst, deskdroid-x86-rootfs.tar.zst and their .sha256 files). For a host with one link per file, add NAME=LINK lines; NAME.sha256= also takes the checksum itself."
             font.family: Party.body; font.pixelSize: 14
             color: Party.textSoft
             wrapMode: Text.WordWrap

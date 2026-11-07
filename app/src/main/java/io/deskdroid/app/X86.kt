@@ -34,15 +34,14 @@ import java.security.MessageDigest
  * Installation Assistant (native/plasma/steamassistant) runs it for people.
  *
  * Where they come from:
- *  - the FEX add-on APK (io.deskdroid.fex, fexpack/), when it is installed and
- *    signed with DeskDroid's own key: its assets hold the same files as the
- *    release, so FEX can travel as an APK while it has no download host;
+ *  - a FEX .zip on the phone (fex/zip.sh: the release's files in one zip),
+ *    named in ~/.config/deskdroid-fex-zip (the assistant's "Install from a
+ *    .zip"), so FEX installs locally while it has no download host;
  *  - otherwise the folder named in ~/.config/deskdroid-fex-url (one URL, the
  *    assistant's "Download from" setting), or the fex-latest release.
  */
 object X86 {
     private const val DEFAULT_RELEASE = "https://github.com/ffseestevanli-oss/deskdroid/releases/download/fex-latest/"
-    const val ADDON = "io.deskdroid.fex"
     private const val FEX = "deskdroid-fex-arm64.tar.zst"
     private const val ROOTFS = "deskdroid-x86-rootfs.tar.zst"
     // The rootfs unpacks to about 4 GB; the download is kept until it's unpacked.
@@ -83,8 +82,6 @@ object X86 {
                     "Categories=Game;\nMimeType=x-scheme-handler/steam;x-scheme-handler/steamlink;\n" +
                     "StartupWMClass=Xwayland\nKeywords=games;x86;FEX;\n")
             if (installed(c)) writeEtc(c)
-            // For the Steam Installation Assistant: whether FEX can come from the add-on APK.
-            File(dir(c), "addon").let { f -> if (addon(c) != null) f.writeText(ADDON + "\n") else f.delete() }
         } catch (e: Exception) {
             AppLog.i("x86: couldn't prepare: $e")
         }
@@ -165,54 +162,64 @@ object X86 {
         return Source(if (base.endsWith("/")) base else "$base/", files)
     }
 
-    /** The FEX add-on APK's assets, when it's installed and signed like DeskDroid. */
-    private fun addon(c: Context): android.content.res.AssetManager? = try {
-        val pm = c.packageManager
-        pm.getPackageInfo(ADDON, 0)
-        if (pm.checkSignatures(c.packageName, ADDON) != android.content.pm.PackageManager.SIGNATURE_MATCH) {
-            AppLog.i("x86: $ADDON is installed but not signed with DeskDroid's key, ignored")
-            null
-        } else c.createPackageContext(ADDON, 0).assets
-    } catch (e: Exception) { null }
+    /**
+     * The FEX .zip chosen in the assistant (~/.config/deskdroid-fex-zip, a
+     * path): the release's files, at its top or in one folder. Null without one.
+     */
+    private class LocalZip(val file: File) : java.io.Closeable {
+        private val zip = java.util.zip.ZipFile(file)
+        private val entries = zip.entries().asSequence().filter { !it.isDirectory }.associateBy { it.name.substringAfterLast('/') }
+        fun has(name: String) = name in entries
+        fun text(name: String): String? = entries[name]?.let { e -> zip.getInputStream(e).use { it.readBytes() }.toString(Charsets.UTF_8).trim() }
 
-    private fun addonHas(assets: android.content.res.AssetManager?, name: String) =
-        assets != null && try { assets.open(name).close(); true } catch (e: Exception) { false }
-
-    /** A file from the add-on APK into dir (checked against its .sha256 there, when it has one). */
-    private fun copyFromAddon(assets: android.content.res.AssetManager, name: String, dir: File, say: (String) -> Unit): File {
-        val out = File(dir, name)
-        val md = MessageDigest.getInstance("SHA-256")
-        var done = 0L
-        var lastMb = -100L
-        assets.open(name).use { input ->
-            FileOutputStream(out).use { o ->
-                val b = ByteArray(1 shl 16)
-                while (true) {
-                    val n = input.read(b)
-                    if (n < 0) break
-                    o.write(b, 0, n); md.update(b, 0, n); done += n
-                    if (done / 1_000_000 >= lastMb + 100) { lastMb = done / 1_000_000; say("  $lastMb MB") }
+        /** name into dir, checked against name.sha256 when the zip has one. */
+        fun extract(name: String, dir: File, say: (String) -> Unit): File {
+            val out = File(dir, name)
+            val md = MessageDigest.getInstance("SHA-256")
+            var done = 0L
+            var lastMb = -100L
+            zip.getInputStream(entries.getValue(name)).use { input ->
+                FileOutputStream(out).use { o ->
+                    val b = ByteArray(1 shl 16)
+                    while (true) {
+                        val n = input.read(b)
+                        if (n < 0) break
+                        o.write(b, 0, n); md.update(b, 0, n); done += n
+                        if (done / 1_000_000 >= lastMb + 100) { lastMb = done / 1_000_000; say("  $lastMb MB") }
+                    }
                 }
             }
+            val expected = text("$name.sha256")?.substringBefore(' ')?.lowercase().orEmpty()
+            val actual = md.digest().joinToString("") { "%02x".format(it) }
+            if (expected.isNotEmpty() && actual != expected) { out.delete(); throw Exception("$name in ${file.name} is damaged (checksum)") }
+            return out
         }
-        val expected = try { assets.open("$name.sha256").use { it.readBytes() }.toString(Charsets.UTF_8).trim().substringBefore(' ').lowercase() } catch (e: Exception) { "" }
-        val actual = md.digest().joinToString("") { "%02x".format(it) }
-        if (expected.isNotEmpty() && actual != expected) { out.delete(); throw Exception("$name in the FEX add-on is damaged (checksum)") }
-        return out
+        override fun close() = zip.close()
     }
 
-    private fun addonText(assets: android.content.res.AssetManager?, name: String): String? =
-        if (!addonHas(assets, name)) null else assets!!.open(name).use { it.readBytes() }.toString(Charsets.UTF_8).trim()
+    private fun localZip(c: Context, say: (String) -> Unit): LocalZip? {
+        val path = try {
+            File(c.filesDir, ".config/deskdroid-fex-zip").takeIf { it.exists() }?.readText()?.trim()
+        } catch (e: Exception) { null }
+        if (path.isNullOrEmpty()) return null
+        val f = File(path)
+        if (!f.canRead()) throw Exception("can't read the FEX .zip $path (moved, or no access to that folder?)")
+        return try { LocalZip(f) } catch (e: Exception) { throw Exception("${f.name} isn't a FEX .zip (${e.message})") }
+            .also { if (!it.has(FEX)) { it.close(); throw Exception("${f.name} has no $FEX in it") } }
+            .also { say("Installing from ${f.path}") }
+    }
 
     private fun install(c: Context, say: (String) -> Unit) {
         File(dir(c), "ready").delete()
         val cache = File(c.cacheDir, "x86").apply { mkdirs() }
-        val addon = addon(c)
         val release = release(c)
+        localZip(c, say).use { zip -> installFrom(c, zip, release, cache, say) }
+    }
 
-        val fex = if (addonHas(addon, FEX)) {
-            say("Copying FEX-Emu from the FEX add-on")
-            copyFromAddon(addon!!, FEX, cache, say)
+    private fun installFrom(c: Context, zip: LocalZip?, release: Source, cache: File, say: (String) -> Unit) {
+        val fex = if (zip != null) {
+            say("Unzipping FEX-Emu")
+            zip.extract(FEX, cache, say)
         } else {
             say("Downloading FEX-Emu from $release")
             download(c, release, FEX, cache, say)
@@ -225,9 +232,9 @@ object X86 {
         check(fexStaging.renameTo(fexDir(c))) { "couldn't move FEX-Emu into place" }
         check(interpreter(c).exists()) { "no FEXInterpreter in the download" }
 
-        val rootfsInAddon = addonHas(addon, ROOTFS)
+        val rootfsInZip = zip?.has(ROOTFS) == true
         val base = ROOTFS.removeSuffix(".tar.zst")
-        val version = if (rootfsInAddon) addonText(addon, "$base.version").orEmpty()
+        val version = if (rootfsInZip) zip!!.text("$base.version").orEmpty()
             else try { fetch(release.url("$base.version")).trim() } catch (e: Exception) { "" }
         val current = File(rootfs(c), "etc/deskdroid-x86-version").takeIf { it.exists() }?.readText()?.trim()
         if (current != null && current == version) {
@@ -237,11 +244,11 @@ object X86 {
             removeTree(rootfs(c))
             val free = StatFs(c.filesDir.path).availableBytes
             check(free >= NEED_BYTES) { "the x86 system needs about ${NEED_BYTES / 1_000_000_000} GB free, only ${free / 1_000_000_000} GB left" }
-            val files = (if (rootfsInAddon) addonText(addon, "$base.files")
+            val files = (if (rootfsInZip) zip!!.text("$base.files")
                 else try { fetch(release.url("$base.files")) } catch (e: Exception) { null })?.trim()?.toLongOrNull() ?: 0L
-            val tar = if (rootfsInAddon) {
-                say("Copying the x86 system from the FEX add-on (Ubuntu 24.04 for x86, about 1.2 GB)")
-                copyFromAddon(addon!!, ROOTFS, cache, say)
+            val tar = if (rootfsInZip) {
+                say("Unzipping the x86 system (Ubuntu 24.04 for x86, about 1.2 GB)")
+                zip!!.extract(ROOTFS, cache, say)
             } else {
                 say("Downloading the x86 system (Ubuntu 24.04 for x86, about 1.2 GB)")
                 download(c, release, ROOTFS, cache, say)
@@ -268,7 +275,7 @@ object X86 {
             conn.instanceFollowRedirects = false
             val code = conn.responseCode
             if (code in 300..399) { u = URL(u, conn.getHeaderField("Location")); conn.disconnect(); return@repeat }
-            if (code != 200) throw Exception("HTTP $code for ${u.path.substringAfterLast('/')} from ${u.host} (is FEX published there? Install the FEX add-on APK, or set another download folder in the Steam Installation Assistant)")
+            if (code != 200) throw Exception("HTTP $code for ${u.path.substringAfterLast('/')} from ${u.host} (is FEX published there? Install from a FEX .zip, or set another download folder in the Steam Installation Assistant)")
             return conn
         }
         throw Exception("too many redirects")

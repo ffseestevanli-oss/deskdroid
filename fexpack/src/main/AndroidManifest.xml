@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- No code and no screen: DeskDroid (X86.kt) reads this APK's assets. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application
-        android:hasCode="false"
-        android:label="DeskDroid FEX"
-        android:allowBackup="false" />
-</manifest>
