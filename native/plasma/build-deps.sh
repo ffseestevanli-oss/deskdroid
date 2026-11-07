@@ -678,7 +678,14 @@ build_plasma5support() {
 # (org.kde.desktop, instead of Android's Material: white windows, big controls)
 # and the platform theme (colors, fonts, icons, KDE's file dialog). The theme's
 # X11 part is a do-nothing stand-in.
-build_qqc2_desktop_style() { kf qqc2-desktop-style; test -e "$PREFIX/lib/qml/org/kde/desktop/qmldir"; }
+# With its Kirigami platform plugin (kirigami-plasmadesktop-integration,
+# built only when KIconThemes and KColorScheme are found): Kirigami pages
+# then take the colour scheme and icon colours and follow changes to them.
+build_qqc2_desktop_style() {
+  kf qqc2-desktop-style
+  test -e "$PREFIX/lib/qml/org/kde/desktop/qmldir"
+  find "$PREFIX/plugins/kf6/kirigami/platform" -name '*org.kde.desktop*' | grep -q .
+}
 build_plasma_integration() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-integration-$PLASMA_VERSION.tar.xz" "plasma-integration-$PLASMA_VERSION.tar.xz")"
   local t="$s/qt6/src/platformtheme"
@@ -825,6 +832,11 @@ build_kcms_workspace() {
   unandroid "$s"
   python3 "$HERE/workspacekcms/patch.py" "$s"
   cp "$HERE/workspacekcms/fonts.cmake" "$s/kcms/fonts/CMakeLists.txt"
+  # Colors › Edit Scheme starts kcolorschemeeditor: an app here, as a
+  # library QtHost starts (bin/kcolorschemeeditor, apps/as-library.py).
+  local e="$s/kcms/colors/editor/CMakeLists.txt"
+  perl -0pi -e 's/add_executable\(kcolorschemeeditor \$\{scheme_editor_SRCS\}\)/add_executable(kcolorschemeeditor)\ntarget_sources(kcolorschemeeditor PRIVATE \${scheme_editor_SRCS})/ or die "editor exe"; s/install\(TARGETS kcolorschemeeditor DESTINATION \$\{KDE_INSTALL_TARGETS_DEFAULT_ARGS\}\)/install(TARGETS kcolorschemeeditor \${KDE_INSTALL_TARGETS_DEFAULT_ARGS})/ or die "editor install"' "$e"
+  python3 "$HERE/apps/as-library.py" "$s" kcms/colors/editor/CMakeLists.txt kcolorschemeeditor kcms/colors/editor/kcolorschemeeditor.cpp
   rm -rf "$s/_kcms" && cp -r "$HERE/workspacekcms" "$s/_kcms"
   KEEP_GOING=1 kde_cmake "$s/_kcms" -DWORKSPACE_SRC="$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
   # No kcminit here (it applies the style at login on Linux).
@@ -832,8 +844,17 @@ build_kcms_workspace() {
   for k in colors icons desktoptheme style fonts lookandfeel; do
     find "$PREFIX/plugins/plasma/kcms/systemsettings" -name "*kcm_$k.so" | grep -q .
   done
+  # Breeze and Breeze Dark (global themes, plasmashell's) use the Breeze
+  # Light and Breeze Dark Plasma styles, as plain Breeze isn't offered.
+  local l="$PREFIX/share/plasma/look-and-feel"
+  perl -0pi -e 's/\[plasmarc\]\[Theme\]\nname=default\n/[plasmarc][Theme]\nname=breeze-light\n/' "$l/org.kde.breeze.desktop/contents/defaults"
+  perl -0pi -e 's/\[plasmarc\]\[Theme\]\nname=default\n/[plasmarc][Theme]\nname=breeze-dark\n/' "$l/org.kde.breezedark.desktop/contents/defaults"
+  ! grep -q "^name=default" "$l"/*/contents/defaults
+  test -e "$PREFIX/lib/libkcolorschemeeditor.so"
+  rm -f "$PREFIX/bin/kcolorschemeeditor" # an earlier build's program
 }
-inputs_kcms_workspace() { cat "$HERE"/workspacekcms/*; }
+# Again after plasmashell, whose look-and-feel packages it edits.
+inputs_kcms_workspace() { cat "$HERE"/workspacekcms/* "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; cat "$STAMPS/plasmashell" 2>/dev/null || true; }
 # Apps & Windows: KWin's pages (kwinkcms/), built against the installed KWin.
 build_kcms_kwin() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kwin-$PLASMA_VERSION.tar.xz" "kwin-$PLASMA_VERSION.tar.xz")"

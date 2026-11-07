@@ -91,7 +91,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Etherium (Firefox, native/firefox, published by firefox.yml) is in the
     # store too, run through ddmask like GIMP.
     [ -n "${DESKDROID_FIREFOX:-}" ] && [ -e "$DESKDROID_FIREFOX" ] && store_programs+=(firefox)
-    for app in dolphin kioworker ksmserver-logout-greeter kwrite systemsettings; do
+    for app in dolphin kioworker ksmserver-logout-greeter kwrite systemsettings kcolorschemeeditor; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
       bundled+=("$OUT/libdd_$app.so"); apps+=("$app")

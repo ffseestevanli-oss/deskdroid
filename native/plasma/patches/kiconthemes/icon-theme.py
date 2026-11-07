@@ -3,7 +3,8 @@
 BreezeIcons library (the Android branch) leaves Qt with no icon theme, so
 Qt Widgets apps such as Dolphin draw no icons. This makes the branch read
 the theme from kdeglobals ([Icons] Theme, Breeze by default) and look for
-it in $XDG_DATA_DIRS/icons, as Plasma does.
+it in $XDG_DATA_DIRS/icons, as Plasma does. Under Plasma's platform theme
+it only adds the search paths: the platform theme picks the theme.
 
 icon-theme.py <kiconthemes source dir>"""
 import pathlib
@@ -41,6 +42,12 @@ new = """static void initThemeHelper()
     }
     QIcon::setThemeSearchPaths(paths);
     QIcon::setFallbackThemeName(QStringLiteral("breeze"));
+    // With Plasma's platform theme (QT_QPA_PLATFORMTHEME=kde) the theme comes
+    // from it and follows System Settings › Icons; pinning it here (as KDE
+    // does without that platform theme) kept apps on the theme they started with.
+    if (QGuiApplicationPrivate::platformTheme() && QGuiApplicationPrivate::platformTheme()->name() == QLatin1String("kde")) {
+        return;
+    }
     const QString themeToUse = KConfigGroup(KSharedConfig::openConfig(), QStringLiteral("Icons")).readEntry("Theme", QStringLiteral("breeze"));
     QIcon::setThemeName(themeToUse);
     *_themeOverride() = themeToUse;
