@@ -772,6 +772,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         qtStatus = "KWin: starting"
         try {
             unpackKWinData(File(libs, "libkwin_data.so"), data)
+            Etherium.applySettings(applicationContext) // Startpage, privacy (Etherium.kt)
             linkPlugins(libs, data)
             // KWin remembers each screen's scale; the app sets it at every start.
             File(filesDir, "config/kwinoutputconfig.json").delete()

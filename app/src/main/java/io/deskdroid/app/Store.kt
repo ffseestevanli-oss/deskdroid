@@ -107,6 +107,7 @@ object Store {
         zip.delete()
         File(dir, "files.txt").writeText(files.joinToString("\n"))
         File(dir, "version.txt").writeText(app.version)
+        if (app.id == "firefox") Etherium.applySettings(c) // its current settings, over the ones it was built with
         File(dir, "app.txt").writeText(app.id) // last: the app counts as installed from here on
         linkCommand(c, app.id)
         AppLog.i("Store: installed ${app.id} ${app.version}")

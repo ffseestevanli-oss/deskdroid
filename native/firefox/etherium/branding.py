@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Makes Etherium, DeskDroid's browser: Firefox under its own name and icon
-(a patched build can't carry Firefox's), with nothing phoning home.
+(a patched build can't carry Firefox's), with nothing phoning home and no
+Google (Startpage searches).
 
     branding.py <firefox source dir>
 
@@ -8,6 +9,7 @@ Creates browser/branding/etherium from the unofficial branding: the names,
 the icons (this folder's rainbow), and default preferences that turn off
 everything Firefox sends to Mozilla or anyone else on its own (prefs.js).
 """
+import json
 import pathlib
 import shutil
 import struct
@@ -53,4 +55,32 @@ for p in out.rglob("*.svg"):
 # user can still change in about:config.
 prefs = out / "pref/firefox-branding.js"
 prefs.write_text(prefs.read_text() + "\n" + (here / "prefs.js").read_text())
-print(f"etherium branding: {icons} icons, {prefs.relative_to(src)}")
+
+# No Google: the search engines Firefox ships with (the copy of Mozilla's
+# search settings it falls back to, prefs.js keeping it from asking for
+# newer ones) lose Google, and Startpage (Google's results, without Google
+# seeing who asked) becomes the default everywhere, in private windows too,
+# first in the list. DuckDuckGo, Wikipedia and the rest stay.
+config = src / "services/settings/dumps/main/search-config-v2.json"
+data = json.loads(config.read_text())
+records = [r for r in data["data"]
+           if not (r.get("recordType") == "engine" and r.get("identifier", "").startswith("google"))]
+found = set()
+for r in records:
+    kind = r.get("recordType")
+    if kind == "defaultEngines":
+        r.update(globalDefault="startpage", globalDefaultPrivate="startpage", specificDefaults=[])
+        found.add(kind)
+    elif kind == "engineOrders":
+        r["orders"] = [{"environment": {"allRegionsAndLocales": True}, "order": ["startpage", "ddg", "wikipedia*"]}]
+        found.add(kind)
+    elif r.get("identifier") == "startpage":
+        r["variants"] = [{"environment": {"allRegionsAndLocales": True}}]
+        found.add("startpage")
+if found != {"defaultEngines", "engineOrders", "startpage"}:
+    sys.exit(f"{config.relative_to(src)}: expected defaultEngines, engineOrders and startpage, found {sorted(found)}")
+dropped = len(data["data"]) - len(records)
+data["data"] = records
+config.write_text(json.dumps(data, indent=2) + "\n")
+print(f"etherium branding: {icons} icons, {prefs.relative_to(src)}, "
+      f"{dropped} Google search engine(s) out, Startpage the default")
