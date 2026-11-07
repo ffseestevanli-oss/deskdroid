@@ -70,4 +70,5 @@ private:
     QSharedPointer<OdrsReviewsBackend> m_reviews;
     int m_fetching = 0;
     QString m_error;
+    QString m_lastOutput;
 };

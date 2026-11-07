@@ -22,6 +22,16 @@ die() { echo "flatpak: $*" >&2; exit 1; }
 # Tests on a desktop machine start glibc programs with this (qemu and
 # DeskDroid's loader); on the phone ddmask does it.
 G="${DESKDROID_GLIBC_RUN:-}"
+# On the phone ddmask starts glibc programs, but only in processes it's
+# preloaded into (Konsole's shell). Started from an app without it (Discover),
+# Android won't exec a program in app data: run it through glibc's loader in
+# the APK's library folder ourselves.
+if [ -z "$G" ]; then
+  case ":${LD_PRELOAD:-}:" in
+    *libddmask.so*) ;;
+    *) G="$L/libdd_ld-glibc.so" ;;
+  esac
+fi
 
 # Flatpak writes Exec=/usr/bin/flatpak into the menu entries it exports; the
 # command is "flatpak" on DeskDroid's PATH.

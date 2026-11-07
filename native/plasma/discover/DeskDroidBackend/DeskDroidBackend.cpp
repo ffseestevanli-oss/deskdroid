@@ -58,7 +58,7 @@ DeskDroidBackend::DeskDroidBackend(QObject *parent)
                   {u"update"_s, u"--user"_s, u"--appstream"_s, u"flathub"_s}},
                  [this](bool ok) {
                      if (!ok) {
-                         m_error = i18n("Couldn't reach Flathub. Check the network connection, then try again.");
+                         m_error = i18n("Couldn't set up Flathub: %1", m_lastOutput);
                          Q_EMIT inlineMessageChanged(QSharedPointer<InlineMessage>(explainDysfunction()));
                      }
                      loadPool();
@@ -124,14 +124,16 @@ void DeskDroidBackend::runSteps(const QList<QStringList> &steps, std::function<v
     connect(p, &QProcess::finished, this, [this, p, steps, done](int code, QProcess::ExitStatus st) {
         p->deleteLater();
         if (st != QProcess::NormalExit || code != 0) {
-            qWarning() << "flatpak" << steps.first() << "failed:" << p->readAll().right(400);
+            m_lastOutput = QString::fromUtf8(p->readAll()).trimmed().section(u'\n', -2);
+            qWarning() << "flatpak" << steps.first() << "failed:" << m_lastOutput;
             done(false);
             return;
         }
         runSteps(steps.mid(1), done);
     });
-    connect(p, &QProcess::errorOccurred, this, [p, done](QProcess::ProcessError e) {
+    connect(p, &QProcess::errorOccurred, this, [this, p, done](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
+            m_lastOutput = p->errorString();
             p->deleteLater();
             done(false);
         }
