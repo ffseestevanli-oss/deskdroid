@@ -942,6 +942,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         File(config, "kdeglobals").takeUnless { it.readText().contains("[KDE Action Restrictions]") }
             ?.appendText("\n[KDE Action Restrictions]\naction/lock_screen=false\n")
         writeUserDirs(config)
+        Storage.testMoves(this)
         writeTerminalSetup(config)
         copyWallpaper()
         // While DeskDroid's default layout changes from build to build, start from it
