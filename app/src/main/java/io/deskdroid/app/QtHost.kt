@@ -120,6 +120,34 @@ object QtHost {
         override fun onBind(intent: android.content.Intent?): android.os.IBinder? = null
     }
 
+    private var application: android.app.Application? = null
+
+    /** The Application an app process would have, so getApplicationContext() isn't null. */
+    private class HostApplication(base: android.content.Context) : android.app.Application() {
+        init { attachBaseContext(base) }
+    }
+
+    /**
+     * Gives the package's LoadedApk an Application. Without one,
+     * getApplicationContext() is null, and services made from this Context
+     * keep that null: AudioManager.setMode() then throws, so Qt Multimedia
+     * has no output device and plays nothing.
+     */
+    private fun giveApplication(thread: Any, threadClass: Class<*>, context: android.content.Context) {
+        try {
+            val app = HostApplication(context)
+            val loadedApk = Class.forName("android.app.ContextImpl").getDeclaredField("mPackageInfo")
+                .apply { isAccessible = true }.get(context)
+            if (loadedApk != null) {
+                loadedApk.javaClass.getDeclaredField("mApplication").apply { isAccessible = true }.set(loadedApk, app)
+            }
+            threadClass.getDeclaredField("mInitialApplication").apply { isAccessible = true }.set(thread, app)
+            application = app
+        } catch (e: Throwable) {
+            println("QtHost: no Application for Qt's Context (${e.cause ?: e})")
+        }
+    }
+
     /**
      * An app_process has no Context. This one is made like a system process
      * makes its own (ActivityThread's system context), then narrowed to
@@ -133,6 +161,7 @@ object QtHost {
             val system = threadClass.getDeclaredMethod("getSystemContext").apply { isAccessible = true }
                 .invoke(thread) as android.content.Context
             val context = system.createPackageContext(BuildConfig.APPLICATION_ID, android.content.Context.CONTEXT_IGNORE_SECURITY)
+            giveApplication(thread, threadClass, context)
             val native = Class.forName("org.qtproject.qt.android.QtNative")
             // QtNative keeps only a weak reference.
             service = HostService(context)
