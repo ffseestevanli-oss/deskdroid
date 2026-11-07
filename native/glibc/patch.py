@@ -15,6 +15,9 @@ patch.py <glibc source dir> <prefix>
    allow (set_robust_list, which glibc makes at start, and others). The loader
    catches that signal (SIGSYS) first thing and makes the call fail with ENOSYS
    instead, which glibc and most programs handle.
+4. No clone3: glibc makes it with every signal blocked (creating a thread,
+   posix_spawn), where SIGSYS can't be caught and the process dies ("Bad
+   system call"). glibc uses plain clone instead, as on kernels before 5.3.
 """
 import pathlib
 import re
@@ -105,4 +108,11 @@ edit("elf/rtld.c", """  struct dl_main_state state;
   struct dl_main_state state;
   dl_main_state_init (&state);
 """)
+# 4. No clone3 (see above): without HAVE_CLONE3_WRAPPER glibc only uses clone.
+for arch in ("aarch64", "x86_64"):
+    p = src / f"sysdeps/unix/sysv/linux/{arch}/sysdep.h"
+    t, n = re.subn(r"^# define HAVE_CLONE3_WRAPPER\s+1$", "/* DeskDroid: no HAVE_CLONE3_WRAPPER */", p.read_text(), flags=re.M)
+    if n != 1:
+        sys.exit(f"patch.py: {arch}/sysdep.h: HAVE_CLONE3_WRAPPER not found")
+    p.write_text(t)
 print(f"patch.py: {changed} files with paths under {prefix}")
