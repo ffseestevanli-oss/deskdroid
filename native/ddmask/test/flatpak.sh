@@ -11,11 +11,15 @@ trap 'rm -rf "$T"' EXIT
 APP="$T/app/files" RT="$T/runtime/files"
 mkdir -p "$APP/bin" "$APP/share/probe" "$RT/share/probe" "$RT/etc/xdg" "$RT/bin"
 "$CC" -O2 -Wall -shared -fPIC "$HERE/../ddflatpak.c" -o "$T/libddflatpak.so" -ldl
-"$CC" -O2 -Wall "$HERE/flatpak-probe.c" -o "$APP/bin/probe"
+"$CC" -O2 -Wall "$HERE/flatpak-probe.c" -o "$APP/bin/probe" -ldl
 echo app-data > "$APP/share/probe/data"
 echo runtime-data > "$RT/share/probe/data"
 echo runtime-etc > "$RT/etc/xdg/proberc"
 cp "$APP/bin/probe" "$RT/bin/rtprobe"
+cp "$(readlink -f /bin/sh)" "$RT/bin/sh" # the runtime's sh, for #!/bin/sh
+printf '#!/bin/sh\nexec /app/bin/probe from-script "$@"\n' > "$APP/bin/script"
+printf '#!/bin/sh\necho zypak itself ran\n' > "$APP/bin/zypak-wrapper.sh"
+chmod 755 "$APP/bin/script" "$APP/bin/zypak-wrapper.sh"
 # This machine's loader stands in for the runtime's.
 LOADER="$(readelf -l "$APP/bin/probe" | sed -n 's/.*interpreter: \(.*\)]/\1/p')"
 
@@ -33,7 +37,7 @@ expect() { # <name> <output> <pattern>...
   done
   echo "ok   $name"
 }
-ALL='open=yes stat=yes opendir=yes realpath=yes'
+ALL='open=yes stat=yes opendir=yes realpath=yes xstat=yes'
 
 out="$(run "$APP/bin/probe" /app/share/probe/data /usr/share/probe/data /etc/xdg/proberc)"
 expect "/app reaches the app's files" "$out" "/app/share/probe/data fopen=app-data $ALL"
@@ -45,10 +49,22 @@ expect "/etc the runtime lacks stays the system's" "$out" "/etc/hostname fopen=[
 
 out="$(run "$APP/bin/probe" "exec:/usr/bin/rtprobe" /app/share/probe/data)"
 expect "a program at /usr/bin starts through the loader" "$out" \
-  "argv0=child exe=[^ ]*ld-linux" "/app/share/probe/data fopen=app-data"
+  "argv0=child exe=$RT/bin/rtprobe" "/app/share/probe/data fopen=app-data"
+
+# Chromium (Electron) finds its files next to /proc/self/exe and execs it.
+out="$(run "$LOADER" "$APP/bin/probe")"
+expect "/proc/self/exe names the program, not the loader" "$out" "exe=$APP/bin/probe"
 
 out="$(run sh -c 'exec probe /usr/share/probe/data' 2>&1 || true)"
 expect "PATH's /app/bin finds the app's program" "$out" "fopen=runtime-data"
+
+out="$(run "$APP/bin/probe" "exec:/app/bin/script" /usr/share/probe/data)"
+expect "a #!/bin/sh script runs with the runtime's sh" "$out" "argv0=/app/bin/probe exe=$APP/bin/probe" \
+  "/usr/share/probe/data fopen=runtime-data"
+
+out="$(run "$APP/bin/probe" "exec:/app/bin/zypak-wrapper.sh" /app/bin/probe /app/share/probe/data)"
+expect "zypak-wrapper starts the program itself with --no-sandbox" "$out" \
+  "argv0=/app/bin/probe exe=$APP/bin/probe" "--no-sandbox fopen=no" "/app/share/probe/data fopen=app-data"
 
 echo
 [ "$fails" = 0 ] && echo "all ddflatpak tests passed" || { echo "$fails failed"; exit 1; }

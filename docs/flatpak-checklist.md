@@ -24,8 +24,25 @@ and ddmask runs them, so the store needs no hosting of its own.
 - [x] KCalc starts with the runtime's own loader and `ddflatpak.c`, without
       `flatpak run` or bubblewrap, with the Breeze style, icons and fonts
       from the runtime (`flatpak-kcalc-test.png`, on Xvfb).
-- [x] `native/ddmask/test/flatpak.sh`: path rewriting and starting programs,
-      with a pretend app and runtime.
+- [x] ytDownloader 4.0.0 (Electron 30.5.1, freedesktop runtime 25.08 with
+      its GL driver extension) runs the same way (`flatpak-ytdownloader-test.png`).
+      What Electron needed:
+      - **zypak**: Flathub's Electron apps start through `zypak-wrapper`, which
+        asks Flatpak's portal to start Chromium's sandboxed helpers. ddflatpak
+        skips it and starts the program with `--no-sandbox` instead.
+      - **/proc/self/exe**: started through the loader, it names the loader;
+        Chromium finds its files next to it and execs it for its helpers, so
+        ddflatpak answers with the program (the loader's `AT_EXECFN`).
+      - **old stat functions**: Electron is built against an old glibc and
+        calls `__xstat64` and friends, so its own fontconfig saw no fonts and
+        the page crashed in Blink (`FontCache::CrashWithFontInfo`, found with
+        Electron's debug symbols). ddflatpak maps those too.
+      - **extensions**: the GL driver (Mesa) goes where Flatpak mounts it,
+        `DDFLATPAK_MOUNTS`.
+      - `#!` scripts (the app's `run.sh`) start with the runtime's `/bin/sh`.
+- [x] `native/ddmask/test/flatpak.sh`: path rewriting, scripts, zypak,
+      `/proc/self/exe` and the old stat functions, with a pretend app and
+      runtime.
 
 ## Left for Android
 
@@ -37,7 +54,9 @@ and ddmask runs them, so the store needs no hosting of its own.
 - [ ] **ddmask rule**: a program under `flatpak/app/*` or `flatpak/runtime/*`
       starts through DeskDroid's glibc with the Flatpak library path and
       `ddflatpak` preloaded (in place of `test/ddflatpak-run.sh`).
-- [ ] Try KCalc's aarch64 build on a phone.
+- [ ] Try KCalc's and ytDownloader's aarch64 builds on a phone.
+- [ ] Extensions in general: read them from the runtime's and app's metadata
+      (`[Extension ...]`, `merge-dirs`) instead of the launcher's one GL case.
 - [ ] **GPU**: Flathub's Mesa doesn't know Android's GPU, so apps draw on the
       CPU at first; later, route them through virgl/Venus.
 - [ ] Build libflatpak and OSTree for Android, then port Discover with its
