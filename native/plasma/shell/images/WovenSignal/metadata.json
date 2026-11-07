@@ -1,0 +1,11 @@
+{
+    "KPlugin": {
+        "Id": "WovenSignal",
+        "Name": "Woven Signal",
+        "Authors": [
+            {
+                "Name": "Steven"
+            }
+        ]
+    }
+}

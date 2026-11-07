@@ -1,0 +1,11 @@
+{
+    "KPlugin": {
+        "Id": "AboveTheWeather",
+        "Name": "Above the Weather",
+        "Authors": [
+            {
+                "Name": "Steven"
+            }
+        ]
+    }
+}

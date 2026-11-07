@@ -1,0 +1,11 @@
+{
+    "KPlugin": {
+        "Id": "SevenVoices",
+        "Name": "Seven Voices",
+        "Authors": [
+            {
+                "Name": "Steven"
+            }
+        ]
+    }
+}

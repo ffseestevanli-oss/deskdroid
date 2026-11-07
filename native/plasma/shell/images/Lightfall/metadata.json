@@ -1,0 +1,11 @@
+{
+    "KPlugin": {
+        "Id": "Lightfall",
+        "Name": "Lightfall",
+        "Authors": [
+            {
+                "Name": "Steven"
+            }
+        ]
+    }
+}
