@@ -17,6 +17,10 @@
  *             buffer is the window's top row, unless y_invert is set (what
  *             OpenGL's default framebuffer orientation gives). The window
  *             takes the buffer's size, so resizing is committing a new size.
+ *     TEXT    desktops: the focused text field's text around the cursor
+ *             (SURROUNDING, in pieces like the TEXT below; a the cursor and b
+ *             the selection's other end, in UTF-16 units), so the phone's
+ *             keyboard knows what's there
  *     IME     show (1) or hide (0) the phone's on-screen keyboard: a text
  *             field in the desktop took or lost the keyboard focus. With it,
  *             the field's kind (purpose, NDESK_PURPOSE_*) and hints
@@ -89,6 +93,7 @@ enum ndesk_action {
 enum ndesk_text {
     NDESK_TEXT_COMMIT = 1,
     NDESK_TEXT_PREEDIT = 2,
+    NDESK_TEXT_SURROUNDING = 3, /* app -> compositor */
 };
 
 /* Wayland text-input's content purpose and the hints DeskDroid uses. */

@@ -1097,10 +1097,14 @@ build_gtk3() {
   # GTK tries first; its shm_open fallback just fails.
   sed -i 's|^#include <linux/memfd.h>$|&\n#ifdef __ANDROID__\n#define shm_open(n, f, m) (errno = ENOSYS, -1)\n#define shm_unlink(n) 0\n#endif|' "$s/gdk/wayland/gdkdisplay-wayland.c"
   grep -q 'define shm_open' "$s/gdk/wayland/gdkdisplay-wayland.c"
+  # The Wayland input method is built in (backend): its loadable module
+  # wasn't found on the phone, so GTK apps (Etherium) typed only with keys
+  # and never heard the phone keyboard's words (swipe typing, corrections).
   # Keep going past errors while the port is new, so one run shows them all.
   NINJA_KEEP_GOING=1 meson_cross "$s" -Dx11_backend=false -Dwayland_backend=true -Dbroadway_backend=false -Dwin32_backend=false \
     -Dquartz_backend=false -Dprint_backends=file -Dcolord=no -Dintrospection=false -Ddemos=false \
-    -Dexamples=false -Dtests=false -Dinstalled_tests=false -Dgtk_doc=false -Dman=false
+    -Dexamples=false -Dtests=false -Dinstalled_tests=false -Dgtk_doc=false -Dman=false \
+    -Dbuiltin_immodules=backend
   test -e "$PREFIX/lib/libgtk-3.so" && test -e "$PREFIX/lib/pkgconfig/gtk+-wayland-3.0.pc"
 }
 

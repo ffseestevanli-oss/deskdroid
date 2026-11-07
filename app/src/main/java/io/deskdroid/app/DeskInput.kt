@@ -21,9 +21,10 @@ import java.lang.ref.WeakReference
  * Android keyboards only offer those to an editor that tells them the text
  * around the cursor and takes words, not keys. So while a desktop text field
  * has the focus (KWin tells us, with its kind: protocol.h's IME), the
- * desktop's view is such an editor: [Connection] keeps a copy of what was
- * typed into the field since it took the focus, lets the keyboard edit that
- * copy like any Android text box, and after each edit sends the field the
+ * desktop's view is such an editor: [Connection] keeps a copy of the field's
+ * text around the cursor (the app reports it through KWin: SURROUNDING), lets
+ * the keyboard edit that copy like any Android text box (corrections, the
+ * space bar's cursor slide), and after each edit sends the field the
  * difference: the word being composed as KWin preedit text (underlined in the
  * field), finished words as commits, and Backspace or arrow keys for what the
  * keyboard took back or moved over. KWin hands those to the app over Wayland
@@ -31,6 +32,11 @@ import java.lang.ref.WeakReference
  *
  * Elsewhere (no text field, a terminal, or Plain keys in the DD menu) the
  * keyboard types keys as before (TYPE_NULL).
+ *
+ * The keyboard isn't restarted while the field keeps the focus: a restarted
+ * keyboard typed the word it was composing a second time. A click or a real
+ * keyboard's key instead ends the composing word, and the copy follows the
+ * field's text again.
  */
 object DeskInput {
     // protocol.h's NDESK_TEXT_*, NDESK_PURPOSE_* and NDESK_HINT_*.
@@ -61,34 +67,57 @@ object DeskInput {
     private val main = Handler(Looper.getMainLooper())
     private val views = mutableListOf<WeakReference<View>>()
     private var live: Connection? = null
+    // The field's text around the cursor as the app last reported it, with
+    // the cursor and the selection's other end; null until it reports.
+    private var reported: Triple<String, Int, Int>? = null
+    // When text or keys last went to the field: what the app reports for a
+    // while after is likely from before they landed.
+    private var sentAt = 0L
+    private const val SETTLE_MS = 300L
+    private val adopt = Runnable { adoptReported() }
 
     /** From the compositor (NativeDesk.onIme), on the main thread. */
     fun onField(active: Boolean, purpose: Int, hints: Int) {
         if (active == field && purpose == this.purpose && hints == this.hints) return
+        if (active != field) AppLog.i("Phone keyboard: desktop text field ${if (active) "focused (purpose $purpose, hints $hints)" else "left"}")
         field = active; this.purpose = purpose; this.hints = hints
         // A new field: the old copy is no use there (its composing word went
         // with the old field when it was clicked away from).
+        reported = null
         live?.dead = true
         live = null
         restart()
     }
 
+    /** From the compositor (NativeDesk.onSurrounding): the field's text around the cursor. */
+    fun onSurrounding(text: String, cursor: Int, anchor: Int) {
+        reported = Triple(text, cursor.coerceIn(0, text.length), anchor.coerceIn(0, text.length))
+        main.removeCallbacks(adopt)
+        main.postDelayed(adopt, (sentAt + SETTLE_MS - android.os.SystemClock.uptimeMillis()).coerceAtLeast(0))
+    }
+
+    private fun adoptReported() {
+        val r = reported ?: return
+        val c = live ?: return
+        val wait = sentAt + SETTLE_MS - android.os.SystemClock.uptimeMillis()
+        if (wait > 0) { main.postDelayed(adopt, wait); return }
+        c.adopt(r.first, r.second, r.third)
+    }
+
     /**
      * A click in the desktop or a key from a real keyboard: the field's cursor
-     * may have moved where the copy can't follow. The word being composed is
-     * finished where it is (before the click lands), and the copy starts over.
+     * may move where the copy can't follow. The word being composed is
+     * finished where it is (before the click lands), and the copy takes the
+     * field's text as the app reports it next.
      */
-    fun interrupted() {
+    fun interrupted(click: Boolean = true) {
         val c = live ?: return
-        if (!c.hasText()) return
-        c.finish()
-        live = null
-        restart()
+        c.reset(if (click) reported else null)
     }
 
     /** Plain keys or swipe typing picked in the DD menu: the keyboard takes it now. */
     fun prefChanged(v: View) {
-        live?.finish()
+        live?.let { it.reset(null); it.dead = true }
         live = null
         if (views.none { it.get() === v }) views += WeakReference(v)
         restart()
@@ -119,7 +148,15 @@ object DeskInput {
         info.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI or
             EditorInfo.IME_FLAG_NO_ENTER_ACTION or EditorInfo.IME_ACTION_NONE or
             (if (private()) EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING else 0)
-        return Connection(v).also { live = it }
+        val c = Connection(v)
+        reported?.let { (t, cursor, anchor) ->
+            c.adopt(t, cursor, anchor, notify = false)
+            info.initialSelStart = minOf(cursor, anchor)
+            info.initialSelEnd = maxOf(cursor, anchor)
+            if (android.os.Build.VERSION.SDK_INT >= 30) info.setInitialSurroundingText(t)
+        }
+        live = c
+        return c
     }
 
     private fun private() = purpose == P_PASSWORD || purpose == P_PIN || hints and (H_HIDDEN or H_SENSITIVE) != 0
@@ -155,14 +192,17 @@ object DeskInput {
     }
 
     private fun key(code: Int, times: Int = 1) {
+        if (times > 0) sentAt = android.os.SystemClock.uptimeMillis()
         repeat(times) {
             NativeDesk.nativeKey(code, 0, true)
             NativeDesk.nativeKey(code, 0, false)
         }
     }
 
-    private fun send(kind: Int, text: String, cursor: Int = 0) =
+    private fun send(kind: Int, text: String, cursor: Int = 0) {
+        sentAt = android.os.SystemClock.uptimeMillis()
         NativeDesk.nativeText(kind, text.toByteArray(Charsets.UTF_8), cursor)
+    }
 
     /** Types text into the field: commits, with Enter for each line break. */
     private fun type(text: String) {
@@ -181,8 +221,8 @@ object DeskInput {
 
     /**
      * The field as the phone's keyboard sees it: an Android editor over a copy
-     * of the text typed since it took the focus, cursor at its end, mirrored
-     * into the desktop's field after every edit (see [DeskInput]).
+     * of the field's text around the cursor, mirrored into the desktop's field
+     * after every edit (see [DeskInput]).
      */
     class Connection(private val view: View) : BaseInputConnection(view, true) {
         @Volatile var dead = false
@@ -194,16 +234,55 @@ object DeskInput {
         private var preedit = ""
         private var preeditCursor = 0
         private var batch = 0
+        // A selection in the field (from the app's report): typing replaces it
+        // there, so the first edit deletes it with one Backspace.
+        private var selLo = 0
+        private var selHi = 0
 
         override fun getEditable(): Editable = text
 
-        fun hasText() = text.isNotEmpty() || preedit.isNotEmpty()
+        /**
+         * The copy becomes the field's text as the app reports it, unless the
+         * keyboard is mid-edit or composing (the field's own report leaves the
+         * composing word out). [notify]: the keyboard hears the new cursor.
+         */
+        fun adopt(s: String, cursor: Int, anchor: Int, notify: Boolean = true) {
+            if (dead || batch > 0 || preedit.isNotEmpty() || getComposingSpanStart(text) >= 0) return
+            val lo = minOf(cursor, anchor)
+            val hi = maxOf(cursor, anchor)
+            if (s == before + after && cursor == before.length && lo == selLo && hi == selHi &&
+                Selection.getSelectionStart(text) == anchor && Selection.getSelectionEnd(text) == cursor) return
+            text.replace(0, text.length, s)
+            Selection.setSelection(text, anchor, cursor)
+            before = s.substring(0, cursor)
+            after = s.substring(cursor)
+            selLo = lo; selHi = hi
+            if (notify) updated()
+        }
 
-        /** Ends the composing word where it is and stops listening. */
-        fun finish() {
-            dead = true
+        /**
+         * A click or a key the copy can't follow: the composing word ends where
+         * it is (the keyboard is told it's gone, so it doesn't type it again),
+         * and the copy is the field's last report ([r], or empty until the next).
+         */
+        fun reset(r: Triple<String, Int, Int>?) {
+            if (dead) return
             if (preedit.isNotEmpty()) send(TEXT_COMMIT, preedit)
-            preedit = ""
+            preedit = ""; preeditCursor = 0
+            batch = 0
+            text.clear()
+            before = ""; after = ""; selLo = 0; selHi = 0
+            Selection.setSelection(text, 0)
+            if (r != null) adopt(r.first, r.second, r.third, notify = false)
+            updated()
+            // Whatever the app reports next is what the field now has.
+            sentAt = 0
+        }
+
+        private fun updated() {
+            view.context.getSystemService(InputMethodManager::class.java)?.updateSelection(
+                view, Selection.getSelectionStart(text), Selection.getSelectionEnd(text),
+                getComposingSpanStart(text), getComposingSpanEnd(text))
         }
 
         private inline fun edit(block: () -> Boolean): Boolean {
@@ -283,7 +362,7 @@ object DeskInput {
             super.finishComposingText()
             mirror()
             key(KeyEvent.KEYCODE_ENTER)
-            interrupted()
+            reset(null) // a new line, or the form went: the app reports what's there now
         }
 
         override fun sendKeyEvent(e: KeyEvent): Boolean {
@@ -345,9 +424,7 @@ object DeskInput {
             // is, and may move the field's cursor: the copy starts over.
             if (down) super.finishComposingText().also { mirror() }
             NativeDesk.nativeKey(e.keyCode, e.unicodeChar, down)
-            if (!down && e.keyCode != KeyEvent.KEYCODE_SHIFT_LEFT && e.keyCode != KeyEvent.KEYCODE_SHIFT_RIGHT) {
-                main.post { if (live === this) interrupted() }
-            }
+            if (!down && !KeyEvent.isModifierKey(e.keyCode)) reset(null)
             return true
         }
 
@@ -378,6 +455,20 @@ object DeskInput {
                 send(TEXT_PREEDIT, "")
                 preedit = ""
                 preeditCursor = 0
+            }
+            if (textChanged && selHi > selLo) {
+                // The field has a selection: the first key goes to it.
+                val w = before + after
+                val lo = selLo.coerceIn(0, w.length)
+                val hi = selHi.coerceIn(lo, w.length)
+                if (nb + na == w) {
+                    key(KeyEvent.KEYCODE_DPAD_LEFT) // collapses it to its start
+                    before = w.substring(0, lo); after = w.substring(lo)
+                } else {
+                    key(KeyEvent.KEYCODE_DEL) // deletes it
+                    before = w.substring(0, lo); after = w.substring(hi)
+                }
+                selLo = 0; selHi = 0
             }
             if (textChanged) {
                 if (nb + na == before + after) {
@@ -410,8 +501,7 @@ object DeskInput {
                 preeditCursor = npc
             }
             // Keyboards follow the editor's cursor and composing word through this.
-            view.context.getSystemService(InputMethodManager::class.java)?.updateSelection(
-                view, Selection.getSelectionStart(text), Selection.getSelectionEnd(text), cs, ce)
+            updated()
         }
     }
 

@@ -48,6 +48,9 @@
 // Set in KWin's InputMethod::refreshActive (add-to-kwin.py): whether the
 // focused surface has an enabled text input, and its purpose and hints.
 namespace KWin { extern void (*deskdroidTextInputHook)(bool, int, int); }
+// Set in KWin's InputMethod::surroundingTextChanged: the focused field's text
+// around the cursor, with the cursor and the selection's other end (UTF-16).
+namespace KWin { extern void (*deskdroidSurroundingHook)(const QString &, int, int); }
 
 namespace KWin
 {
@@ -766,6 +769,7 @@ bool NativeDeskBackend::initialize()
     static NativeDeskBackend *self;
     self = this;
     deskdroidTextInputHook = [](bool active, int purpose, int hints) { self->setTextInputActive(active, purpose, hints); };
+    deskdroidSurroundingHook = [](const QString &text, int cursor, int anchor) { self->setSurrounding(text, cursor, anchor); };
 
     m_output = new NativeDeskOutput(this, m_size, m_scale);
     Q_EMIT outputAdded(m_output);
@@ -877,6 +881,41 @@ void NativeDeskBackend::setTextInputActive(bool active, int purpose, int hints)
     m.ime.purpose = purpose;
     m.ime.hints = hints;
     send(m);
+}
+
+void NativeDeskBackend::setSurrounding(const QString &text, int cursor, int anchor)
+{
+    // Apps report it after every change; the phone hears the latest, a moment later.
+    m_surrounding = text.toUtf8();
+    m_surroundingCursor = cursor;
+    m_surroundingAnchor = anchor;
+    if (!m_surroundingPending) {
+        m_surroundingPending = true;
+        QTimer::singleShot(30, this, [this] {
+            m_surroundingPending = false;
+            const QByteArray &u = m_surrounding;
+            qsizetype off = 0;
+            do {
+                qsizetype piece = u.size() - off;
+                if (piece > NDESK_TEXT_CHUNK) {
+                    piece = NDESK_TEXT_CHUNK;
+                    while (piece > 1 && (uchar(u[off + piece]) & 0xC0) == 0x80) {
+                        piece--; // whole characters
+                    }
+                }
+                ndesk_msg m = {};
+                m.op = NDESK_TEXT;
+                m.text.kind = NDESK_TEXT_SURROUNDING;
+                m.text.more = off + piece < u.size();
+                m.text.len = uint16_t(piece);
+                m.text.a = m_surroundingCursor;
+                m.text.b = m_surroundingAnchor;
+                memcpy(m.text.text, u.constData() + off, piece);
+                send(m);
+                off += piece;
+            } while (off < u.size());
+        });
+    }
 }
 
 void NativeDeskBackend::text(const ndesk_msg &m)

@@ -131,6 +131,13 @@ object NativeDesk {
         Prefs.nativeScale(c).takeIf { it > 0f }
             ?: ((c.resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4f)
 
+    /** From the compositor: the focused desktop text field's text around the cursor (UTF-8; UTF-16 indices). */
+    @JvmStatic @androidx.annotation.Keep
+    fun onSurrounding(utf8: ByteArray, cursor: Int, anchor: Int) {
+        val text = String(utf8, Charsets.UTF_8)
+        Handler(Looper.getMainLooper()).post { DeskInput.onSurrounding(text, cursor, anchor) }
+    }
+
     /** From the compositor: a text field in the desktop took (or lost) the keyboard focus. */
     @JvmStatic @androidx.annotation.Keep
     fun onIme(show: Boolean, purpose: Int, hints: Int) {
@@ -1538,7 +1545,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // (there's no KDE mixer yet): Android's own volume slider shows.
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
         if (started) {
-            if (!KeyEvent.isModifierKey(keyCode)) DeskInput.interrupted() // a real keyboard's key
+            if (!KeyEvent.isModifierKey(keyCode)) DeskInput.interrupted(click = false) // a real keyboard's key
             NativeDesk.physicalKey(keyCode, e, true)
         }
         return true
@@ -2353,7 +2360,7 @@ class PhoneTouchpadActivity : Activity() {
         // Typing in the drawer's search box stays there.
         if (drawerOpen) return super.onKeyDown(keyCode, e)
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
-        if (!KeyEvent.isModifierKey(keyCode)) DeskInput.interrupted() // a real keyboard's key
+        if (!KeyEvent.isModifierKey(keyCode)) DeskInput.interrupted(click = false) // a real keyboard's key
         NativeDesk.physicalKey(keyCode, e, true)
         return true
     }

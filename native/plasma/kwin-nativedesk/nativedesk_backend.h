@@ -235,6 +235,7 @@ public:
     // A text field took (true) or lost the keyboard focus: the phone's keyboard.
     void setTextInputActive(bool active, int purpose, int hints);
     void text(const ndesk_msg &m);
+    void setSurrounding(const QString &text, int cursor, int anchor);
 
 private:
     struct Buffer
@@ -265,6 +266,10 @@ private:
     int m_textInputPurpose = 0;
     int m_textInputHints = 0;
     QByteArray m_text; // a TEXT message's pieces so far
+    QByteArray m_surrounding; // the focused field's text, for the phone
+    int m_surroundingCursor = 0;
+    int m_surroundingAnchor = 0;
+    bool m_surroundingPending = false;
     QList<QPointer<Window>> m_minimizedForScreenOff; // NDESK_ACTION_SCREEN_OFF
 };
 

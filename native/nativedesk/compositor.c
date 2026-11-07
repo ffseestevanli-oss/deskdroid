@@ -323,6 +323,34 @@ static void ime(bool show, uint32_t purpose, uint32_t hints)
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
 }
 
+/* The focused text field's text, from the desktop (TEXT SURROUNDING), for
+ * NativeDesk.onSurrounding; pieces gather here until the last one. */
+static void surrounding(const struct ndesk_msg *m)
+{
+    static char buf[16384];
+    static size_t len;
+    size_t n = m->text.len < NDESK_TEXT_CHUNK ? m->text.len : NDESK_TEXT_CHUNK;
+    if (len + n <= sizeof buf) {
+        memcpy(buf + len, m->text.text, n);
+        len += n;
+    }
+    if (m->text.more) return;
+    JNIEnv *env;
+    if (C.vm && C.cls
+        && ((*C.vm)->GetEnv(C.vm, (void **)&env, JNI_VERSION_1_6) == JNI_OK
+            || (*C.vm)->AttachCurrentThread(C.vm, &env, NULL) == JNI_OK)) {
+        jmethodID id = (*env)->GetStaticMethodID(env, C.cls, "onSurrounding", "([BII)V");
+        jbyteArray bytes = (*env)->NewByteArray(env, (jsize)len);
+        if (id && bytes) {
+            (*env)->SetByteArrayRegion(env, bytes, 0, (jsize)len, (const jbyte *)buf);
+            (*env)->CallStaticVoidMethod(env, C.cls, id, bytes, (jint)m->text.a, (jint)m->text.b);
+        }
+        if (bytes) (*env)->DeleteLocalRef(env, bytes);
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    }
+    len = 0;
+}
+
 /* Reads one packet; returns false when the client is gone. */
 static bool read_client(int i)
 {
@@ -431,6 +459,9 @@ static bool read_client(int i)
     }
     case NDESK_IME:
         ime(m.ime.show != 0, m.ime.purpose, m.ime.hints);
+        break;
+    case NDESK_TEXT:
+        if (m.text.kind == NDESK_TEXT_SURROUNDING) surrounding(&m);
         break;
     default:
         if (fence >= 0) close(fence);
