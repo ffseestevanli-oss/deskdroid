@@ -461,7 +461,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     fun sendSafeArea() {
         val insets = lastInsets
         val e = FloatArray(4) // left, top, right, bottom
-        if (insets != null && Prefs.dodgeCutouts(this)) {
+        // A monitor has no cutouts to dodge: off while the desktop is on one,
+        // and back (if it was on) once it's on the phone again.
+        if (insets != null && Prefs.dodgeCutouts(this) && !NativeDesk.onMonitor) {
             // Panels dodge sideways only, by the same amount on both sides so
             // they stay centred: the deeper of the cutouts and the full
             // radius of the screen's rounded corners.
@@ -562,6 +564,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             holder.surface.setFrameRate(hz, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
         }
         if (NativeDesk.running) {
+            // Home on the phone while the desktop is on a monitor: the
+            // desktop stays there, the phone goes back to its touchpad screen.
+            if (monitorHasDesktop()) {
+                AppLog.i("Native desktop: Home while on a monitor, back to the touchpad")
+                backToTouchpad()
+                return
+            }
             // On a monitor with the desktop drawn above Android's taskbar
             // (MonitorOverlay): this window only takes the input.
             if (external && MonitorOverlay.active) {
@@ -622,6 +631,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (!(external && MonitorOverlay.active))
             surfaceView.holder.surfaceFrame.let { NativeDesk.surfaceW = it.width().toFloat(); NativeDesk.surfaceH = it.height().toFloat() }
         NativeDesk.setOnMonitor(applicationContext, external)
+        sendSafeArea() // cutouts dodged on the phone only
         // Above Android's taskbar, with the desktop helper on (MonitorOverlay).
         if (external) display?.displayId?.let { PowerMenuService.showOverlay(it) }
         if (external) {
@@ -1944,10 +1954,34 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     // minimized (KWin's Show Desktop; Home again brings them back). Coming
     // back from another app, Home only brings the desktop forward.
     private var inFront = false
-    override fun onResume() { super.onResume(); inFront = true }
+    override fun onResume() {
+        super.onResume()
+        inFront = true
+        if (monitorHasDesktop()) { backToTouchpad(); return }
+        // The monitor went while this window waited behind the touchpad
+        // screen with its surface: the desktop comes back here.
+        val h = surfaceView.holder
+        if (!external && NativeDesk.running && !NativeDesk.onMonitor && !started && h.surface.isValid) {
+            started = NativeDesk.nativeStart(h.surface)
+            if (started) { MonitorOverlay.replaced(); tookSurface(); NativeDesk.nativeResized(); main.post(tick) }
+        }
+    }
     override fun onPause() { super.onPause(); inFront = false }
+
+    /** The phone's window while the desktop is on a monitor that's still plugged in. */
+    private fun monitorHasDesktop() =
+        !external && NativeDesk.running && NativeDesk.onMonitor && MonitorGuard.monitor(this) != null
+
+    /** The phone's touchpad screen to the front (the phone's Home while on a monitor). */
+    private fun backToTouchpad() {
+        startActivity(android.content.Intent(this, PhoneTouchpadActivity::class.java)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            android.app.ActivityOptions.makeBasic().setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY).toBundle())
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        if (intent.hasCategory(android.content.Intent.CATEGORY_HOME) && monitorHasDesktop()) { backToTouchpad(); return }
         if (inFront && started && intent.hasCategory(android.content.Intent.CATEGORY_HOME)) {
             showMenu(false)
             NativeDesk.nativeAction(1)
