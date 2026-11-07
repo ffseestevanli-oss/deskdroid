@@ -95,6 +95,79 @@ pref("media.gmp-provider.enabled", false);
 pref("media.gmp-manager.url", "");
 pref("media.gmp-gmpopenh264.enabled", false);
 pref("browser.startup.homepage_override.mstone", "ignore");
+// ---- Etherium (DeskDroid): no Google ---------------------------------------
+// Startpage (Google's results, without Google seeing who asked) is the search
+// engine, in private windows too. branding.py takes Google out of the search
+// engines Etherium ships with; policies.json sets the default and removes
+// Google from builds made before that.
+pref("browser.search.separatePrivateDefault", true);
+pref("browser.search.separatePrivateDefault.ui.enabled", true);
+pref("browser.urlbar.placeholderName", "Startpage");
+pref("browser.urlbar.placeholderName.private", "Startpage");
+// Widevine is Google's DRM module, downloaded from Google: off, with the
+// rest of the DRM machinery (there is no Widevine for this build anyway).
+pref("media.eme.enabled", false);
+pref("media.gmp-widevinecdm.enabled", false);
+pref("media.gmp-widevinecdm.visible", false);
+pref("media.gmp-manager.updateEnabled", false);
+// Google's Safe Browsing report and advisory pages, should anyone turn Safe
+// Browsing back on.
+pref("browser.safebrowsing.provider.google.reportURL", "");
+pref("browser.safebrowsing.provider.google4.reportURL", "");
+pref("browser.safebrowsing.provider.google4.dataSharingURL", "");
+pref("browser.safebrowsing.provider.google4.dataSharing.enabled", false);
+pref("browser.safebrowsing.reportPhishURL", "");
+// ---- Etherium (DeskDroid): privacy -----------------------------------------
+// Tracking protection on Strict: trackers, cross-site cookies (each site
+// gets its own cookie jar), cryptominers, fingerprinters, social trackers.
+pref("browser.contentblocking.category", "strict");
+pref("privacy.trackingprotection.enabled", true);
+pref("privacy.trackingprotection.pbmode.enabled", true);
+pref("privacy.trackingprotection.socialtracking.enabled", true);
+pref("privacy.trackingprotection.emailtracking.enabled", true);
+pref("privacy.trackingprotection.fingerprinting.enabled", true);
+pref("privacy.trackingprotection.cryptomining.enabled", true);
+pref("privacy.fingerprintingProtection", true);
+pref("network.cookie.cookieBehavior", 5);
+// Tracking bits stripped from links (?fbclid=, ?gclid= and the like).
+pref("privacy.query_stripping.enabled", true);
+pref("privacy.query_stripping.enabled.pbmode", true);
+// Sites are told not to sell or share your data (Global Privacy Control,
+// legally binding in some places), and Do Not Track.
+pref("privacy.globalprivacycontrol.enabled", true);
+pref("privacy.donottrackheader.enabled", true);
+// Other sites only learn which site sent you, not the page.
+pref("network.http.referer.XOriginTrimmingPolicy", 2);
+// HTTPS only: plain HTTP pages ask first.
+pref("dom.security.https_only_mode", true);
+pref("dom.security.https_only_mode_send_http_background_request", false);
+// Lookalike web addresses (Cyrillic "а" for "a") shown as what they are,
+// since Safe Browsing is off.
+pref("network.IDN_show_punycode", true);
+// No hyperlink-auditing pings, no battery level for sites.
+pref("browser.send_pings", false);
+pref("dom.battery.enabled", false);
+// Nothing sent to Mozilla about the sites you visit or what you type.
+pref("browser.urlbar.suggest.trending", false);
+pref("browser.urlbar.suggest.weather", false);
+pref("browser.urlbar.suggest.yelp", false);
+pref("browser.urlbar.suggest.fakespot", false);
+pref("browser.urlbar.suggest.mdn", false);
+pref("browser.urlbar.suggest.addons", false);
+pref("browser.urlbar.suggest.pocket", false);
+pref("browser.newtabpage.activity-stream.feeds.weatherfeed", false);
+pref("browser.newtabpage.activity-stream.showWeather", false);
+pref("browser.newtabpage.activity-stream.default.sites", "");
+pref("browser.contentblocking.report.lockwise.enabled", false);
+pref("browser.contentblocking.report.monitor.enabled", false);
+pref("dom.private-attribution.submission.enabled", false);
+pref("browser.ml.enable", false);
+pref("browser.ml.chat.enabled", false);
+pref("browser.tabs.groups.smart.enabled", false);
+pref("signon.management.page.breach-alerts.enabled", false);
+pref("signon.firefoxRelay.feature", "disabled");
+pref("browser.shopping.experience2023.enabled", false);
+pref("browser.attribution.enabled", false);
 // ---- DeskDroid's desktop ---------------------------------------------------
 // Scrolling that stops responding (touch, touchpad and mouse at once): on
 // Wayland Firefox paces scrolling by the compositor's frame callbacks, and

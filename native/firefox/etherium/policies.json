@@ -8,14 +8,54 @@
     "CaptivePortal": false,
     "NetworkPrediction": false,
     "ExtensionUpdate": false,
-    "FirefoxHome": {"SponsoredTopSites": false, "SponsoredStories": false, "Stories": false},
-    "FirefoxSuggest": {"SponsoredSuggestions": false, "ImproveSuggest": false, "WebSuggestions": false},
-    "UserMessaging": {"ExtensionRecommendations": false, "FeatureRecommendations": false, "MoreFromMozilla": false, "SkipOnboarding": true},
+    "FirefoxHome": {
+      "SponsoredTopSites": false,
+      "SponsoredStories": false,
+      "Stories": false
+    },
+    "FirefoxSuggest": {
+      "SponsoredSuggestions": false,
+      "ImproveSuggest": false,
+      "WebSuggestions": false
+    },
+    "UserMessaging": {
+      "ExtensionRecommendations": false,
+      "FeatureRecommendations": false,
+      "MoreFromMozilla": false,
+      "SkipOnboarding": true
+    },
     "ExtensionSettings": {
       "uBlock0@raymondhill.net": {
         "installation_mode": "normal_installed",
         "install_url": "file://@DISTRIBUTION@/extensions/uBlock0@raymondhill.net.xpi"
       }
-    }
+    },
+    "SearchEngines": {
+      "Add": [
+        {
+          "Name": "Startpage",
+          "Description": "Google's results, without Google seeing who asked",
+          "URLTemplate": "https://www.startpage.com/sp/search?q={searchTerms}",
+          "SuggestURLTemplate": "https://www.startpage.com/suggestions?partner=apex&format=opensearch&q={searchTerms}",
+          "IconURL": "https://www.startpage.com/favicon.ico",
+          "Alias": "@startpage",
+          "Method": "GET"
+        }
+      ],
+      "Default": "Startpage",
+      "DefaultPrivate": "Startpage",
+      "Remove": [
+        "Google"
+      ]
+    },
+    "SearchSuggestEnabled": false,
+    "EnableTrackingProtection": {
+      "Value": true,
+      "Cryptomining": true,
+      "Fingerprinting": true,
+      "EmailTracking": true,
+      "Category": "strict"
+    },
+    "HttpsOnlyMode": "enabled"
   }
 }

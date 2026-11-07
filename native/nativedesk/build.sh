@@ -318,6 +318,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
           [ -e "$P/distribution/policies.json" ] && sed -i \
             "s|/data/data/io.deskdroid.app/files/kwin/firefox/|/data/data/io.deskdroid.app/files/store/apps/firefox/program/|g" \
             "$P/distribution/policies.json"
+          # Etherium's settings as they are now, over the ones it was built with.
+          "$HERE/../firefox/etherium/settings.sh" "$P" /data/data/io.deskdroid.app/files/store/apps/firefox/program
           echo firefox > "$pkg/program.txt"
           # Firefox finds its files next to its program, which it would take
           # from /proc/self/exe (deskdroid.py); Termux's patches put /tmp
@@ -409,6 +411,10 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       # the system's mimeapps.list from: XDG_DATA_DIRS/applications.
       mkdir -p "$WORK/shell/share/applications"
       cp "$HERE/mimeapps.list" "$WORK/shell/share/applications/mimeapps.list"
+      # Etherium's settings (search, privacy: native/firefox/etherium), which
+      # the app copies into the installed browser at every start (Etherium.kt).
+      "$HERE/../firefox/etherium/settings.sh" "$WORK/shell/share/deskdroid/etherium" \
+        /data/data/io.deskdroid.app/files/store/apps/firefox/program
       # GSettings schemas (GTK's file and color choosers, GIMP's...), compiled:
       # GIO aborts the first time a GTK program opens a schema it can't find
       # ("No GSettings schemas are installed"). GIO looks in
