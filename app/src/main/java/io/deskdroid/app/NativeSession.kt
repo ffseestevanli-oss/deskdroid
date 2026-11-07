@@ -1,6 +1,5 @@
 package io.deskdroid.app
 
-import android.app.ActivityOptions
 import android.content.Context
 import android.content.Intent
 import android.view.Display
@@ -20,7 +19,7 @@ object NativeSession {
         // A monitor gets its own window (ExternalDeskActivity); the phone keeps its touchpad.
         val cls = if (display != Display.DEFAULT_DISPLAY) ExternalDeskActivity::class.java else NativeDeskActivity::class.java
         val intent = Intent(c, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val options = ActivityOptions.makeBasic().setLaunchDisplayId(display)
-        c.startActivity(intent, options.toBundle())
+        // On a monitor, full screen rather than an Android desktop-mode window.
+        c.startActivity(intent, MonitorGuard.launchOptions(display).toBundle())
     }
 }

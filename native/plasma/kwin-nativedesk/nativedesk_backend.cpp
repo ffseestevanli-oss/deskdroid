@@ -299,6 +299,14 @@ void NativeDeskInputDevice::scroll(qreal dx, qreal dy, bool wheel)
 
 void NativeDeskInputDevice::evdevKey(uint32_t key, bool down)
 {
+    if (down ? m_down.contains(key) : !m_down.contains(key)) {
+        return; // already down (Android's auto-repeat), or not down
+    }
+    if (down) {
+        m_down.insert(key);
+    } else {
+        m_down.remove(key);
+    }
     Q_EMIT keyChanged(key, down ? KeyboardKeyState::Pressed : KeyboardKeyState::Released, now(), this);
 }
 
@@ -398,28 +406,41 @@ static uint32_t evdevFromChar(char32_t c, bool *shift)
 void NativeDeskInputDevice::key(int androidKeyCode, int unicode, bool down)
 {
     if (uint32_t k = evdevFromAndroid(androidKeyCode)) {
-        if (k == KEY_LEFTSHIFT || k == KEY_RIGHTSHIFT) {
-            m_shiftHeld = down;
-        }
         evdevKey(k, down);
         return;
     }
     // No key code (typed on the on-screen keyboard): press the key that types
     // the character, with Shift around it when needed. Text outside US ASCII
-    // needs an input method, which comes later.
+    // needs an input method, which comes later. The release undoes what the
+    // press did (the character can differ by then, if Shift went up first).
+    if (!down) {
+        const auto typed = m_typed.take(androidKeyCode ? androidKeyCode : unicode);
+        if (typed.first) {
+            evdevKey(typed.first, false);
+            if (typed.second) {
+                evdevKey(KEY_LEFTSHIFT, false);
+            }
+            return;
+        }
+    }
+    if (down && m_typed.contains(androidKeyCode ? androidKeyCode : unicode)) {
+        return; // Android's auto-repeat: still held from the first press
+    }
     bool shift = false;
     const uint32_t k = unicode > 0 ? evdevFromChar(char32_t(unicode), &shift) : 0;
     if (!k) {
         return;
     }
-    const bool addShift = shift && !m_shiftHeld;
-    if (down && addShift) {
+    const bool addShift = shift && !m_down.contains(KEY_LEFTSHIFT) && !m_down.contains(KEY_RIGHTSHIFT);
+    if (!down) {
+        evdevKey(k, false);
+        return;
+    }
+    if (addShift) {
         evdevKey(KEY_LEFTSHIFT, true);
     }
-    evdevKey(k, down);
-    if (!down && addShift) {
-        evdevKey(KEY_LEFTSHIFT, false);
-    }
+    evdevKey(k, true);
+    m_typed.insert(androidKeyCode ? androidKeyCode : unicode, qMakePair(k, addShift));
 }
 
 NativeDeskInputBackend::NativeDeskInputBackend(NativeDeskBackend *backend)

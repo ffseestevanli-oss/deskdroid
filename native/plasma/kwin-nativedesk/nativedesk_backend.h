@@ -20,7 +20,9 @@
 #include "opengl/eglbackend.h"
 #include "qpainter/qpainterbackend.h"
 
+#include <QHash>
 #include <QImage>
+#include <QSet>
 #include <QPointF>
 #include <QPointer>
 #include <QSize>
@@ -86,7 +88,15 @@ private:
 
     const bool m_keyboard;
     uint32_t m_buttons = 0;
-    bool m_shiftHeld = false;
+    // Keys KWin has been told are down. A key is pressed once and released
+    // once, whatever Android sends: its auto-repeat presses again (KWin and
+    // the apps repeat keys themselves), and a release can come for a key
+    // whose press went elsewhere. An extra press of Shift used to leave it
+    // held in KWin's keyboard state until Plasma restarted.
+    QSet<uint32_t> m_down;
+    // Typed characters (no key code): the key pressed, and whether Shift was
+    // added around it, so the release lets go of exactly that.
+    QHash<int, QPair<uint32_t, bool>> m_typed;
 };
 
 class NativeDeskInputBackend : public InputBackend

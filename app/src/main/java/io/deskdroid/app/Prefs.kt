@@ -68,6 +68,10 @@ object Prefs {
     fun mouseCapture(c: Context) = prefs(c).getBoolean("mouse_capture", true)
     fun setMouseCapture(c: Context, on: Boolean) = prefs(c).edit().putBoolean("mouse_capture", on).apply()
 
+    /** While the desktop is on a monitor, Android's desktop mode and DeX are kept off it (MonitorGuard, the desktop helper). */
+    fun monitorGuard(c: Context) = prefs(c).getBoolean("monitor_guard", true)
+    fun setMonitorGuard(c: Context, on: Boolean) = prefs(c).edit().putBoolean("monitor_guard", on).apply()
+
     fun scrollWheel(c: Context) = prefs(c).getBoolean("scroll_wheel", true)
     fun setScrollWheel(c: Context, on: Boolean) = prefs(c).edit().putBoolean("scroll_wheel", on).apply()
 
