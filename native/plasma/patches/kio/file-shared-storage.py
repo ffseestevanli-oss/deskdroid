@@ -14,6 +14,8 @@ On shared storage, the worker now:
   moves the file by copying it and deleting the original (as it does between
   drives);
 - logs each refusal with its error, so DeskDroid's log shows what Android did.
+And Dolphin no longer refuses a drop, Paste or move into a folder there
+on its own (see the second part, at the end).
 """
 import sys
 
@@ -84,3 +86,36 @@ for inc in ("#include <QThread>\n", "#include <cstring>\n"):
         first = t.index("#include ")
         t = t[:first] + inc + t[first:]
 open(p, "w").write(t)
+
+# Dolphin checks writability itself before it asks the worker: the drop
+# (KIO::DropJob), Paste and the copy job's look at the target folder all go
+# by KFileItem::isWritable() or the folder's mode bits. On shared storage
+# those come from Android's file system and say nothing reliable about what
+# MediaProvider will allow, so there the operation itself decides.
+src = sys.argv[1] + "/src/core/kfileitem.cpp"
+t = open(src).read()
+old = """bool KFileItem::isWritable() const
+{
+    if (!d) {
+        return false;
+    }
+
+    d->ensureInitialized();
+"""
+assert t.count(old) == 1, "isWritable"
+t = t.replace(old, old + """
+    // DeskDroid: see native/plasma/patches/kio/file-shared-storage.py.
+    if (d->m_bIsLocalUrl && d->m_url.toLocalFile().startsWith(QLatin1String("/storage/emulated/"))) {
+        return QFileInfo::exists(d->m_url.toLocalFile());
+    }
+""")
+open(src, "w").write(t)
+
+src = sys.argv[1] + "/src/core/copyjob.cpp"
+t = open(src).read()
+old = "            const bool isWritable = (permissions != -1) && (permissions & S_IWUSR);\n"
+assert t.count(old) == 1, "copyjob writable"
+t = t.replace(old, """            const bool isWritable = ((permissions != -1) && (permissions & S_IWUSR))
+                || (m_dest.isLocalFile() && m_dest.toLocalFile().startsWith(QLatin1String("/storage/emulated/"))); // DeskDroid
+""")
+open(src, "w").write(t)
