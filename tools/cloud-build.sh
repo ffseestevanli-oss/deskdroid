@@ -47,6 +47,21 @@ fi
 { yes || true; } | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" --install \
   "ndk;$NDK_VERSION" "platforms;android-36" "build-tools;36.0.0" platform-tools >/dev/null
 echo "sdk.dir=$ANDROID_HOME" > "$HERE/local.properties"
+# Maven Central rate-limits these machines (429); Google's mirror of it doesn't.
+# Tried first, so a 429 doesn't disable the repository for the whole build.
+mkdir -p "$HOME/.gradle/init.d"
+cat > "$HOME/.gradle/init.d/deskdroid-maven-mirror.gradle" <<'GRADLE'
+def mirror = { repos ->
+  def r = repos.maven { url 'https://maven-central.storage-download.googleapis.com/maven2/' }
+  repos.remove(r)
+  repos.addFirst(r)
+}
+settingsEvaluated { s ->
+  mirror(s.pluginManagement.repositories)
+  mirror(s.dependencyResolutionManagement.repositories)
+}
+allprojects { mirror(buildscript.repositories) }
+GRADLE
 
 echo "== desktop Qt (host tools)"
 [ -d "$QT_HOST" ] || aqt install-qt linux desktop 6.8.3 linux_gcc_64 -O "$HOME/Qt" -m qtshadertools >/dev/null

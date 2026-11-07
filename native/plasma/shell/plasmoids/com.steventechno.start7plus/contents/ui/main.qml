@@ -23,24 +23,24 @@ PlasmoidItem {
     // DeskDroid's Kicker ProcessRunner lists the app menu (KDE's categories, as
     // Kickoff shows them), starts apps, opens files and runs commands. On Linux
     // it has none of these and the widget uses its scripts as before.
-    Kicker.ProcessRunner { id: runner }
-    readonly property bool nativeRunner: typeof runner.appMenu === "function"
+    Kicker.ProcessRunner { id: processRunner }
+    readonly property bool nativeRunner: typeof processRunner.appMenu === "function"
 
     // A command meant for sh, done without one: power and session buttons go
     // to Plasma's session management, a plain command runs as it is.
     function runNative(cmd) {
         var c = cmd.trim()
-        if (/promptShutDown|promptReboot|promptLogout|systemctl (poweroff|reboot)/.test(c)) { runner.session("logout"); return }
-        if (/lock-session/.test(c)) { runner.session("lock"); return }
-        if (/systemctl suspend/.test(c)) { runner.session("suspend"); return }
-        if (/systemctl hibernate/.test(c)) { runner.session("hibernate"); return }
-        if (/for t in konsole/.test(c)) { runner.runCommand("konsole"); return }
+        if (/promptShutDown|promptReboot|promptLogout|systemctl (poweroff|reboot)/.test(c)) { processRunner.session("logout"); return }
+        if (/lock-session/.test(c)) { processRunner.session("lock"); return }
+        if (/systemctl suspend/.test(c)) { processRunner.session("suspend"); return }
+        if (/systemctl hibernate/.test(c)) { processRunner.session("hibernate"); return }
+        if (/for t in konsole/.test(c)) { processRunner.runCommand("konsole"); return }
         c = c.split("||")[0].trim()     // "plasma-systemmonitor || ksysguard": the first one
         if (/[;&|<>$`'"()]/.test(c) || /^(if|setsid)\b/.test(c)) {
             console.warn("Start 7 Plus: needs a shell, not run here:", cmd)
             return
         }
-        runner.runCommand(c)
+        processRunner.runCommand(c)
     }
     function run(cmd) {
         if (nativeRunner) runNative(cmd)
@@ -70,7 +70,7 @@ PlasmoidItem {
 
     function loadApps() {
         if (nativeRunner) {
-            var cats = runner.appMenu()
+            var cats = processRunner.appMenu()
             indexApps(cats)
             categories = cats
             trySeedPins()
@@ -100,9 +100,9 @@ PlasmoidItem {
 
     Component.onCompleted: {
         if (nativeRunner) {
-            defaultBrowserId = runner.defaultBrowser()
+            defaultBrowserId = processRunner.defaultBrowser()
             browserChecked = true
-            var user = runner.userInfo()
+            var user = processRunner.userInfo()
             fullName = user[0] || ""
             systemAvatar = user[1] || ""
             distroName = "DeskDroid"
@@ -190,7 +190,7 @@ PlasmoidItem {
     readonly property string searchScript: Qt.resolvedUrl("../code/search.py").toString().replace("file://", "")
 
     function searchFiles(query) {
-        if (nativeRunner) { fileSearchResult = runner.searchFiles(query); return }
+        if (nativeRunner) { fileSearchResult = processRunner.searchFiles(query); return }
         var q = "'" + query.replace(/'/g, "'\\''") + "'"
         searchSource.connectSource('python3 "' + root.searchScript + '" ' + q)
     }
@@ -281,7 +281,8 @@ PlasmoidItem {
         onDraggingChanged: root.dragInProgress = dragging
         onLaunched: root.expanded = false
         onRunCommand: cmd => root.run(cmd)
-        runner: root.nativeRunner ? runner : null
+        // processRunner, not runner: inside StartMenu that name is its own property (a binding loop, so null)
+        runner: root.nativeRunner ? processRunner : null
         onChangeAvatar: {
             root.dialogOpen = true
             avatarDialog.open()
