@@ -41,6 +41,10 @@ object QtHost {
             }
         }
         giveQtClassLoader()
+        // Qt prefers its FFmpeg backend when it has one; DeskDroid's FFmpeg only
+        // decodes audio, so programs keep Android's unless they ask (Sasha does,
+        // in its own entry point).
+        try { android.system.Os.setenv("QT_MEDIA_BACKEND", "android", false) } catch (e: Throwable) { println("QtHost: no media backend setting ($e)") }
         if (app) {
             // Qt Multimedia's own messages (backend, player states, audio
             // output) go to DeskDroid's log, unless the app sets its own rules.
@@ -61,10 +65,13 @@ object QtHost {
         loadWithDependencies(File(args[1]).takeIf { it.isAbsolute } ?: File(libs, args[1]), libs)
         // Qt loads its plugins with dlopen, which skips JNI_OnLoad. The Android
         // multimedia plugin's registers the natives its Java side calls back
-        // (QtAndroidMediaPlayer.onStateChangedNative...), so load it here first;
-        // Qt's own dlopen of the same file later gets this copy.
-        if (app) File(libs, "libplugins_multimedia_androidmediaplugin_arm64-v8a.so").takeIf { it.exists() }?.let {
-            try { load(it) } catch (e: UnsatisfiedLinkError) { println("QtHost: ${it.name}: ${e.message?.take(200)}") }
+        // (QtAndroidMediaPlayer.onStateChangedNative...), and the FFmpeg one's
+        // gives FFmpeg the Java VM, so load them here first; Qt's own dlopen of
+        // the same file later gets this copy.
+        if (app) for (plugin in listOf("androidmediaplugin", "ffmpegmediaplugin")) {
+            File(libs, "libplugins_multimedia_${plugin}_arm64-v8a.so").takeIf { it.exists() }?.let {
+                try { loadWithDependencies(it, libs) } catch (e: UnsatisfiedLinkError) { println("QtHost: ${it.name}: ${e.message?.take(200)}") }
+            }
         }
         println("QtHost: libraries loaded, starting ${args[1]}")
         System.out.flush()

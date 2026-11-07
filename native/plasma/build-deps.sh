@@ -347,7 +347,37 @@ build_qtsvg() { qt_module qtsvg; }
 build_qt5compat() { qt_module qt5compat; }
 build_qtsensors() { qt_module qtsensors; }
 # Gwenview plays videos with Qt Multimedia (Android's own media backend).
-build_qtmultimedia() { qt_module qtmultimedia -DFEATURE_ffmpeg=OFF -DFEATURE_spatialaudio=OFF -DFEATURE_spatialaudio_quick3d=OFF; }
+# FFmpeg for Qt Multimedia's FFmpeg backend, which Sasha plays music with:
+# audio decoders (and cover art's), no programs, no network, no encoders.
+# Static, in a folder of its own: it goes into Qt's FFmpeg plugin, and other
+# recipes' pkg-config doesn't find it (GEGL would pick it up).
+build_ffmpeg() {
+  local s; s="$(unpack https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n7.1.1.tar.gz ffmpeg-7.1.1.tar.gz)"
+  local dec="mp1,mp1float,mp2,mp2float,mp3,mp3float,mp3adu,mp3adufloat,mp3on4,mp3on4float,aac,aac_fixed,aac_latm"
+  dec+=",alac,flac,vorbis,opus,wavpack,ape,tta,wmav1,wmav2,wmapro,wmalossless,ac3,eac3,dca,truehd,mlp"
+  dec+=",mpc7,mpc8,pcm_*,adpcm_*,dsd_*,mjpeg,png"
+  local dmx="mp3,aac,flac,ogg,mov,matroska,wav,w64,aiff,ape,wv,tta,asf,ac3,eac3,dts,truehd,mlp,dsf,caf,au,mpc,mpc8"
+  rm -rf "$PREFIX/ffmpeg"
+  (cd "$s" && PKG_CONFIG_LIBDIR="$PREFIX/ffmpeg/lib/pkgconfig" ./configure \
+    --prefix="$PREFIX/ffmpeg" --target-os=android --arch=aarch64 --cpu=armv8-a --enable-cross-compile \
+    --cc="$CC" --cxx="$CXX" --nm="$BIN/llvm-nm" --ar="$BIN/llvm-ar" --ranlib="$BIN/llvm-ranlib" --strip="$BIN/llvm-strip" \
+    --enable-static --disable-shared --enable-pic --disable-programs --disable-doc \
+    --disable-avdevice --disable-avfilter --disable-postproc --disable-network \
+    --disable-autodetect --enable-pthreads --enable-zlib --enable-jni \
+    --disable-everything --enable-decoder="$dec" --enable-demuxer="$dmx" \
+    --enable-parser=mpegaudio,aac,aac_latm,flac,vorbis,opus,ac3,dca,mlp,mjpeg,png \
+    --enable-protocol=file,pipe && make -j"$JOBS" && make install)
+  test -e "$PREFIX/ffmpeg/lib/libavcodec.a"
+  test -e "$PREFIX/ffmpeg/lib/libswscale.a"
+}
+# Qt Multimedia with both backends: Android's (MediaPlayer, the default for
+# apps, Gwenview's videos) and FFmpeg's (Sasha), with FFmpeg linked in.
+build_qtmultimedia() {
+  qt_module qtmultimedia -DFEATURE_ffmpeg=ON -DFFMPEG_DIR="$PREFIX/ffmpeg" \
+    -DFEATURE_spatialaudio=OFF -DFEATURE_spatialaudio_quick3d=OFF
+  test -n "$(find "$PREFIX/plugins" -name '*ffmpegmediaplugin*.so' | head -1)"
+}
+inputs_qtmultimedia() { declare -f build_ffmpeg; }
 # Text to speech, which KTextEditor needs (its "Say" actions); Qt Speech
 # builds nothing without Qt Multimedia.
 build_qtspeech() { qt_module qtspeech; test -e "$PREFIX/lib/libQt6TextToSpeech_arm64-v8a.so" || test -e "$PREFIX/lib/libQt6TextToSpeech.so"; }
@@ -1517,7 +1547,7 @@ inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HE
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
-     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors qtmultimedia qtspeech qtwayland qttools deskdroid_ahb
+     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors ffmpeg qtmultimedia qtspeech qtwayland qttools deskdroid_ahb
      ecm plasma_wayland_protocols kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      kdecoration kwayland kiconthemes breeze

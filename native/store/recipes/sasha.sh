@@ -37,6 +37,11 @@ print('''#include <cstdlib>
 #include <unistd.h>
 static int sashaMain(int argc, char **argv)
 {
+    // Qt Multimedia's FFmpeg backend: songs are decoded in Sasha's own process
+    // and played through Qt's audio output. The Android backend hands them to
+    // Android's media server, which turns a DeskDroid app away ("Unsupported
+    // media" for any MP3). QtHost gives other apps the Android backend.
+    setenv("QT_MEDIA_BACKEND", "ffmpeg", 1);
     // Qt resolves the QML's inline components (Glyph) by loading its URL
     // again, which fails for QML passed as data ("Type Glyph unavailable").
     // The store installs main.qml into share/sasha, so the host loads it
