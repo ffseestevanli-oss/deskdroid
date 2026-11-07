@@ -106,6 +106,25 @@ assert "kwinMain" not in entry and '"kwin_wayland"' not in entry
 p = ws / "shell" / "main.cpp"
 p.write_text(p.read_text() + "\n" + entry)
 
+# ---- Start 7 Plus: what it asks Python and a shell for on Linux -----------
+# Kicker's ProcessRunner lists the menu, starts apps, opens files and runs
+# commands for it (processrunner-deskdroid.cpp says why).
+pr = "applets/kicker/processrunner."
+edit(pr + "h", "#include <QAction>\n", "#include <QAction>\n#include <QStringList>\n#include <QVariant>\n")
+edit(pr + "h", "    Q_INVOKABLE static void runMenuEditor(QString arg = QString());\n",
+     "    Q_INVOKABLE static void runMenuEditor(QString arg = QString());\n"
+     "    // DeskDroid, for Start 7 Plus (processrunner-deskdroid.cpp)\n"
+     "    Q_INVOKABLE static QVariantList appMenu();\n"
+     "    Q_INVOKABLE static bool runApp(const QString &pathOrId);\n"
+     "    Q_INVOKABLE static void openUrl(const QString &url);\n"
+     "    Q_INVOKABLE static void runCommand(const QString &command);\n"
+     "    Q_INVOKABLE static QVariantMap searchFiles(const QString &query);\n"
+     "    Q_INVOKABLE static QStringList userInfo();\n"
+     "    Q_INVOKABLE static QString defaultBrowser();\n"
+     "    Q_INVOKABLE static void session(const QString &action);\n")
+edit(pr + "cpp", '#include "moc_processrunner.cpp"',
+     (here / "processrunner-deskdroid.cpp").read_text() + '\n#include "moc_processrunner.cpp"')
+
 # ---- End Session: Kickoff's Log Out and KDE's logout screen ----------------
 # Kickoff's "Log Out" is "End Session": the desktop is a session inside
 # DeskDroid, and ending it closes the desktop, not a login.

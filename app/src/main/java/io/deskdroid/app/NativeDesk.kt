@@ -132,30 +132,70 @@ object NativeDesk {
     }
 
     /**
-     * Plasma's menu (KDE's app database lists only the apps a menu file takes
-     * in): every installed app, the phone's in their own folders, which are
-     * left out while the desktop is on a monitor. Written through a new file
+     * Plasma's application menu (KDE's app database lists only the apps a menu
+     * file takes in): KDE's categories (Development, Games, Graphics, Internet,
+     * Office, System, Utilities..., from plasma-workspace, shipped in
+     * share/deskdroid/menus with their names and icons in share/desktop-directories),
+     * then the phone's apps in Android Apps, sorted into subfolders by kind, and
+     * Private Space and Work Apps, which are left out while the desktop is on a
+     * monitor. Kickoff, Application Menu (Kicker) and Start 7 Plus all read this one menu. Written through a new file
      * so KDE sees the change and rebuilds its database.
      */
     fun writeMenu(c: android.content.Context) {
-        val dir = File(c.filesDir, "config/menus").apply { mkdirs() }
+        val config = File(c.filesDir, "config")
+        val data = File(c.filesDir, "kwin")
+        val dirs = File(c.filesDir, ".local/share/desktop-directories").apply { mkdirs() }
+        fun directory(file: String, name: String, icon: String) =
+            File(dirs, file).writeText("[Desktop Entry]\nType=Directory\nName=$name\nIcon=$icon\n")
+        directory("deskdroid-android.directory", "Android Apps", "smartphone")
+        directory("deskdroid-android-private.directory", "Private Space", "security-high")
+        directory("deskdroid-android-work.directory", "Work Apps", "folder-documents")
+        val kinds = androidKinds.joinToString("") { k ->
+            directory("deskdroid-android-${k.id.lowercase()}.directory", k.name, k.icon)
+            "    <Menu>\n      <Name>${k.id}</Name>\n      <Directory>deskdroid-android-${k.id.lowercase()}.directory</Directory>\n" +
+                "      <Include><And><Category>X-DeskDroid-Android</Category><Category>X-DeskDroid-Kind-${k.id}</Category></And></Include>\n" +
+                "    </Menu>\n"
+        }
         val android = if (onMonitor) "" else
-            "  <Menu>\n    <Name>Android Apps</Name>\n" +
-            "    <Include><Category>X-DeskDroid-Android</Category></Include>\n  </Menu>\n" +
-            "  <Menu>\n    <Name>Private Space</Name>\n" +
+            "  <Menu>\n    <Name>Android Apps</Name>\n    <Directory>deskdroid-android.directory</Directory>\n" +
+            "    <Include><And><Category>X-DeskDroid-Android</Category><Not>" +
+            androidKinds.joinToString("") { "<Category>X-DeskDroid-Kind-${it.id}</Category>" } + "</Not></And></Include>\n" +
+            kinds + "  </Menu>\n" +
+            "  <Menu>\n    <Name>Private Space</Name>\n    <Directory>deskdroid-android-private.directory</Directory>\n" +
             "    <Include><Category>X-DeskDroid-Android-Private</Category></Include>\n  </Menu>\n" +
-            "  <Menu>\n    <Name>Work Apps</Name>\n" +
+            "  <Menu>\n    <Name>Work Apps</Name>\n    <Directory>deskdroid-android-work.directory</Directory>\n" +
             "    <Include><Category>X-DeskDroid-Android-Work</Category></Include>\n  </Menu>\n"
+        val kde = File(data, "share/deskdroid/menus/plasma-applications.menu")
+        val menu = kde.takeIf { it.exists() }?.readText()?.takeIf { "<DefaultMergeDirs/>" in it }
+            ?.replace("<DefaultMergeDirs/>", "<!-- DeskDroid: the phone's apps -->\n$android  <DefaultMergeDirs/>")
+            // A build without KDE's menu: every app in one list, as before.
+            ?: ("<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n" +
+                "  \"http://www.freedesktop.org/standards/menu-spec/1.0/menu.dtd\">\n" +
+                "<Menu>\n  <Name>Applications</Name>\n  <DefaultAppDirs/>\n  <DefaultDirectoryDirs/>\n" +
+                "  <Include><And><All/><Not><Category>X-DeskDroid-Android</Category></Not>" +
+                "<Not><Category>X-DeskDroid-Android-Private</Category></Not><Not><Category>X-DeskDroid-Android-Work</Category></Not></And></Include>\n" +
+                android + "</Menu>\n")
+        val dir = File(config, "menus").apply { mkdirs() }
         val tmp = File(dir, ".applications.menu.tmp")
-        tmp.writeText(
-            "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n" +
-            "  \"http://www.freedesktop.org/standards/menu-spec/1.0/menu.dtd\">\n" +
-            "<Menu>\n  <Name>Applications</Name>\n  <DefaultAppDirs/>\n  <DefaultDirectoryDirs/>\n" +
-            "  <Include><And><All/><Not><Category>X-DeskDroid-Android</Category></Not>" +
-            "<Not><Category>X-DeskDroid-Android-Private</Category></Not><Not><Category>X-DeskDroid-Android-Work</Category></Not></And></Include>\n" +
-            android + "</Menu>\n")
+        tmp.writeText(menu)
         tmp.renameTo(File(dir, "applications.menu"))
     }
+
+    /** An Android app kind, a subfolder of Android Apps (from the app's own category). */
+    class AndroidKind(val id: String, val name: String, val icon: String)
+
+    val androidKinds = listOf(
+        AndroidKind("Games", "Games", "applications-games"),
+        AndroidKind("Audio", "Music & Audio", "applications-multimedia"),
+        AndroidKind("Video", "Video", "applications-multimedia"),
+        AndroidKind("Images", "Photos & Images", "applications-graphics"),
+        AndroidKind("Social", "Social", "applications-internet"),
+        AndroidKind("News", "News", "applications-internet"),
+        AndroidKind("Maps", "Maps & Travel", "applications-internet"),
+        AndroidKind("Productivity", "Productivity", "applications-office"),
+        AndroidKind("Accessibility", "Accessibility", "preferences-desktop-accessibility"),
+    )
+
 
     /** Opening an Android app while the desktop is on a monitor: on the phone's screen. */
     fun phoneScreenOptions(): android.os.Bundle? = if (!onMonitor) null else
@@ -601,8 +641,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 ?.writeText("[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24\n")
             applyDarkDefault(config, data)
             // KDE's app database (ksycoca) lists only the apps a menu file takes in;
-            // with none, Plasma finds no apps. One menu with every installed app,
-            // and a fresh database each start so it matches this build's apps.
+            // with none, Plasma finds no apps. KDE's own menu, with its categories,
+            // plus the Android folders, and a fresh database each start so it
+            // matches this build's apps.
             NativeDesk.writeMenu(this)
             File(filesDir, ".cache").listFiles { f -> f.name.startsWith("ksycoca6") }?.forEach { it.delete() }
             // Open with Android app: KDE offers it for every file (all files derive
@@ -962,6 +1003,24 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
+    private fun androidKind(info: android.content.pm.ApplicationInfo): NativeDesk.AndroidKind? {
+        @Suppress("DEPRECATION")
+        val game = (info.flags and android.content.pm.ApplicationInfo.FLAG_IS_GAME) != 0
+        val id = when (info.category) {
+            android.content.pm.ApplicationInfo.CATEGORY_GAME -> "Games"
+            android.content.pm.ApplicationInfo.CATEGORY_AUDIO -> "Audio"
+            android.content.pm.ApplicationInfo.CATEGORY_VIDEO -> "Video"
+            android.content.pm.ApplicationInfo.CATEGORY_IMAGE -> "Images"
+            android.content.pm.ApplicationInfo.CATEGORY_SOCIAL -> "Social"
+            android.content.pm.ApplicationInfo.CATEGORY_NEWS -> "News"
+            android.content.pm.ApplicationInfo.CATEGORY_MAPS -> "Maps"
+            android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY -> "Productivity"
+            8 /* CATEGORY_ACCESSIBILITY, Android 12 */ -> "Accessibility"
+            else -> if (game) "Games" else null
+        }
+        return NativeDesk.androidKinds.firstOrNull { it.id == id }
+    }
+
     private fun writeAndroidApps(c: android.content.Context) {
         val dir = File(c.filesDir, ".local/share/applications").apply { mkdirs() }
         val icons = File(c.filesDir, ".local/share/deskdroid-android-icons").apply { mkdirs() }
@@ -1002,11 +1061,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         bmp.recycle()
                     }
                     val label = info.label.toString().replace("\n", " ")
+                    // The app's kind (Games, Social...) for the Android Apps folder's subfolders.
+                    val kind = androidKind(info.applicationInfo)?.let { "X-DeskDroid-Kind-${it.id};" } ?: ""
                     // Hidden from search too while the desktop is on a monitor (NativeDesk.onMonitor).
                     // Written through a new file, so KDE notices the change.
                     val tmp = File(dir, ".$name.tmp")
                     tmp.writeText("[Desktop Entry]\nType=Application\nName=$label\nComment=Android app\n" +
-                        "Icon=${icon.path}\nExec=android-open android-app:$id\nCategories=$category;\n" +
+                        "Icon=${icon.path}\nExec=android-open android-app:$id\nCategories=$category;$kind\n" +
                         if (NativeDesk.onMonitor) "NoDisplay=true\n" else "")
                     tmp.renameTo(File(dir, name))
                 } catch (e: Exception) {
