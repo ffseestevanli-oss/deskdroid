@@ -387,6 +387,8 @@ kf_src() { # <name>: a framework's source
 # kde_cmake <src> [options...]: a KDE project for Android, through Qt's
 # toolchain file, with build tools (kconfig_compiler...) from the host builds.
 kde_cmake() {
+  # AUTORCC on plain add_library targets uses the host rcc's zstd, which this Qt
+  # (built without zstd) can't read: undefined qt_resourceFeatureZstd.
   local src="$1"; shift
   PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" \
   cmake -S "$src" -B "$src/_android" -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -394,6 +396,7 @@ kde_cmake() {
     -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib $(qt_find_args) \
     -DKF6_HOST_TOOLING="$HOSTPREFIX/lib/cmake" -DKF_IGNORE_PLATFORM_CHECK=ON \
     -DWayland_DATADIR="$HOSTPREFIX/share/wayland" -DWaylandProtocols_DATADIR="$PREFIX/share/wayland-protocols" \
+    -DCMAKE_AUTORCC_OPTIONS=--no-zstd \
     -DSKIP_APPSTREAM=ON -DBUILD_TESTING=OFF -DBUILD_QCH=OFF -DBUILD_PYTHON_BINDINGS=OFF -DBUILD_DESIGNERPLUGIN=OFF "$@"
   cmake --build "$src/_android" -j "$JOBS" ${KEEP_GOING:+-- -k 0}
   cmake --install "$src/_android"
