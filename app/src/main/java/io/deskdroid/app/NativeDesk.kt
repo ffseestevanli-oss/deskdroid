@@ -1114,8 +1114,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             "  <cachedir>${File(cacheDir, "fontconfig").path}</cachedir>\n" +
             alias(listOf("monospace", "Monospace", "Hack", "DejaVu Sans Mono", "Noto Sans Mono", "Liberation Mono", "Courier", "Courier New"),
                 listOf(mono, "Droid Sans Mono", "Cutive Mono")) +
-            alias(listOf("sans-serif", "sans", "Sans"),
-                listOf("Roboto", "Google Sans", "Noto Sans")) +
+            // KDE's default font is Noto Sans, which Android doesn't have
+            // (only its per-script Noto Sans fonts): asked for it, fontconfig
+            // picked one of those, whose own digits drew thinner than the
+            // letters around them (which fell back to Roboto). Desktop fonts
+            // apps ask for by name go to Roboto too.
+            alias(listOf("sans-serif", "sans", "Sans", "Noto Sans", "Noto Sans UI", "DejaVu Sans", "Liberation Sans",
+                    "Cantarell", "Arial", "Helvetica", "Segoe UI", "Ubuntu", "Open Sans"),
+                listOf("Roboto", "Google Sans")) +
             alias(listOf("serif", "Serif"),
                 listOf("Noto Serif", "Droid Serif")) +
             "</fontconfig>\n"
