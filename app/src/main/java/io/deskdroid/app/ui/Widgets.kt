@@ -46,7 +46,7 @@ class PartySwitch(c: Context) : View(c) {
     }
 }
 
-/** The DeskDroid logo with its rainbow ring and a soft purple glow. */
+/** The DeskDroid icon (the same art as the launcher icon) with a soft purple glow. */
 fun Ui.logo(sizeDp: Int): View = FrameLayout(c).apply {
     val img = ImageView(c).apply { setImageResource(R.drawable.ic_logo) }
     addView(img, FrameLayout.LayoutParams(c.dp(sizeDp), c.dp(sizeDp), Gravity.CENTER))
