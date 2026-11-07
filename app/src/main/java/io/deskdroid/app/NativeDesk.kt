@@ -1240,11 +1240,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             globals.appendText("\n" + dark.readText() + "\n[General]\nColorScheme=BreezeDark\n")
             AppLog.i("Native desktop test: Breeze Dark colors set")
         } else if (!dark.exists()) AppLog.i("Native desktop test: no BreezeDark.colors in the data")
-        // Apps (Dolphin, KWrite...) pick their colors with KDE's colour scheme
-        // manager, which reads UiSettings (kdeglobals falls through to every
-        // app's settings); there is no KDE platform theme to set them.
-        if (!globals.exists() || !globals.readText().contains("[UiSettings]"))
-            globals.appendText("\n[UiSettings]\nColorScheme=Breeze Dark\n")
+        // Earlier builds pinned every app to Breeze Dark here ([UiSettings] in
+        // kdeglobals, which every app's settings fall through to), from before
+        // Plasma's platform theme: apps then ignored System Settings' colours
+        // and Global Theme. The platform theme follows kdeglobals itself.
+        if (globals.exists()) {
+            val pinned = "\n[UiSettings]\nColorScheme=Breeze Dark\n"
+            val text = globals.readText()
+            if (text.contains(pinned)) globals.writeText(text.replace(pinned, "\n"))
+        }
         File(config, "plasmarc").takeUnless { it.exists() && it.readText().contains("[Theme]") }
             ?.appendText("\n[Theme]\nname=breeze-dark\n")
         // GTK programs (Floorp): Breeze for GTK (breeze-gtk), light or dark as
