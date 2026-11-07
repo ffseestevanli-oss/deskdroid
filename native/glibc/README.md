@@ -26,7 +26,8 @@ changes upstream glibc so it fits:
 - **No clone3.** glibc creates threads and child processes (`posix_spawn`)
   with clone3, with every signal blocked: a blocked clone3 there can't be
   caught and kills the process ("Bad system call", seen from flatpak). glibc
-  is built to use plain clone instead, as on kernels before 5.3.
+  is built to use plain clone instead, as on kernels before 5.3. Each new
+  thread also registered rseq with signals blocked; that's off by default.
 
 `build.sh` builds it with an aarch64 glibc cross compiler and outputs three
 files for the APK's library folder:
