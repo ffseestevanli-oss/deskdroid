@@ -21,6 +21,10 @@ patch.py <glibc source dir> <prefix>
 5. No rseq: glibc registers it again in every new thread, also with every
    signal blocked. Off by default (the glibc.pthread.rseq tunable), as on
    kernels before 4.18.
+6. set_robust_list, which Android blocks (the log above names it, number 99),
+   glibc makes again in every new thread and in fork's child, both with every
+   signal blocked. Built as for kernels without it: glibc checks the result of
+   its first call at start and skips the rest.
 """
 import pathlib
 import re
@@ -147,4 +151,12 @@ edit("sysdeps/nptl/dl-tunables.list", """    rseq {
       minval: 0
       maxval: 1
       default: 0""")
+# 6. set_robust_list only where the first call at start worked (see above).
+edit("sysdeps/unix/sysv/linux/kernel-features.h", "#define __ASSUME_SET_ROBUST_LIST\t1",
+     "/* DeskDroid: no __ASSUME_SET_ROBUST_LIST (Android blocks it) */")
+edit("sysdeps/nptl/_Fork.c", """      INTERNAL_SYSCALL_CALL (set_robust_list, &self->robust_head,""",
+     """#ifndef __ASSUME_SET_ROBUST_LIST
+      if (__nptl_set_robust_list_avail)
+#endif
+      INTERNAL_SYSCALL_CALL (set_robust_list, &self->robust_head,""")
 print(f"patch.py: {changed} files with paths under {prefix}")

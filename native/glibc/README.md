@@ -28,6 +28,9 @@ changes upstream glibc so it fits:
   caught and kills the process ("Bad system call", seen from flatpak). glibc
   is built to use plain clone instead, as on kernels before 5.3. Each new
   thread also registered rseq with signals blocked; that's off by default.
+  And set_robust_list, which Android blocks, glibc made again in each new
+  thread and in fork's child; it's now only made where the first one worked.
+  `sigsys.log` in the runtime's folder lists the calls Android blocked.
 
 `build.sh` builds it with an aarch64 glibc cross compiler and outputs three
 files for the APK's library folder:
