@@ -5,6 +5,10 @@ Plasma wallpaper packages that go into the APK as `share/wallpapers/<name>`
 
 - `DeskDroid`: DeskDroid's own, the default (the Debian trixie desktop's,
   rendered by rootfs/wallpaper/make-wallpaper.py).
+- DeskDroid's own set, by Steven: `AboveTheWeather`, `Breach`, `Lightfall`,
+  `PrismSkyline`, `RelicsAfloat`, `SevenVoices`, `ShardsOfDawn`,
+  `VisitorAtDusk`, `WovenSignal`. One image each at its own size (most are
+  5040x2160), JPEG quality 88; Plasma crops it to the screen.
 - `Next`: Plasma 6's default, from breeze 6.4.5 (CC-BY-SA-4.0).
 - `Altai`, `Flow`, `Honeywave`, `Kay`, `MilkyWay`, `Mountain`, `ScarletTree`,
   `Volna`: from plasma-workspace-wallpapers 6.4.5 (see each metadata.json for

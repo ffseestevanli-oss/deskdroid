@@ -1,0 +1,11 @@
+{
+    "KPlugin": {
+        "Id": "RelicsAfloat",
+        "Name": "Relics Afloat",
+        "Authors": [
+            {
+                "Name": "Steven"
+            }
+        ]
+    }
+}
