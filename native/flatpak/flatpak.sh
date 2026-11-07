@@ -62,8 +62,14 @@ cli() {
   export DDFLATPAK_RUNTIME="$CLI/usr" DDFLATPAK_MOUNTS="/etc/ssl=$CLI/etc/ssl;/usr/etc=$CLI/etc"
   export DDMASK_GLIBC_LD_LIBRARY_PATH="$GLIBC_LIB:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib"
   export FLATPAK_BWRAP="$L/libdd_nobwrap.so" GIO_USE_VFS=local GSETTINGS_BACKEND=memory
+  rm -f "$F/glibc/sigsys.log"
   $G "$CLI/usr/bin/flatpak" "$@"
   rc=$?
+  # Killed on a system call Android blocks (SIGSYS, 128+31): say which ones
+  # glibc caught along the way (../glibc/patch.py logs them), for the report.
+  if [ $rc -eq 159 ]; then
+    echo "flatpak: stopped by Android (Bad system call); blocked calls caught: $(sort -un "$F/glibc/sigsys.log" 2>/dev/null | tr '\n' ' ')" >&2
+  fi
   fix_exports
   return $rc
 }

@@ -15,6 +15,12 @@ patch.py <glibc source dir> <prefix>
    allow (set_robust_list, which glibc makes at start, and others). The loader
    catches that signal (SIGSYS) first thing and makes the call fail with ENOSYS
    instead, which glibc and most programs handle.
+4. No clone3: glibc makes it with every signal blocked (creating a thread,
+   posix_spawn), where SIGSYS can't be caught and the process dies ("Bad
+   system call"). glibc uses plain clone instead, as on kernels before 5.3.
+5. No rseq: glibc registers it again in every new thread, also with every
+   signal blocked. Off by default (the glibc.pthread.rseq tunable), as on
+   kernels before 4.18.
 """
 import pathlib
 import re
@@ -76,6 +82,7 @@ edit("elf/rtld.c", "#include <dl-call_tls_init_tp.h>", """#include <dl-call_tls_
 #include <signal.h>
 #include <sys/ucontext.h>
 #include <kernel_sigaction.h>
+#include <fcntl.h>
 
 /* DeskDroid: Android's seccomp filter traps system calls apps may not make
    (SIGSYS). Make them return ENOSYS, as on a kernel without them.  */
@@ -83,6 +90,24 @@ static void
 deskdroid_sigsys (int sig, siginfo_t *info, void *context)
 {
   ucontext_t *uc = context;
+  /* Note the call in <prefix>/sigsys.log: the calls Android blocks, for
+     finding the one that killed a program where this can't run.  */
+  {
+    char line[24];
+    int n = sizeof line;
+    line[--n] = '\\n';
+    unsigned int nr = info->si_syscall;
+    do
+      line[--n] = '0' + nr % 10;
+    while ((nr /= 10) != 0 && n > 0);
+    int fd = INTERNAL_SYSCALL_CALL (openat, AT_FDCWD, "@PREFIX@/sigsys.log",
+                                    O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
+    if (fd >= 0)
+      {
+        INTERNAL_SYSCALL_CALL (write, fd, line + n, sizeof line - n);
+        INTERNAL_SYSCALL_CALL (close, fd);
+      }
+  }
 #if defined __aarch64__
   uc->uc_mcontext.regs[0] = (unsigned long int) -ENOSYS;
 #elif defined __x86_64__
@@ -97,7 +122,7 @@ deskdroid_catch_sigsys (void)
   act.k_sa_handler = (__sighandler_t) deskdroid_sigsys;
   act.sa_flags = SA_SIGINFO;
   INTERNAL_SYSCALL_CALL (rt_sigaction, SIGSYS, &act, NULL, __NSIG_BYTES);
-}""")
+}""".replace("@PREFIX@", prefix))
 edit("elf/rtld.c", """  struct dl_main_state state;
   dl_main_state_init (&state);
 """, """  deskdroid_catch_sigsys ();
@@ -105,4 +130,21 @@ edit("elf/rtld.c", """  struct dl_main_state state;
   struct dl_main_state state;
   dl_main_state_init (&state);
 """)
+# 4. No clone3 (see above): without HAVE_CLONE3_WRAPPER glibc only uses clone.
+for arch in ("aarch64", "x86_64"):
+    p = src / f"sysdeps/unix/sysv/linux/{arch}/sysdep.h"
+    t, n = re.subn(r"^# define HAVE_CLONE3_WRAPPER\s+1$", "/* DeskDroid: no HAVE_CLONE3_WRAPPER */", p.read_text(), flags=re.M)
+    if n != 1:
+        sys.exit(f"patch.py: {arch}/sysdep.h: HAVE_CLONE3_WRAPPER not found")
+    p.write_text(t)
+# 5. No rseq (see above).
+edit("sysdeps/nptl/dl-tunables.list", """    rseq {
+      type: INT_32
+      minval: 0
+      maxval: 1
+      default: 1""", """    rseq {
+      type: INT_32
+      minval: 0
+      maxval: 1
+      default: 0""")
 print(f"patch.py: {changed} files with paths under {prefix}")
