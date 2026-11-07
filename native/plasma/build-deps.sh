@@ -622,6 +622,7 @@ build_kio() {
   python3 "$HERE/patches/kio/preview-plugins.py" "$s"
   python3 "$HERE/patches/kio/fileitem-groups.py" "$s"
   python3 "$HERE/patches/kio/diroperator-path.py" "$s"
+  python3 "$HERE/patches/kio/file-shared-storage.py" "$s"
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON -DWITH_WAYLAND=ON
 }

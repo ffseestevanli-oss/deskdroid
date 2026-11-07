@@ -108,6 +108,56 @@ object Storage {
         return listOf(phone.path to MOUNT)
     }
 
+    /**
+     * Logs whether Android lets DeskDroid move and copy a file into a folder made
+     * a moment before, on the phone's storage, in Download and in DCIM: the case
+     * Dolphin refused ("Access denied") until the folder had sat for a while.
+     * Each step's result, or its error, goes to the log as "storage test:".
+     * Everything it makes is in a DeskDroid-storage-test folder it deletes
+     * again. Runs in the background; never throws.
+     */
+    fun testMoves(c: Context) {
+        if (!granted(c)) return
+        Thread({
+            for (dir in listOf(Environment.DIRECTORY_DOWNLOADS, Environment.DIRECTORY_DCIM)) try {
+                testMovesIn(File(root, dir))
+            } catch (e: Throwable) {
+                AppLog.i("storage test: $dir: $e")
+            }
+        }, "storage-test").start()
+    }
+
+    private fun testMovesIn(parent: File) {
+        val base = File(parent, "DeskDroid-storage-test")
+        base.deleteRecursively()
+        val steps = mutableListOf<String>()
+        fun step(name: String, op: () -> Unit) {
+            val t = System.nanoTime()
+            val result = try {
+                op(); "ok"
+            } catch (e: android.system.ErrnoException) {
+                android.system.OsConstants.errnoName(e.errno) ?: "errno ${e.errno}"
+            } catch (e: Exception) {
+                e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
+            }
+            steps += "$name $result (${(System.nanoTime() - t) / 1_000_000} ms)"
+        }
+        fun write(f: File) = Os.close(Os.open(f.path,
+            android.system.OsConstants.O_CREAT or android.system.OsConstants.O_WRONLY or android.system.OsConstants.O_TRUNC, 0x1b6))
+        val folder = File(base, "new folder")
+        step("make folders") { Os.mkdir(base.path, 0x1ff); Os.mkdir(folder.path, 0x1ff) }
+        step("new file") { write(File(base, "a.txt")) }
+        step("move into new folder") { Os.rename(File(base, "a.txt").path, File(folder, "a.txt").path) }
+        step("copy into new folder") {
+            write(File(base, "b.txt"))
+            File(base, "b.txt").copyTo(File(folder, "b.txt"))
+        }
+        step("move back out") { Os.rename(File(folder, "a.txt").path, File(base, "a2.txt").path) }
+        step("rename folder") { Os.rename(folder.path, File(base, "renamed").path) }
+        val left = base.deleteRecursively()
+        AppLog.i("storage test: ${parent.name}: ${steps.joinToString("; ")}${if (left) "" else "; couldn't delete ${base.path}"}")
+    }
+
     private fun writeUserDirs(home: File) {
         val f = File(home, ".config/user-dirs.dirs")
         if (f.exists()) return
