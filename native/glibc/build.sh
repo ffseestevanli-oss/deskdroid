@@ -16,8 +16,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$(mkdir -p "$1" && cd "$1" && pwd)"
-VERSION=2.41
-COMMIT=74f59e9271cbb4071671e5a474e7d4f1622b186f # tag glibc-2.41
+VERSION=2.42
+COMMIT=d2097651cc57834dbfcaa102ddfacae0d86cfb66 # tag glibc-2.42
 REPO=https://github.com/bminor/glibc # mirror of sourceware.org/git/glibc.git
 PREFIX=/data/data/io.deskdroid.app/files/glibc
 CROSS="${CROSS:-aarch64-linux-gnu-}"

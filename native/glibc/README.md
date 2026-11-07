@@ -1,6 +1,7 @@
 # glibc for ddmask
 
-DeskDroid's own build of glibc 2.41, so ddmask can run ordinary ARM64 Linux
+DeskDroid's own build of glibc 2.42 (the version Flathub's 25.08 runtimes
+use, so their programs run on it; see `docs/flatpak-checklist.md`), so ddmask can run ordinary ARM64 Linux
 (glibc) programs on Android without proot.
 
 Android has no glibc, and a stock glibc wouldn't work there anyway: it looks

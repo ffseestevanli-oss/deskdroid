@@ -46,11 +46,14 @@ and ddmask runs them, so the store needs no hosting of its own.
 
 ## Left for Android
 
-- [ ] **glibc.** The KDE 6.11 runtime ships glibc 2.42; DeskDroid's (patched
-      for Android's seccomp filter, `native/glibc`) is 2.41. Plan: build
-      DeskDroid's glibc at the runtime's version and use its loader and libc
-      in place of the runtime's (the runtime's loader is in app data, which
-      Android won't exec, and its glibc isn't patched for seccomp).
+- [x] **glibc 2.42** (2026-11-07). Flathub's 25.08 runtimes need it (their
+      programs ask for `GLIBC_2.42`); `native/glibc` builds it with
+      DeskDroid's patches (paths, variables, seccomp) and its tests pass. On
+      qemu-aarch64, the arm64 freedesktop 25.08 runtime's `stty` (which needs
+      2.42), bash and Python 3.13 (with ssl and sqlite3) run on DeskDroid's
+      loader and libc in place of the runtime's own: put DeskDroid's
+      `glibc/lib` first in `DDMASK_GLIBC_LD_LIBRARY_PATH`, then the runtime's.
+      Runtimes on a newer glibc will need the next bump.
 - [ ] **ddmask rule**: a program under `flatpak/app/*` or `flatpak/runtime/*`
       starts through DeskDroid's glibc with the Flatpak library path and
       `ddflatpak` preloaded (in place of `test/ddflatpak-run.sh`).
