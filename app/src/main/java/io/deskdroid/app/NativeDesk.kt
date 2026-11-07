@@ -657,6 +657,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         put("FONTCONFIG_FILE", File(data, "fonts.conf").path)
                         put("XDG_DATA_DIRS", dataDirs(data))
                         put("XDG_CONFIG_HOME", File(filesDir, "config").path)
+                        put("XDG_CONFIG_DIRS", kdeDefaultsDirs(File(filesDir, "config")))
                         put("XCURSOR_PATH", File(data, "share/icons").path)
                         sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
                     }
@@ -777,6 +778,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("XDG_RUNTIME_DIR", runtime.path)
                     put("XDG_DATA_DIRS", dataDirs(data))
                     put("XDG_CONFIG_HOME", config.path)
+                    put("XDG_CONFIG_DIRS", kdeDefaultsDirs(config))
                     put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
                     put("QT_PLUGIN_PATH", pluginPath(libs, data)) // Qt's plugins flat, KDE's by namespace
                     put("XCURSOR_PATH", File(data, "share/icons").path)
@@ -846,12 +848,16 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val old = Regex("\\[QtQuickRendererSettings]\nSceneGraphBackend=[a-z]*\n")
             g.writeText(if (old.containsMatchIn(t)) t.replace(old, Regex.escapeReplacement(section)) else t + "\n" + section)
         }
-        // Breeze Dark's icons (white symbolic ones) to match the dark colors; earlier
-        // builds wrote the light theme here.
+        // Breeze Dark's icons (white symbolic ones) to match the dark colors, unless
+        // an icon theme is set (System Settings › Icons, or a Global Theme in
+        // kdedefaults). Earlier builds wrote the light theme here: that is changed
+        // once, so choosing Breeze later sticks.
         File(config, "kdeglobals").let { g ->
             val t = g.readText()
-            if (!t.contains("[Icons]")) g.appendText("\n[Icons]\nTheme=breeze-dark\n")
-            else if (t.contains("[Icons]\nTheme=breeze\n")) g.writeText(t.replace("[Icons]\nTheme=breeze\n", "[Icons]\nTheme=breeze-dark\n"))
+            val migrated = File(config, "deskdroid-icons-migrated")
+            if (!t.contains("[Icons]") && !kdeDefaults(config, "kdeglobals").contains("[Icons]")) g.appendText("\n[Icons]\nTheme=breeze-dark\n")
+            else if (!migrated.exists() && t.contains("[Icons]\nTheme=breeze\n")) g.writeText(t.replace("[Icons]\nTheme=breeze\n", "[Icons]\nTheme=breeze-dark\n"))
+            migrated.writeText("")
         }
         // No screen locker here: Lock stays out of the menus.
         File(config, "kdeglobals").takeUnless { it.readText().contains("[KDE Action Restrictions]") }
@@ -887,6 +893,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("XDG_RUNTIME_DIR", runtime.path)
                     put("XDG_DATA_DIRS", dataDirs(data))
                     put("XDG_CONFIG_HOME", config.path)
+                    put("XDG_CONFIG_DIRS", kdeDefaultsDirs(config))
                     put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
                     put("XCURSOR_PATH", File(data, "share/icons").path)
                     put("FONTCONFIG_FILE", File(data, "fonts.conf").path)
@@ -1246,7 +1253,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private fun applyDarkDefault(config: File, data: File) {
         val globals = File(config, "kdeglobals")
         val dark = File(data, "share/color-schemes/BreezeDark.colors")
-        if (dark.exists() && !(globals.exists() && globals.readText().contains("ColorScheme="))) {
+        val defaults = kdeDefaults(config, "kdeglobals")
+        if (dark.exists() && !(globals.exists() && globals.readText().contains("ColorScheme=")) && !defaults.contains("ColorScheme=")) {
             globals.appendText("\n" + dark.readText() + "\n[General]\nColorScheme=BreezeDark\n")
             AppLog.i("Native desktop test: Breeze Dark colors set")
         } else if (!dark.exists()) AppLog.i("Native desktop test: no BreezeDark.colors in the data")
@@ -1259,14 +1267,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val text = globals.readText()
             if (text.contains(pinned)) globals.writeText(text.replace(pinned, "\n"))
         }
-        File(config, "plasmarc").takeUnless { it.exists() && it.readText().contains("[Theme]") }
+        File(config, "plasmarc").takeUnless { it.exists() && it.readText().contains("[Theme]") || kdeDefaults(config, "plasmarc").contains("[Theme]") }
             ?.appendText("\n[Theme]\nname=breeze-dark\n")
         // GTK programs (Floorp): Breeze for GTK (breeze-gtk), light or dark as
         // Plasma's colour scheme is, at every start. A settings.ini without
         // DeskDroid's first line is the user's own and is kept.
         val gtk = File(config, "gtk-3.0/settings.ini")
         if (!gtk.exists() || gtk.readLines().firstOrNull() == GTK_MARK) {
-            val scheme = Regex("(?m)^ColorScheme=(.*)$").find(globals.readText())?.groupValues?.get(1).orEmpty()
+            val scheme = (Regex("(?m)^ColorScheme=(.*)$").find(if (globals.exists()) globals.readText() else "")
+                ?: Regex("(?m)^ColorScheme=(.*)$").find(defaults))?.groupValues?.get(1).orEmpty()
             val light = scheme.contains("Light", ignoreCase = true) || scheme == "Breeze"
             gtk.parentFile?.mkdirs()
             gtk.writeText("$GTK_MARK\n[Settings]\ngtk-theme-name=${if (light) "Breeze" else "Breeze-Dark"}\n" +
@@ -1274,6 +1283,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "gtk-application-prefer-dark-theme=${!light}\ngtk-cursor-theme-name=breeze_cursors\n")
         }
     }
+    /**
+     * Plasma's Global Theme (and System Settings' Quick Settings) writes its
+     * choices as defaults in config/kdedefaults and takes the user's own
+     * values out, as on Linux, where startplasma puts that folder in
+     * XDG_CONFIG_DIRS. Without it there the theme never applied.
+     */
+    private fun kdeDefaultsDirs(config: File) = File(config, "kdedefaults").path + ":/etc/xdg"
+    private fun kdeDefaults(config: File, name: String) =
+        File(config, "kdedefaults/$name").let { if (it.exists()) it.readText() else "" }
     private val GTK_MARK = "# Written by DeskDroid to match Plasma's colors; delete this line to keep your own."
 
     /**
