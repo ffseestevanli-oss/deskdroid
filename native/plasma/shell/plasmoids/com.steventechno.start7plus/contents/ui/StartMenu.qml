@@ -54,6 +54,10 @@ Item {
     readonly property real fixedWidth: Kirigami.Units.gridUnit * 27
     readonly property real wantWidth: (classic && classicLoader.item) ? classicLoader.item.requiredWidth : fixedWidth
     readonly property real classicHeight: (classic && classicLoader.item) ? classicLoader.item.requiredHeight : 0
+    // DeskDroid: the same size as its implicit size too, which Plasma's popup
+    // starts from before it reads the Layout hints.
+    implicitWidth: wantWidth
+    implicitHeight: Layout.preferredHeight
     Layout.minimumWidth: wantWidth
     Layout.maximumWidth: wantWidth
     Layout.preferredWidth: wantWidth

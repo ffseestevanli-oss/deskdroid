@@ -1,0 +1,16 @@
+diff --git a/src/plasmaquick/appletpopup.cpp b/src/plasmaquick/appletpopup.cpp
+index 31095fd..d5a1bfd 100644
+--- a/src/plasmaquick/appletpopup.cpp
++++ b/src/plasmaquick/appletpopup.cpp
+@@ -141,6 +141,11 @@ void AppletPopup::setAppletInterface(QQuickItem *appletInterface)
+         if (!size.isEmpty()) {
+             m_sizeExplicitlySetFromConfig = true;
+             resize(size.grownBy(padding()));
++            // DeskDroid: keep a remembered size within the widget's own minimum and
++            // maximum. Restored after those were applied, a size saved too small
++            // (Start 7 Plus's first opening) stayed, showing a corner of the menu.
++            updateMinSize();
++            updateMaxSize();
+             return;
+         }
+     }
