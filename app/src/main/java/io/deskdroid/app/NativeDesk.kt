@@ -25,6 +25,8 @@ import kotlin.math.abs
 
 /** The menu's desktop scales; 0 is automatic (from the screen's density). */
 private val SCALES = listOf(0f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
+/** A monitor's scales (its own, apart from the phone's): 1 (100%) whenever a monitor connects. */
+private val EXTERNAL_SCALES = listOf(1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
 private const val EDGE_DP = 56f // how far up from the bottom a corner swipe may start
 
 /**
@@ -128,8 +130,20 @@ object NativeDesk {
 
     /** Plasma's usual size on a phone (about twice the panel's pixels), or the menu's choice. */
     fun desktopScale(c: android.content.Context): Float =
-        Prefs.nativeScale(c).takeIf { it > 0f }
+        if (onMonitor) Prefs.externalScale(c).takeIf { it > 0f } ?: 1f
+        else Prefs.nativeScale(c).takeIf { it > 0f }
             ?: ((c.resources.displayMetrics.density / 1.75f * 4).toInt().coerceIn(4, 12) / 4f)
+
+    /** The monitor's next scale (the Scale button on the phone's touchpad screen and the menu), applied now. */
+    fun nextExternalScale(c: android.content.Context): Float {
+        val i = (EXTERNAL_SCALES.indexOf(Prefs.externalScale(c)) + 1) % EXTERNAL_SCALES.size
+        Prefs.setExternalScale(c, EXTERNAL_SCALES[i])
+        if (running && onMonitor) nativeSetScale(desktopScale(c))
+        AppLog.i("Native desktop: monitor scale ${scaleText(EXTERNAL_SCALES[i])}")
+        return EXTERNAL_SCALES[i]
+    }
+
+    fun scaleText(s: Float) = "%.2f".format(java.util.Locale.ROOT, s).trimEnd('0').trimEnd('.') + "×"
 
     /** From the compositor: the focused desktop text field's text around the cursor (UTF-8; UTF-16 indices). */
     @JvmStatic @androidx.annotation.Keep
@@ -185,7 +199,10 @@ object NativeDesk {
         if (onMonitor == on) return
         onMonitor = on
         AppLog.i("Native desktop: " + if (on) "on a monitor, Android apps leave Plasma's menus" else "back on the phone, Android apps are in Plasma's menus again")
+        // A monitor gets its own scale, 1× (100%) each time one connects; the phone's comes back with the phone.
+        if (on) Prefs.setExternalScale(c, 1f)
         if (!running) return
+        nativeSetScale(desktopScale(c))
         runCatching { writeMenu(c) }.onFailure { AppLog.i("Native desktop: couldn't write the menu: $it") }
         appsRefresher?.run()
     }
@@ -1667,6 +1684,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
         val scaleTile = ui.tile(scaleLabel(), P.YELLOW) {}
         scaleTile.setOnClickListener {
+            // On a monitor: the monitor's own scale.
+            if (NativeDesk.onMonitor) { NativeDesk.nextExternalScale(this); scaleTile.text = scaleLabel(); return@setOnClickListener }
             val i = (SCALES.indexOf(Prefs.nativeScale(this)) + 1) % SCALES.size
             Prefs.setNativeScale(this, SCALES[i])
             scaleTile.text = scaleLabel()
@@ -1890,7 +1909,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (Prefs.keepAwake(this)) window.addFlags(flag) else window.clearFlags(flag)
     }
 
-    private fun scaleLabel() = Prefs.nativeScale(this).let { if (it == 0f) "Scale: auto" else "Scale ${"%.2f".format(it).trimEnd('0').trimEnd('.')}×" }
+    private fun scaleLabel() = if (NativeDesk.onMonitor) "Monitor scale ${NativeDesk.scaleText(Prefs.externalScale(this))}" else Prefs.nativeScale(this).let { if (it == 0f) "Scale: auto" else "Scale ${"%.2f".format(it).trimEnd('0').trimEnd('.')}×" }
 
     /**
      * While the DD menu is open Android's status and navigation bars show
@@ -2323,6 +2342,12 @@ class PhoneTouchpadActivity : Activity() {
             addView(ui.row(8) {
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 addView(header, LinearLayout.LayoutParams(0, -2, 1f))
+                // The monitor's own scale, apart from the phone's; 1× each time a monitor connects.
+                lateinit var scale: android.widget.TextView
+                scale = ui.outlineButton("SCALE ${NativeDesk.scaleText(Prefs.externalScale(context))}", P.YELLOW, P.YELLOW) {
+                    scale.text = "SCALE ${NativeDesk.scaleText(NativeDesk.nextExternalScale(context))}"
+                }
+                addView(scale, LinearLayout.LayoutParams(-2, dp(44)))
                 addView(ui.outlineButton("APPS", P.CYAN, P.CYAN) { showDrawer(true) }, LinearLayout.LayoutParams(-2, dp(44)))
             }, LinearLayout.LayoutParams(-1, -2))
             addView(area, LinearLayout.LayoutParams(-1, 0, 1f))
