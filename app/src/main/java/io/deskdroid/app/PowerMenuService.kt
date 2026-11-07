@@ -44,6 +44,7 @@ class PowerMenuService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        MonitorOverlay.hide()
         if (instance === this) instance = null
         super.onDestroy()
     }
@@ -66,7 +67,9 @@ class PowerMenuService : AccessibilityService() {
         for (i in 0 until all.size()) for (w in all.valueAt(i))
             if (w.isFocused && w.type == AccessibilityWindowInfo.TYPE_APPLICATION && owner(w) == packageName) focused = true
         ddFocused = focused
-        if (!NativeDesk.running || !Prefs.monitorGuard(this)) return
+        if (!NativeDesk.running || !Prefs.monitorGuard(this)) { MonitorOverlay.hide(); return }
+        // The desktop drawn above Android's taskbar (turned on after the desktop went to the monitor).
+        MonitorGuard.desktopDisplay.let { if (it >= 0) MonitorOverlay.show(this, it) else MonitorOverlay.hide() }
         // The desktop's monitor, or a monitor Android's desktop mode or DeX
         // opened its own home on while the desktop ran on the phone.
         val monitor = MonitorGuard.desktopDisplay.takeIf { it >= 0 } ?: MonitorGuard.monitor(this)?.displayId ?: return
@@ -78,7 +81,15 @@ class PowerMenuService : AccessibilityService() {
         val seen = windows.filter { it.type == AccessibilityWindowInfo.TYPE_SYSTEM }.mapNotNull { owner(it) }.distinct().sorted().joinToString()
         if (seen != lastSeen) { lastSeen = seen; if (seen.isNotEmpty()) AppLog.i("Desktop helper: system windows on the monitor: $seen") }
         // Android's own dialogs (permissions and the like) are left to answer.
-        if (pkg != packageName && pkg !in DIALOGS) MonitorGuard.reclaim(this, "$pkg was on top of the monitor")
+        // The overlay steps aside for them. A full-screen one isn't a dialog:
+        // SystemUI's desktop-mode wallpaper, say, is Android's desktop taking over.
+        val bounds = android.graphics.Rect().also { top.getBoundsInScreen(it) }
+        val screen = getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(monitor)
+            ?.let { d -> android.graphics.Point().also { @Suppress("DEPRECATION") d.getRealSize(it) } }
+        val fullScreen = screen != null && bounds.width() >= screen.x * 9 / 10 && bounds.height() >= screen.y * 9 / 10
+        val dialog = pkg != packageName && pkg in DIALOGS && !fullScreen
+        MonitorOverlay.pause(dialog)
+        if (pkg != packageName && !dialog) MonitorGuard.reclaim(this, "$pkg was on top of the monitor")
     }
 
     private fun owner(w: AccessibilityWindowInfo): String? = runCatching { w.root?.packageName?.toString() }.getOrNull()
@@ -154,6 +165,12 @@ class PowerMenuService : AccessibilityService() {
             val s = instance
             if (s != null) { s.main.post { s.exitDex() }; return }
             turnOn(c, "Turn on \"DeskDroid desktop helper\" so DeskDroid can turn DeX off, or tap DeX in Quick Settings")
+        }
+
+        /** The desktop went to a monitor: draw it above Android's taskbar there (MonitorOverlay). */
+        fun showOverlay(displayId: Int) {
+            val s = instance ?: return
+            s.main.post { MonitorOverlay.show(s, displayId) }
         }
 
         fun turnOn(c: Context, why: String) {
