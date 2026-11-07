@@ -54,15 +54,22 @@ and ddmask runs them, so the store needs no hosting of its own.
       loader and libc in place of the runtime's own: put DeskDroid's
       `glibc/lib` first in `DDMASK_GLIBC_LD_LIBRARY_PATH`, then the runtime's.
       Runtimes on a newer glibc will need the next bump.
-- [ ] **ddmask rule**: a program under `flatpak/app/*` or `flatpak/runtime/*`
-      starts through DeskDroid's glibc with the Flatpak library path and
-      `ddflatpak` preloaded (in place of `test/ddflatpak-run.sh`).
-- [ ] Try KCalc's and ytDownloader's aarch64 builds on a phone.
+- [x] **The flatpak command on the phone** (`native/flatpak`): Debian's arm64
+      flatpak, OSTree and gpg on DeskDroid's glibc for installing, and
+      `flatpak run` through ddmask with ddflatpak preloaded first. Under
+      qemu-aarch64, laid out like the phone, it added Flathub, installed
+      KCalc (aarch64) with its runtime and GL driver, and ran it
+      (`flatpak-kcalc-arm64-test.png`).
+- [x] Desktop wiring: `bin/flatpak`, `files/flatpak-cli` unpacked with
+      glibc, Flatpak's exported menu entries in `XDG_DATA_DIRS`.
+- [ ] Try KCalc's and ytDownloader's aarch64 builds on a phone (APK).
 - [ ] Extensions in general: read them from the runtime's and app's metadata
       (`[Extension ...]`, `merge-dirs`) instead of the launcher's one GL case.
 - [ ] **GPU**: Flathub's Mesa doesn't know Android's GPU, so apps draw on the
       CPU at first; later, route them through virgl/Venus.
-- [ ] Build libflatpak and OSTree for Android, then port Discover with its
-      Flatpak backend, its Launch button starting apps through ddmask.
+- [ ] Discover: port it with its Flatpak backend (libflatpak can come from
+      the same Debian packages only for glibc programs; Discover is bionic,
+      so either build libflatpak for Android or run Discover itself on glibc
+      from a Flathub/Debian build), its Launch button calling `flatpak run`.
 - Known gaps: programs that make raw system calls (static Go) and glibc's
   own internal reads (gconv) see the real paths; `LOCPATH` covers locales.

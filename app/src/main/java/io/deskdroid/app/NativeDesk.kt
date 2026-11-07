@@ -648,7 +648,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         val data = File(filesDir, "kwin")
                         put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
                         put("FONTCONFIG_FILE", File(data, "fonts.conf").path)
-                        put("XDG_DATA_DIRS", File(data, "share").path)
+                        put("XDG_DATA_DIRS", dataDirs(data))
                         put("XDG_CONFIG_HOME", File(filesDir, "config").path)
                         put("XCURSOR_PATH", File(data, "share/icons").path)
                         sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
@@ -758,7 +758,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("HOME", filesDir.path)
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", runtime.path)
-                    put("XDG_DATA_DIRS", File(data, "share").path)
+                    put("XDG_DATA_DIRS", dataDirs(data))
                     put("XDG_CONFIG_HOME", config.path)
                     put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
                     put("QT_PLUGIN_PATH", pluginPath(libs, data)) // Qt's plugins flat, KDE's by namespace
@@ -868,7 +868,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("LANG", java.util.Locale.getDefault().let { "${it.language}_${it.country}.UTF-8" }) // the phone's language, for dates, times and text
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", runtime.path)
-                    put("XDG_DATA_DIRS", File(data, "share").path)
+                    put("XDG_DATA_DIRS", dataDirs(data))
                     put("XDG_CONFIG_HOME", config.path)
                     put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
                     put("XCURSOR_PATH", File(data, "share/icons").path)
@@ -968,9 +968,19 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * holds the libraries musl programs bring. Each one's /etc is written here:
      * the app's user, and DNS from Android's current network.
      */
+    /**
+     * KDE's data folders: the build's, then the menu entries and icons of the
+     * Flathub apps the flatpak command installed (native/flatpak).
+     */
+    private fun dataDirs(data: File) =
+        File(data, "share").path + ":" + File(filesDir, "flatpak/exports/share").path
+
     private fun glibcRuntime(libs: String) {
         val zip = File(libs, "libdd_glibc.so")
         if (zip.exists()) unpackKWinData(zip, File(filesDir, "glibc"))
+        // The flatpak command's programs and libraries (native/flatpak), which
+        // run on this glibc; the flatpak command itself is bin/flatpak.
+        File(libs, "libdd_flatpakcli.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "flatpak-cli")) }
         val uid = android.os.Process.myUid()
         val home = File(filesDir, "home").apply { mkdirs() }
         val dns = try {
@@ -1010,7 +1020,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         // Apps from the app store (Store.kt).
         Store.installed(this).forEach { Store.linkCommand(this, it) }
-        for (tool in listOf("android-open", "set-wallpaper", "dbus-send")) File(libs, "libdd_$tool.so").takeIf { it.exists() }?.let {
+        for (tool in listOf("android-open", "set-wallpaper", "dbus-send", "flatpak")) File(libs, "libdd_$tool.so").takeIf { it.exists() }?.let {
             try { android.system.Os.symlink(it.path, File(bin, tool).path) }
             catch (e: Exception) { AppLog.i("Native desktop test: couldn't link $tool: $e") }
         }

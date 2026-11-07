@@ -224,14 +224,29 @@ static const char *resolve(const char *path, char *const argv[], char ***out, ch
     if (!argc) a[argc++] = (char *)path;
     char hdr[256];
     REAL(open);
+    char self[PATH_MAX];
     for (int depth = 0; depth < 4; depth++) {
+        /* Chromium starts its helpers by exec'ing /proc/self/exe: the program
+         * (readlink goes through ddmask's, or this file's, answer). */
+        if (!strcmp(path, "/proc/self/exe") || !strcmp(path, "/proc/thread-self/exe")) {
+            ssize_t n = readlink(path, self, sizeof self - 1);
+            if (n > 0) { self[n] = 0; path = self; }
+        }
         const char *m = map(path, buf);
         const char *base = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
         if ((!strcmp(base, "zypak-wrapper") || !strcmp(base, "zypak-wrapper.sh")) && argc > 1) {
-            /* [wrapper, program, args...] -> [program, --no-sandbox, args...] */
+            /* [wrapper, program, args...] -> [program, --no-sandbox, args...];
+             * on a Wayland desktop (DeskDroid's has no X server) also
+             * Chromium's Wayland backend. */
             path = a[1];
             a[0] = a[1];
             a[1] = "--no-sandbox";
+            const char *wl = getenv("WAYLAND_DISPLAY");
+            if (wl && *wl) {
+                memmove(a + 3, a + 2, (argc - 1) * sizeof(char *));
+                a[2] = "--ozone-platform-hint=auto";
+                argc++;
+            }
             if (debug) fprintf(stderr, "ddflatpak: zypak -> %s --no-sandbox\n", path);
             continue;
         }
