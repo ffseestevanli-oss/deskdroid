@@ -659,13 +659,20 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.text("DeskDroid ${BuildConfig.VERSION_NAME} · GPL-3.0", 12f, Party.DIM))
     }
 
+    /** The desktop's helpers' own logs (Set as Desktop Wallpaper...), at the end of the saved log. */
+    private fun helperLogs(): String = listOf("set-wallpaper.log").joinToString("") { name ->
+        val f = java.io.File(c.filesDir, name)
+        if (!f.exists()) "\n== $name: none\n"
+        else "\n== $name\n" + try { f.readText().takeLast(10_000) } catch (e: Exception) { "($e)" } + "\n"
+    }
+
     /** Saves the log as a .txt in Downloads, like a browser download, so it can be attached anywhere. */
     private fun saveLog() {
         val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
         val name = "deskdroid-log-$stamp.txt"
         val text = "DeskDroid ${BuildConfig.VERSION_NAME}\n" +
             "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}\n\n" +
-            AppLog.text() + "\n"
+            AppLog.text() + "\n" + helperLogs()
         val msg = try {
             val values = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)

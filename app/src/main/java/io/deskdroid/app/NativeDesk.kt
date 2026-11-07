@@ -735,6 +735,16 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     if ("[Show]\n" in text) text.replaceFirst("[Show]\n", "[Show]\nwallpaperfileitemaction=false\n")
                     else text + "\n[Show]\nwallpaperfileitemaction=false\n")
             }
+            // Etherium's windows on the taskbar with its own icon: the browser
+            // gives its windows the Wayland app_id firefox-default (or firefox),
+            // which the task manager maps to Etherium's menu entry here.
+            File(filesDir, "config/taskmanagerrulesrc").apply {
+                val text = if (exists()) readText() else ""
+                if ("firefox-default=org.deskdroid.firefox" !in text) writeText(
+                    if ("[Mapping]\n" in text) text.replaceFirst("[Mapping]\n",
+                        "[Mapping]\nfirefox-default=org.deskdroid.firefox\nfirefox=org.deskdroid.firefox\n")
+                    else text + "\n[Mapping]\nfirefox-default=org.deskdroid.firefox\nfirefox=org.deskdroid.firefox\n")
+            }
             // The panel's keyboard button (an Icon widget on this file).
             File(filesDir, ".local/share/applications/org.deskdroid.keyboard.desktop").writeText(
                 "[Desktop Entry]\nType=Application\nName=Keyboard\nGenericName=Show or hide the phone's keyboard\n" +
@@ -996,6 +1006,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         val bin = File(data, "bin").apply { mkdirs() }
         bin.listFiles()?.forEach { it.delete() }
         val apps = File(data, "apps.txt").takeIf { it.exists() }?.readLines()?.filter { it.isNotBlank() }.orEmpty()
+        // Apps that came from the app store and are now in the APK (Konsole):
+        // the store's copy goes, so the APK's runs (qtapp.sh prefers the store's).
+        val fromStore = Store.installed(this)
+        for (app in apps) if (app in fromStore) {
+            AppLog.i("Native desktop test: $app is in the APK now, removing the app store's copy")
+            Store.uninstall(this, app)
+        }
         for (app in apps) {
             try {
                 android.system.Os.symlink(File(libs, "libdd_qtapp.so").path, File(bin, app).path)
