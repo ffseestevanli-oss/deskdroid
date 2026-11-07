@@ -142,17 +142,23 @@ mapped:
 #define REAL(name) static __typeof__(name) *real_##name; \
     if (!real_##name) real_##name = (__typeof__(name) *)dlsym(RTLD_NEXT, #name)
 
-#define MODE_ARG(flags) mode_t mode = 0; \
+/* Android (SELinux) doesn't let apps make hard links in their data, so a
+ * file opened with O_TMPFILE can never get a name (linkat). Say the folder
+ * doesn't support O_TMPFILE: OSTree, Flatpak and GLib then write a named
+ * temporary file and rename it, which works.  */
+#define NO_TMPFILE(flags) if (((flags) & O_TMPFILE) == O_TMPFILE) { errno = EOPNOTSUPP; return -1; }
+
+#define MODE_ARG(flags) NO_TMPFILE(flags); mode_t mode = 0; \
     if ((flags) & (O_CREAT | O_TMPFILE)) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
 
 int open(const char *p, int flags, ...) { MODE_ARG(flags); char b[PATH_MAX]; REAL(open); return real_open(map(p, b), flags, mode); }
 int open64(const char *p, int flags, ...) { MODE_ARG(flags); char b[PATH_MAX]; REAL(open64); return real_open64(map(p, b), flags, mode); }
 int openat(int d, const char *p, int flags, ...) { MODE_ARG(flags); char b[PATH_MAX]; REAL(openat); return real_openat(d, map(p, b), flags, mode); }
 int openat64(int d, const char *p, int flags, ...) { MODE_ARG(flags); char b[PATH_MAX]; REAL(openat64); return real_openat64(d, map(p, b), flags, mode); }
-int __open_2(const char *p, int flags) { char b[PATH_MAX]; REAL(open); return real_open(map(p, b), flags); }
-int __open64_2(const char *p, int flags) { char b[PATH_MAX]; REAL(open64); return real_open64(map(p, b), flags); }
-int __openat_2(int d, const char *p, int flags) { char b[PATH_MAX]; REAL(openat); return real_openat(d, map(p, b), flags); }
-int __openat64_2(int d, const char *p, int flags) { char b[PATH_MAX]; REAL(openat64); return real_openat64(d, map(p, b), flags); }
+int __open_2(const char *p, int flags) { NO_TMPFILE(flags); char b[PATH_MAX]; REAL(open); return real_open(map(p, b), flags); }
+int __open64_2(const char *p, int flags) { NO_TMPFILE(flags); char b[PATH_MAX]; REAL(open64); return real_open64(map(p, b), flags); }
+int __openat_2(int d, const char *p, int flags) { NO_TMPFILE(flags); char b[PATH_MAX]; REAL(openat); return real_openat(d, map(p, b), flags); }
+int __openat64_2(int d, const char *p, int flags) { NO_TMPFILE(flags); char b[PATH_MAX]; REAL(openat64); return real_openat64(d, map(p, b), flags); }
 FILE *fopen(const char *p, const char *m) { char b[PATH_MAX]; REAL(fopen); return real_fopen(map(p, b), m); }
 FILE *fopen64(const char *p, const char *m) { char b[PATH_MAX]; REAL(fopen64); return real_fopen64(map(p, b), m); }
 FILE *freopen(const char *p, const char *m, FILE *f) { char b[PATH_MAX]; REAL(freopen); return real_freopen(map(p, b), m, f); }
@@ -172,6 +178,17 @@ int euidaccess(const char *p, int m) { char b[PATH_MAX]; REAL(euidaccess); retur
 int eaccess(const char *p, int m) { char b[PATH_MAX]; REAL(eaccess); return real_eaccess(map(p, b), m); }
 DIR *opendir(const char *p) { char b[PATH_MAX]; REAL(opendir); return real_opendir(map(p, b)); }
 ssize_t readlink(const char *p, char *o, size_t n) { ssize_t r = self_link(p, o, n); if (r != -2) return r; char b[PATH_MAX]; REAL(readlink); return real_readlink(map(p, b), o, n); }
+/* Hard links: SELinux refuses them in app data with EACCES. Linux's own
+ * refusal (protected_hardlinks, other file systems) is EPERM, which OSTree
+ * and others take as "copy instead"; give them that.  */
+int linkat(int od, const char *o, int nd, const char *n, int fl)
+{
+    char b1[PATH_MAX], b2[PATH_MAX]; REAL(linkat);
+    int r = real_linkat(od, map(o, b1), nd, map(n, b2), fl);
+    if (r < 0 && errno == EACCES) errno = EPERM;
+    return r;
+}
+int link(const char *o, const char *n) { return linkat(AT_FDCWD, o, AT_FDCWD, n, 0); }
 ssize_t readlinkat(int d, const char *p, char *o, size_t n) { ssize_t r = self_link(p, o, n); if (r != -2) return r; char b[PATH_MAX]; REAL(readlinkat); return real_readlinkat(d, map(p, b), o, n); }
 char *realpath(const char *p, char *o) { char b[PATH_MAX]; REAL(realpath); return real_realpath(map(p, b), o); }
 char *canonicalize_file_name(const char *p) { char b[PATH_MAX]; REAL(canonicalize_file_name); return real_canonicalize_file_name(map(p, b)); }

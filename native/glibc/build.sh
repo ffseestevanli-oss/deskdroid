@@ -20,10 +20,13 @@ VERSION=2.42
 COMMIT=d2097651cc57834dbfcaa102ddfacae0d86cfb66 # tag glibc-2.42
 REPO=https://github.com/bminor/glibc # mirror of sourceware.org/git/glibc.git
 PREFIX=/data/data/io.deskdroid.app/files/glibc
-CROSS="${CROSS:-aarch64-linux-gnu-}"
+# DESKDROID_GLIBC_ARCH=x86_64 (with CROSS= or CROSS=x86_64-linux-gnu-) builds
+# the same glibc for a desktop machine, for test/android-sim.sh.
+ARCH="${DESKDROID_GLIBC_ARCH:-aarch64}"
+CROSS="${CROSS-$ARCH-linux-gnu-}"
 command -v "${CROSS}gcc" >/dev/null || { echo "glibc: no ${CROSS}gcc, skipped" >&2; exit 0; }
 
-key="$(cat "$HERE/build.sh" "$HERE/patch.py" | sha256sum | cut -c1-16)"
+key="$( { cat "$HERE/build.sh" "$HERE/patch.py"; echo "$ARCH"; } | sha256sum | cut -c1-16)"
 CACHE="${DESKDROID_GLIBC_CACHE:-$HOME/.cache/deskdroid/glibc}/$key"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -34,7 +37,7 @@ if [ ! -e "$CACHE/.done" ]; then
   [ "$(git -C "$WORK/src" rev-parse HEAD)" = "$COMMIT" ] || { echo "glibc: tag glibc-$VERSION isn't $COMMIT" >&2; exit 1; }
   python3 "$HERE/patch.py" "$WORK/src" "$PREFIX"
   mkdir -p "$WORK/build"
-  (cd "$WORK/build" && "$WORK/src/configure" --host=aarch64-linux-gnu --build="$(uname -m)-linux-gnu" \
+  (cd "$WORK/build" && "$WORK/src/configure" --host=$ARCH-linux-gnu --build="$(uname -m)-linux-gnu" \
     --prefix="$PREFIX" libc_cv_slibdir="$PREFIX/lib" CC="${CROSS}gcc" CXX="${CROSS}g++" \
     --enable-kernel=4.14 --disable-werror --disable-nscd --disable-build-nscd --disable-timezone-tools \
     --disable-profile --without-selinux --disable-sanity-checks > configure.log)
@@ -60,7 +63,8 @@ rm -f "$OUT/libdd_glibc.so"
 (cd "$R" && zip -qr -X "$OUT/libdd_glibc.so" .)
 
 # The loader, in the APK's library folder: Android runs it, it loads the program.
-install -m 755 "$CACHE/lib/ld-linux-aarch64.so.1" "$OUT/libdd_ld-glibc.so"
+case "$ARCH" in aarch64) ld=ld-linux-aarch64.so.1 ;; x86_64) ld=ld-linux-x86-64.so.2 ;; esac
+install -m 755 "$CACHE/lib/$ld" "$OUT/libdd_ld-glibc.so"
 "${CROSS}strip" --strip-unneeded "$OUT/libdd_ld-glibc.so"
 
 # ddmask for glibc programs (DDMASK_GLIBC: Android's folders, glibc's variables).

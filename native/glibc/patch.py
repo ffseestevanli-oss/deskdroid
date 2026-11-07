@@ -85,6 +85,9 @@ edit("elf/rtld.c", 'state->library_path_source = "LD_LIBRARY_PATH";', 'state->li
 edit("elf/rtld.c", "#include <dl-call_tls_init_tp.h>", """#include <dl-call_tls_init_tp.h>
 #include <signal.h>
 #include <sys/ucontext.h>
+#if defined __x86_64__ && !defined SA_RESTORER
+# define SA_RESTORER 0x04000000
+#endif
 #include <kernel_sigaction.h>
 #include <fcntl.h>
 
@@ -119,12 +122,27 @@ deskdroid_sigsys (int sig, siginfo_t *info, void *context)
 #endif
 }
 
+#if defined __x86_64__
+/* x86_64 (a desktop machine standing in for the phone, test/android-sim.sh)
+   returns from a handler through a restorer the program names; ARM64's
+   kernel has its own.  */
+extern void deskdroid_restore_rt (void) attribute_hidden;
+asm (".text\\n"
+     "deskdroid_restore_rt:\\n"
+     "  movq $15, %rax\\n" /* rt_sigreturn */
+     "  syscall\\n");
+#endif
+
 static void
 deskdroid_catch_sigsys (void)
 {
   struct kernel_sigaction act = { 0 };
   act.k_sa_handler = (__sighandler_t) deskdroid_sigsys;
   act.sa_flags = SA_SIGINFO;
+#if defined __x86_64__
+  act.sa_flags |= SA_RESTORER;
+  act.sa_restorer = deskdroid_restore_rt;
+#endif
   INTERNAL_SYSCALL_CALL (rt_sigaction, SIGSYS, &act, NULL, __NSIG_BYTES);
 }""".replace("@PREFIX@", prefix))
 edit("elf/rtld.c", """  struct dl_main_state state;

@@ -89,7 +89,12 @@ struct world {
 };
 static const struct world worlds[] = {
     { "libddmask.so", NULL, NULL, "LD_PRELOAD" },
+#if defined(__x86_64__)
+    /* A desktop machine standing in for the phone (glibc/test/android-sim.sh). */
+    { "libddmask_glibc.so", "libdd_ld-glibc.so", "/lib64/ld-linux-x86-64.so.2", "DDMASK_GLIBC_LD_PRELOAD" },
+#else
     { "libddmask_glibc.so", "libdd_ld-glibc.so", "/lib/ld-linux-aarch64.so.1", "DDMASK_GLIBC_LD_PRELOAD" },
+#endif
     { "libddmask_musl.so", "libdd_ld-musl.so", "/lib/ld-musl-aarch64.so.1", "DDMASK_MUSL_LD_PRELOAD" },
 };
 #define WORLDS (int)(sizeof worlds / sizeof worlds[0])
