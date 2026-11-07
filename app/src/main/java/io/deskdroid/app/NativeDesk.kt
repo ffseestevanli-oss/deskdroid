@@ -324,6 +324,11 @@ object NativeDesk {
                     }
                     return
                 }
+                // The system tray's Battery and Network items: the phone's own settings.
+                if (path.startsWith("deskdroid:settings:")) {
+                    Handler(Looper.getMainLooper()).post { openPhoneSettings(c, path.removePrefix("deskdroid:settings:")) }
+                    return
+                }
                 // An Android app from Plasma's menu (writeAndroidApps).
                 if (path.startsWith("android-app:")) {
                     Handler(Looper.getMainLooper()).post { launchAndroidApp(c, path.removePrefix("android-app:")) }
@@ -371,6 +376,27 @@ object NativeDesk {
             AppLog.i("Native desktop: opened $pkg" + if (onMonitor) " on the phone's screen" else "")
         } catch (e: Exception) {
             AppLog.i("Native desktop: couldn't open $pkg: $e")
+        }
+    }
+
+    /** A page of Android's Settings (battery, network), on the phone's screen when the desktop is on a monitor. */
+    private fun openPhoneSettings(c: android.content.Context, page: String) {
+        val action = when (page) {
+            "battery" -> android.content.Intent.ACTION_POWER_USAGE_SUMMARY
+            "network" -> if (android.os.Build.VERSION.SDK_INT >= 29) android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY
+                         else android.provider.Settings.ACTION_WIRELESS_SETTINGS
+            "wifi" -> android.provider.Settings.ACTION_WIFI_SETTINGS
+            else -> android.provider.Settings.ACTION_SETTINGS
+        }
+        for (a in listOf(action, android.provider.Settings.ACTION_SETTINGS)) {
+            val intent = android.content.Intent(a).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                if (onMonitor) c.startActivity(intent, phoneScreenOptions()) else (activity?.get() ?: c).startActivity(intent)
+                AppLog.i("Native desktop: opened the phone's $page settings")
+                return
+            } catch (e: Exception) {
+                AppLog.i("Native desktop: couldn't open $a: $e")
+            }
         }
     }
 

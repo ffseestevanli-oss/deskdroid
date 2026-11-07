@@ -102,6 +102,9 @@ add_subdirectory(applets/icon)
 add_subdirectory(libdbusmenuqt)
 add_subdirectory(statusnotifierwatcher)
 add_subdirectory(applets/systemtray)
+# The tray's Media Player (MPRIS players: Etherium, Flatpak apps...), shown
+# while something plays. Its QML module comes from libkmpris, below.
+add_subdirectory(applets/mediacontroller)
 # The task manager's QML modules: media players (MPRIS) for its tooltips,
 # and D-Bus calls from QML. The applet itself is plasma-desktop's
 # (build_plasma_desktop_taskmanager).

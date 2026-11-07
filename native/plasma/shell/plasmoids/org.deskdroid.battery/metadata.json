@@ -6,7 +6,12 @@
         "Icon": "battery-080",
         "Id": "org.deskdroid.battery",
         "License": "GPL-2.0+",
-        "Name": "Battery"
+        "Name": "Battery",
+        "EnabledByDefault": true,
+        "FormFactors": [
+            "desktop"
+        ]
     },
-    "X-Plasma-API-Minimum-Version": "6.0"
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-NotificationAreaCategory": "Hardware"
 }
