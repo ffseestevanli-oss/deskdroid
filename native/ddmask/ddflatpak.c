@@ -82,7 +82,9 @@ __attribute__((constructor)) static void ddflatpak_init(void) {
         exe[n] = 0;
         const char *base = strrchr(exe, '/') ? strrchr(exe, '/') + 1 : exe;
         const char *prog = (const char *)getauxval(AT_EXECFN);
-        if (!strncmp(base, "ld-linux", 8) && prog && prog[0] == '/' && strcmp(prog, exe))
+        /* glibc's loader: the system's, or DeskDroid's (libdd_ld-glibc.so). */
+        int loader = !strncmp(base, "ld-linux", 8) || !strncmp(base, "libdd_ld-", 9);
+        if (loader && prog && prog[0] == '/' && strcmp(prog, exe))
             snprintf(self_exe, sizeof self_exe, "%s", prog);
     }
 }
