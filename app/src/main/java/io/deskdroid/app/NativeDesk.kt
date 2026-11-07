@@ -413,6 +413,7 @@ object NativeDesk {
         }
         openWatcher?.stopWatching()
         openWatcher = null
+        MonitorOverlay.stopping()
         if (running) nativeStop()
         running = false
         PhoneStatus.stop()
@@ -535,8 +536,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             holder.surface.setFrameRate(hz, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
         }
         if (NativeDesk.running) {
+            // On a monitor with the desktop drawn above Android's taskbar
+            // (MonitorOverlay): this window only takes the input.
+            if (external && MonitorOverlay.active) {
+                started = true; stats.visibility = android.view.View.GONE; tookSurface(); main.post(tick)
+                return
+            }
             // Back from the background: the desktop kept running, show it again.
             started = NativeDesk.nativeStart(holder.surface)
+            if (started && !external) MonitorOverlay.replaced()
             AppLog.i(if (started) "Native desktop: back on screen" + (if (external) " (monitor)" else "") else "Native desktop: couldn't show it again")
             if (started) { stats.visibility = android.view.View.GONE; tookSurface(); main.post(tick) }
             return
@@ -585,8 +593,11 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         NativeDesk.owner = java.lang.ref.WeakReference(this)
         // A new screen size: the pointer starts again in the middle.
         NativeDesk.cursorX = -1f; NativeDesk.cursorY = -1f
-        surfaceView.holder.surfaceFrame.let { NativeDesk.surfaceW = it.width().toFloat(); NativeDesk.surfaceH = it.height().toFloat() }
+        if (!(external && MonitorOverlay.active))
+            surfaceView.holder.surfaceFrame.let { NativeDesk.surfaceW = it.width().toFloat(); NativeDesk.surfaceH = it.height().toFloat() }
         NativeDesk.setOnMonitor(applicationContext, external)
+        // Above Android's taskbar, with the desktop helper on (MonitorOverlay).
+        if (external) display?.displayId?.let { PowerMenuService.showOverlay(it) }
         if (external) {
             AppLog.i("Native desktop: on a monitor (display ${display?.displayId}); the phone is its touchpad")
             val opts = android.app.ActivityOptions.makeBasic().setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY)
@@ -597,6 +608,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     // The phone turned: the compositor passes the new size on to KWin.
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        if (external && MonitorOverlay.active) return // the overlay has the picture, and its own size
         if (started && NativeDesk.owner?.get() === this) { NativeDesk.surfaceW = width.toFloat(); NativeDesk.surfaceH = height.toFloat() }
         if (started) {
             AppLog.i("Native desktop test: screen ${width}x$height")
@@ -609,11 +621,24 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         main.removeCallbacks(tick)
         // Only the window the compositor draws into lets go of it: the phone's
         // window going away while a monitor shows the desktop changes nothing.
-        if (started && NativeDesk.owner?.get() === this) {
+        // On a monitor with the overlay drawing, this surface was never in use.
+        if (started && NativeDesk.owner?.get() === this && !(external && MonitorOverlay.active)) {
             NativeDesk.nativeDetach()
             NativeDesk.owner = null
         }
         started = false
+    }
+
+    /** The monitor's overlay went away: the desktop draws into this window again, if it can. */
+    fun reattachSurface() {
+        val h = surfaceView.holder
+        if (!NativeDesk.running || !h.surface.isValid) return
+        if (NativeDesk.nativeStart(h.surface)) {
+            started = true
+            h.surfaceFrame.let { NativeDesk.surfaceW = it.width().toFloat(); NativeDesk.surfaceH = it.height().toFloat() }
+            NativeDesk.nativeResized()
+            AppLog.i("Native desktop: drawing into the monitor's window again")
+        }
     }
 
     /** Test apps are separate processes, like real apps would be. */
@@ -2182,6 +2207,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     override fun onDestroy() {
         try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
         if (external) MonitorGuard.dexMetaKeys(this, false)
+        if (external && NativeDesk.owner?.get().let { it == null || it === this }) MonitorOverlay.hide()
         main.removeCallbacks(tick)
         // Stop (in the menu or the notification) ends the desktop; anything else
         // that destroys the window leaves it running in the background.

@@ -568,8 +568,8 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
             Prefs.setMonitorGuard(c, !guard); renderMonitor()
         })
         if (guard) monitorInfo.addView(ui.text(
-            if (helper) "The desktop helper brings DeskDroid back if Android's desktop mode or DeX takes the monitor, and sends Meta and Alt+Tab to the desktop."
-            else "Turn on the DeskDroid desktop helper so DeskDroid can take the monitor back by itself and keep Meta and Alt+Tab.",
+            if (helper) "The desktop helper draws the desktop above Android's taskbar, brings DeskDroid back if Android's desktop mode or DeX takes the monitor, and sends Meta and Alt+Tab to the desktop."
+            else "Turn on the DeskDroid desktop helper so Android's taskbar stays off the desktop, DeskDroid takes the monitor back by itself, and Meta and Alt+Tab reach the desktop.",
             12f, if (helper) Party.MUTED else Party.ORANGE))
         if (guard && !helper) monitorInfo.addView(ui.outlineButton("TURN ON DESKTOP HELPER", Party.ORANGE, Party.ORANGE) {
             io.deskdroid.app.PowerMenuService.turnOn(c, "Turn on \"DeskDroid desktop helper\"")
