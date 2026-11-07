@@ -891,31 +891,34 @@ void NativeDeskBackend::setSurrounding(const QString &text, int cursor, int anch
     m_surroundingAnchor = anchor;
     if (!m_surroundingPending) {
         m_surroundingPending = true;
-        QTimer::singleShot(30, this, [this] {
-            m_surroundingPending = false;
-            const QByteArray &u = m_surrounding;
-            qsizetype off = 0;
-            do {
-                qsizetype piece = u.size() - off;
-                if (piece > NDESK_TEXT_CHUNK) {
-                    piece = NDESK_TEXT_CHUNK;
-                    while (piece > 1 && (uchar(u[off + piece]) & 0xC0) == 0x80) {
-                        piece--; // whole characters
-                    }
-                }
-                ndesk_msg m = {};
-                m.op = NDESK_TEXT;
-                m.text.kind = NDESK_TEXT_SURROUNDING;
-                m.text.more = off + piece < u.size();
-                m.text.len = uint16_t(piece);
-                m.text.a = m_surroundingCursor;
-                m.text.b = m_surroundingAnchor;
-                memcpy(m.text.text, u.constData() + off, piece);
-                send(m);
-                off += piece;
-            } while (off < u.size());
-        });
+        QTimer::singleShot(30, this, &NativeDeskBackend::sendSurrounding);
     }
+}
+
+void NativeDeskBackend::sendSurrounding()
+{
+    m_surroundingPending = false;
+    const QByteArray &u = m_surrounding;
+    qsizetype off = 0;
+    do {
+        qsizetype piece = u.size() - off;
+        if (piece > NDESK_TEXT_CHUNK) {
+            piece = NDESK_TEXT_CHUNK;
+            while (piece > 1 && (uchar(u[off + piece]) & 0xC0) == 0x80) {
+                piece--; // whole characters
+            }
+        }
+        ndesk_msg m = {};
+        m.op = NDESK_TEXT;
+        m.text.kind = NDESK_TEXT_SURROUNDING;
+        m.text.more = off + piece < u.size();
+        m.text.len = uint16_t(piece);
+        m.text.a = m_surroundingCursor;
+        m.text.b = m_surroundingAnchor;
+        memcpy(m.text.text, u.constData() + off, piece);
+        send(m);
+        off += piece;
+    } while (off < u.size());
 }
 
 void NativeDeskBackend::text(const ndesk_msg &m)
@@ -958,6 +961,17 @@ void NativeDeskBackend::readMessages()
             }
             break;
         case NDESK_POINTER:
+            // A click in a text field: the phone's keyboard hears the field's
+            // text again once the click has landed, even if it didn't change
+            // (it forgets it on a click: the cursor may have moved).
+            if (m.pointer.buttons && !m_pointerButtons && m_textInputActive) {
+                QTimer::singleShot(150, this, [this] {
+                    if (m_textInputActive && !m_surroundingPending) {
+                        sendSurrounding();
+                    }
+                });
+            }
+            m_pointerButtons = m.pointer.buttons;
             // The compositor speaks screen pixels, KWin logical ones, at
             // whatever scale KWin's output configuration settled on.
             m_pointer->pointer(QPointF(m.pointer.x, m.pointer.y) / outputScale(), m.pointer.buttons);

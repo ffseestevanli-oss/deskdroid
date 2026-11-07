@@ -236,6 +236,7 @@ public:
     void setTextInputActive(bool active, int purpose, int hints);
     void text(const ndesk_msg &m);
     void setSurrounding(const QString &text, int cursor, int anchor);
+    void sendSurrounding();
 
 private:
     struct Buffer
@@ -270,6 +271,7 @@ private:
     int m_surroundingCursor = 0;
     int m_surroundingAnchor = 0;
     bool m_surroundingPending = false;
+    uint32_t m_pointerButtons = 0;
     QList<QPointer<Window>> m_minimizedForScreenOff; // NDESK_ACTION_SCREEN_OFF
 };
 
