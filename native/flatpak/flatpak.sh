@@ -53,9 +53,11 @@ cli() {
   # Flatpak's programs and helpers (gpg, ostree's, flatpak-*), again after
   # each unpack.
   if [ ! -x "$CLI/usr/bin/flatpak" ]; then
-    for d in "$CLI/usr/bin" "$CLI/usr/libexec" "$CLI/usr/lib/$TRIPLE/gnupg" "$CLI/usr/lib/gnupg"; do
-      [ -d "$d" ] && find "$d" -type f -exec chmod 755 {} +
-    done
+    # Globs, not find: Android's find opens the current folder first, which
+    # apps like Discover may not be allowed to read.
+    chmod 755 "$CLI"/usr/bin/* "$CLI"/usr/libexec/* "$CLI"/usr/libexec/*/* \
+      "$CLI"/usr/lib/"$TRIPLE"/gnupg/* "$CLI"/usr/lib/gnupg/* 2>/dev/null
+    [ -x "$CLI/usr/bin/flatpak" ] || die "can't make $CLI/usr/bin/flatpak executable"
   fi
   export DDFLATPAK_RUNTIME="$CLI/usr" DDFLATPAK_MOUNTS="/etc/ssl=$CLI/etc/ssl;/usr/etc=$CLI/etc"
   export DDMASK_GLIBC_LD_LIBRARY_PATH="$GLIBC_LIB:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib"
