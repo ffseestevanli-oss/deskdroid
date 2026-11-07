@@ -558,7 +558,26 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
             if (d == null) ui.text("No monitor connected. Plug one in with USB-C.", 13f, Party.ORANGE)
             else ui.text("Monitor connected · ${d.mode.physicalWidth} × ${d.mode.physicalHeight}", 13f, Party.GREEN, 600)
         )
-        monitorInfo.addView(ui.text("Full screen on the monitor. Phone touchpad mode and DeX-style windows come next.", 12f, Party.MUTED))
+        monitorInfo.addView(ui.text("Full screen on the monitor, with the phone as its touchpad.", 12f, Party.MUTED))
+        if (d == null) return
+        // Android's own desktop mode and Samsung DeX kept off the monitor (MonitorGuard).
+        val guard = Prefs.monitorGuard(c)
+        val helper = io.deskdroid.app.PowerMenuService.on
+        val dex = io.deskdroid.app.MonitorGuard.dexRunning(c)
+        monitorInfo.addView(settingRow("Keep Android's desktop off the monitor", if (guard) "On" else "Off") {
+            Prefs.setMonitorGuard(c, !guard); renderMonitor()
+        })
+        if (guard) monitorInfo.addView(ui.text(
+            if (helper) "The desktop helper brings DeskDroid back if Android's desktop mode or DeX takes the monitor, and sends Meta and Alt+Tab to the desktop."
+            else "Turn on the DeskDroid desktop helper so DeskDroid can take the monitor back by itself and keep Meta and Alt+Tab.",
+            12f, if (helper) Party.MUTED else Party.ORANGE))
+        if (guard && !helper) monitorInfo.addView(ui.outlineButton("TURN ON DESKTOP HELPER", Party.ORANGE, Party.ORANGE) {
+            io.deskdroid.app.PowerMenuService.turnOn(c, "Turn on \"DeskDroid desktop helper\"")
+        }, LinearLayout.LayoutParams(-1, c.dp(44)))
+        monitorInfo.addView(ui.outlineButton(if (dex) "EXIT DEX AND TAKE THE MONITOR" else "TAKE BACK THE MONITOR", Party.CYAN, Party.CYAN) {
+            if (dex) io.deskdroid.app.PowerMenuService.exitDex(c)
+            else io.deskdroid.app.MonitorGuard.reclaim(c, "Take back the monitor", manual = true)
+        }, LinearLayout.LayoutParams(-1, c.dp(44)))
     }
 
     private fun isHomeApp(): Boolean {

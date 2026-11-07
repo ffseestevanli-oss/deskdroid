@@ -106,6 +106,9 @@ object NativeDesk {
     @Volatile var owner: java.lang.ref.WeakReference<Activity>? = null
     @Volatile var surfaceW = 0f
     @Volatile var surfaceH = 0f
+    // The desktop's pointer, as the touchpads and captured mice last moved it (-1: not yet).
+    @Volatile var cursorX = -1f
+    @Volatile var cursorY = -1f
     // The phone's touchpad screen while the desktop is on a monitor.
     @Volatile var touchpad: java.lang.ref.WeakReference<PhoneTouchpadActivity>? = null
     // The overlay's last lines, kept across activity instances.
@@ -427,6 +430,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             addView(buildMenu(), FrameLayout.LayoutParams(-1, -1))
         })
         applyKeepAwake()
+        // Samsung DeX: the Meta key opens the desktop's menu, not DeX's.
+        if (external) MonitorGuard.dexMetaKeys(this, true)
         // Screen off: Etherium's windows minimized (Prefs.browserScreenOff), so a
         // video stops drawing and decoding while its sound plays on; screen on:
         // back as they were (KWin remembers which, NDESK_ACTION_SCREEN_OFF/ON).
@@ -505,6 +510,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     /** This window shows the desktop now; on a monitor, the phone becomes its touchpad. */
     private fun tookSurface() {
         NativeDesk.owner = java.lang.ref.WeakReference(this)
+        // A new screen size: the pointer starts again in the middle.
+        NativeDesk.cursorX = -1f; NativeDesk.cursorY = -1f
         surfaceView.holder.surfaceFrame.let { NativeDesk.surfaceW = it.width().toFloat(); NativeDesk.surfaceH = it.height().toFloat() }
         NativeDesk.setOnMonitor(applicationContext, external)
         if (external) {
@@ -1399,7 +1406,33 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private fun mouse(e: MotionEvent) {
         touchpad.moveTo(e.x, e.y)
         NativeDesk.nativePointer(e.x, e.y, e.buttonState)
+        // On a monitor, Android's cursor over the desktop while another window
+        // (the phone's touchpad, a phone app) has the focus: the desktop takes
+        // the focus, and with it the mouse, before the cursor reaches an edge
+        // where Android's taskbar would slide in (MonitorGuard).
+        if (external && !hasWindowFocus()) MonitorGuard.toFront(this)
+        if (external && e.buttonState != 0) MonitorGuard.fullscreen(this)
         captureMouse()
+    }
+
+    /** The mouse is captured: always on a monitor (MonitorGuard), else as the menu says. */
+    private fun wantCapture() = external || Prefs.mouseCapture(this)
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // The monitor's window took the focus: the mouse is the desktop's
+        // straight away, before Android's cursor can wander to an edge.
+        if (hasFocus && external && started) { captureMouse(); MonitorGuard.fullscreen(this) }
+    }
+
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun onMultiWindowModeChanged(inMultiWindow: Boolean) {
+        super.onMultiWindowModeChanged(inMultiWindow)
+        // Android's desktop mode made the monitor's desktop a window with a caption bar.
+        if (inMultiWindow && external) {
+            AppLog.i("Native desktop: Android put the monitor's desktop in a window, asking for full screen")
+            MonitorGuard.fullscreen(this)
+        }
     }
 
     // Mouse capture: Android hands the mouse's movement to the desktop (no
@@ -1408,7 +1441,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private var captureListening = false
 
     private fun captureMouse() {
-        if (!Prefs.mouseCapture(this) || !hasWindowFocus() || surfaceView.hasPointerCapture() ||
+        if (!wantCapture() || !hasWindowFocus() || surfaceView.hasPointerCapture() ||
             menu.visibility == android.view.View.VISIBLE) return
         if (!captureListening) {
             surfaceView.setOnCapturedPointerListener { _, e -> capturedMouse(e); true }
@@ -1428,15 +1461,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 120f, true)
             return
         }
-        if (!Prefs.mouseCapture(this)) { releaseMouse(); return }
-        // Relative movement: each sample's distance since the one before.
-        var dx = e.x; var dy = e.y
-        for (i in 0 until e.historySize) { dx += e.getHistoricalX(i); dy += e.getHistoricalY(i) }
-        val w = surfaceView.width.toFloat(); val h = surfaceView.height.toFloat()
-        val (px, py) = touchpad.position() ?: Pair(w / 2, h / 2)
-        val x = (px + dx).coerceIn(0f, w - 1); val y = (py + dy).coerceIn(0f, h - 1)
-        touchpad.moveTo(x, y)
-        NativeDesk.nativePointer(x, y, e.buttonState)
+        if (!wantCapture()) { releaseMouse(); return }
+        if (external && e.buttonState != 0) MonitorGuard.fullscreen(this)
+        touchpad.captured(e, surfaceView.width.toFloat(), surfaceView.height.toFloat())
     }
 
     override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
@@ -1835,8 +1862,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * two fingers scroll, a double tap double-clicks, and tap then hold drags.
      */
     class Touchpad {
-        private var px = -1f
-        private var py = -1f
+        // One pointer for the desktop, wherever it's moved from: the phone's
+        // touchpad screen, a captured mouse on it or on the monitor's window.
+        private var px: Float
+            get() = NativeDesk.cursorX
+            set(v) { NativeDesk.cursorX = v }
+        private var py: Float
+            get() = NativeDesk.cursorY
+            set(v) { NativeDesk.cursorY = v }
         private var lastX = 0f
         private var lastY = 0f
         private var downAt = 0L
@@ -1858,6 +1891,16 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         private var wheelSteps = 0f
 
         fun moveTo(x: Float, y: Float) { px = x; py = y }
+
+        /** A captured mouse's relative movement (each sample's distance since the one before), on a w × h desktop. */
+        fun captured(e: MotionEvent, w: Float, h: Float) {
+            var dx = e.x; var dy = e.y
+            for (i in 0 until e.historySize) { dx += e.getHistoricalX(i); dy += e.getHistoricalY(i) }
+            val (ox, oy) = position() ?: Pair(w / 2, h / 2)
+            val x = (ox + dx).coerceIn(0f, w - 1); val y = (oy + dy).coerceIn(0f, h - 1)
+            moveTo(x, y)
+            NativeDesk.nativePointer(x, y, e.buttonState)
+        }
         fun position(): Pair<Float, Float>? = if (px < 0) null else Pair(px, py)
 
         /** The buttons held (bit 1 left, 2 right), from on-screen buttons, at the pointer. */
@@ -1997,6 +2040,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onDestroy() {
         try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
+        if (external) MonitorGuard.dexMetaKeys(this, false)
         main.removeCallbacks(tick)
         // Stop (in the menu or the notification) ends the desktop; anything else
         // that destroys the window leaves it running in the background.
@@ -2193,7 +2237,40 @@ class PhoneTouchpadActivity : Activity() {
         val d = drawer ?: return
         if (show == drawerOpen) return
         d.view.visibility = if (show) android.view.View.VISIBLE else android.view.View.GONE
-        if (show) d.show()
+        if (show) { releaseMouse(); d.show() } else captureMouse()
+    }
+
+    // A USB or Bluetooth mouse while this screen has the focus (it takes it
+    // whenever the phone is touched) moves the desktop's pointer on the
+    // monitor too: captured here, Android's cursor never shows on either
+    // screen, so it can't reach the monitor's edges and reveal Android's
+    // taskbar there (MonitorGuard). The app drawer lets it go, for its search box.
+    private fun captureMouse() {
+        if (drawerOpen || !hasWindowFocus() || pad.hasPointerCapture() || NativeDesk.surfaceW <= 0f) return
+        pad.setOnCapturedPointerListener { _, e ->
+            if (e.actionMasked == MotionEvent.ACTION_SCROLL)
+                NativeDesk.nativeScroll(-e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 120f,
+                    -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 120f, true)
+            else touchpad.captured(e, NativeDesk.surfaceW, NativeDesk.surfaceH)
+            true
+        }
+        pad.requestFocus()
+        pad.requestPointerCapture()
+    }
+
+    private fun releaseMouse() {
+        if (pad.hasPointerCapture()) pad.releasePointerCapture()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) captureMouse()
+    }
+
+    override fun onGenericMotionEvent(e: MotionEvent): Boolean {
+        // A mouse that isn't captured yet (it was plugged in after the focus came here).
+        if (e.isFromSource(InputDevice.SOURCE_MOUSE) && !drawerOpen) { captureMouse(); return true }
+        return super.onGenericMotionEvent(e)
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
