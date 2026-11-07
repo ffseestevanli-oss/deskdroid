@@ -21,7 +21,8 @@ VIRGL_VERSION=1.3.0
 VIRGL_URL="https://gitlab.freedesktop.org/virgl/virglrenderer/-/archive/virglrenderer-$VIRGL_VERSION/virglrenderer-virglrenderer-$VIRGL_VERSION.tar.gz"
 VIRGL_SHA256=56170f8caa1bb642a2624b649e3bcca095ec2834814e5c308efc8a85a709e4ce
 EPOXY_VERSION=1.5.10
-EPOXY_URL="https://github.com/anholt/libepoxy/archive/refs/tags/$EPOXY_VERSION.tar.gz"
+# Debian's copy is the same file; some build machines' proxies refuse GitHub archives.
+EPOXY_URL="https://github.com/anholt/libepoxy/archive/refs/tags/$EPOXY_VERSION.tar.gz https://deb.debian.org/debian/pool/main/libe/libepoxy/libepoxy_$EPOXY_VERSION.orig.tar.gz"
 EPOXY_SHA256=a7ced37f4102b745ac86d6a70a9da399cc139ff168ba6b8002b4d8d43c900c15
 
 for tool in meson ninja pkg-config python3; do
@@ -30,10 +31,10 @@ done
 
 CACHE="${DESKDROID_SRC_CACHE:-$HOME/.cache/deskdroid}"
 mkdir -p "$CACHE"
-fetch() { # url sha256 file
-  local f="$CACHE/$3"
+fetch() { # "url [mirror...]" sha256 file
+  local f="$CACHE/$3" u
   if ! echo "$2  $f" | sha256sum -c --status 2>/dev/null; then
-    curl -fL --retry 4 -o "$f.part" "$1"
+    for u in $1; do curl -fL --retry 4 -o "$f.part" "$u" >&2 && break; done
     echo "$2  $f.part" | sha256sum -c --status || { echo "virgl: checksum mismatch for $1" >&2; exit 1; }
     mv "$f.part" "$f"
   fi
