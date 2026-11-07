@@ -114,6 +114,53 @@ object NativeDesk {
     // KWin said it takes apps' GPU buffers (deskdroid_ahb_v1): Qt apps draw on the GPU.
     @Volatile var kwinTakesGpuBuffers = false
 
+    // The desktop is on a monitor. Android's apps then belong to the phone's
+    // screen (its app drawer, PhoneTouchpadActivity): they leave Plasma's
+    // menus, since opening one on the monitor hands it to Android's own
+    // desktop mode, and come back when the monitor is unplugged.
+    @Volatile var onMonitor = false
+    // Lists the phone's apps for Plasma's menu again (set by watchAndroidApps).
+    @Volatile var appsRefresher: Runnable? = null
+
+    fun setOnMonitor(c: android.content.Context, on: Boolean) {
+        if (onMonitor == on) return
+        onMonitor = on
+        AppLog.i("Native desktop: " + if (on) "on a monitor, Android apps leave Plasma's menus" else "back on the phone, Android apps are in Plasma's menus again")
+        if (!running) return
+        runCatching { writeMenu(c) }.onFailure { AppLog.i("Native desktop: couldn't write the menu: $it") }
+        appsRefresher?.run()
+    }
+
+    /**
+     * Plasma's menu (KDE's app database lists only the apps a menu file takes
+     * in): every installed app, the phone's in their own folders, which are
+     * left out while the desktop is on a monitor. Written through a new file
+     * so KDE sees the change and rebuilds its database.
+     */
+    fun writeMenu(c: android.content.Context) {
+        val dir = File(c.filesDir, "config/menus").apply { mkdirs() }
+        val android = if (onMonitor) "" else
+            "  <Menu>\n    <Name>Android Apps</Name>\n" +
+            "    <Include><Category>X-DeskDroid-Android</Category></Include>\n  </Menu>\n" +
+            "  <Menu>\n    <Name>Private Space</Name>\n" +
+            "    <Include><Category>X-DeskDroid-Android-Private</Category></Include>\n  </Menu>\n" +
+            "  <Menu>\n    <Name>Work Apps</Name>\n" +
+            "    <Include><Category>X-DeskDroid-Android-Work</Category></Include>\n  </Menu>\n"
+        val tmp = File(dir, ".applications.menu.tmp")
+        tmp.writeText(
+            "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n" +
+            "  \"http://www.freedesktop.org/standards/menu-spec/1.0/menu.dtd\">\n" +
+            "<Menu>\n  <Name>Applications</Name>\n  <DefaultAppDirs/>\n  <DefaultDirectoryDirs/>\n" +
+            "  <Include><And><All/><Not><Category>X-DeskDroid-Android</Category></Not>" +
+            "<Not><Category>X-DeskDroid-Android-Private</Category></Not><Not><Category>X-DeskDroid-Android-Work</Category></Not></And></Include>\n" +
+            android + "</Menu>\n")
+        tmp.renameTo(File(dir, "applications.menu"))
+    }
+
+    /** Opening an Android app while the desktop is on a monitor: on the phone's screen. */
+    fun phoneScreenOptions(): android.os.Bundle? = if (!onMonitor) null else
+        android.app.ActivityOptions.makeBasic().setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY).toBundle()
+
     // Open with Android app: bin/android-open (android-open.sh) leaves each file
     // as a request in files/open-requests; this opens it in Android's chooser.
     private var openWatcher: android.os.FileObserver? = null
@@ -187,7 +234,7 @@ object NativeDesk {
                     return
                 }
                 val activity = launcher.getActivityList(pkg, user).firstOrNull() ?: throw Exception("no app to open")
-                launcher.startMainActivity(activity.componentName, user, null, null)
+                launcher.startMainActivity(activity.componentName, user, null, phoneScreenOptions())
                 AppLog.i("Native desktop: opened $target")
             } catch (e: Exception) {
                 AppLog.i("Native desktop: couldn't open $target: $e")
@@ -202,8 +249,10 @@ object NativeDesk {
             return
         }
         try {
-            (activity?.get() ?: c).startActivity(intent)
-            AppLog.i("Native desktop: opened $pkg")
+            // On a monitor, from the phone's own context: an activity on the
+            // monitor would pull the app over there.
+            if (onMonitor) c.startActivity(intent, phoneScreenOptions()) else (activity?.get() ?: c).startActivity(intent)
+            AppLog.i("Native desktop: opened $pkg" + if (onMonitor) " on the phone's screen" else "")
         } catch (e: Exception) {
             AppLog.i("Native desktop: couldn't open $pkg: $e")
         }
@@ -215,7 +264,7 @@ object NativeDesk {
             try {
                 val view = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(path))
                     .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                (activity?.get() ?: c).startActivity(view)
+                if (onMonitor) c.startActivity(view, phoneScreenOptions()) else (activity?.get() ?: c).startActivity(view)
                 AppLog.i("Native desktop: opening a link with the phone's browser")
             } catch (e: Exception) {
                 AppLog.i("Native desktop: couldn't open a link with the phone's browser: $e")
@@ -232,7 +281,8 @@ object NativeDesk {
                 .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             val chooser = android.content.Intent.createChooser(view, file.name)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            (activity?.get() ?: c).startActivity(chooser)
+            // On a monitor, the chooser and the app opened on the phone's screen.
+            if (onMonitor) c.startActivity(chooser, phoneScreenOptions()) else (activity?.get() ?: c).startActivity(chooser)
             AppLog.i("Native desktop: opening ${file.path} ($type) with an Android app")
         } catch (e: Exception) {
             AppLog.i("Native desktop: couldn't open ${file.path} with an Android app: $e")
@@ -416,6 +466,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private fun tookSurface() {
         NativeDesk.owner = java.lang.ref.WeakReference(this)
         surfaceView.holder.surfaceFrame.let { NativeDesk.surfaceW = it.width().toFloat(); NativeDesk.surfaceH = it.height().toFloat() }
+        NativeDesk.setOnMonitor(applicationContext, external)
         if (external) {
             AppLog.i("Native desktop: on a monitor (display ${display?.displayId}); the phone is its touchpad")
             val opts = android.app.ActivityOptions.makeBasic().setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY)
@@ -552,19 +603,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             // KDE's app database (ksycoca) lists only the apps a menu file takes in;
             // with none, Plasma finds no apps. One menu with every installed app,
             // and a fresh database each start so it matches this build's apps.
-            File(config, "menus").mkdirs()
-            File(config, "menus/applications.menu").writeText(
-                "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n" +
-                "  \"http://www.freedesktop.org/standards/menu-spec/1.0/menu.dtd\">\n" +
-                "<Menu>\n  <Name>Applications</Name>\n  <DefaultAppDirs/>\n  <DefaultDirectoryDirs/>\n" +
-                "  <Include><And><All/><Not><Category>X-DeskDroid-Android</Category></Not>" +
-                "<Not><Category>X-DeskDroid-Android-Private</Category></Not><Not><Category>X-DeskDroid-Android-Work</Category></Not></And></Include>\n" +
-                "  <Menu>\n    <Name>Android Apps</Name>\n" +
-                "    <Include><Category>X-DeskDroid-Android</Category></Include>\n  </Menu>\n" +
-                "  <Menu>\n    <Name>Private Space</Name>\n" +
-                "    <Include><Category>X-DeskDroid-Android-Private</Category></Include>\n  </Menu>\n" +
-                "  <Menu>\n    <Name>Work Apps</Name>\n" +
-                "    <Include><Category>X-DeskDroid-Android-Work</Category></Include>\n  </Menu>\n</Menu>\n")
+            NativeDesk.writeMenu(this)
             File(filesDir, ".cache").listFiles { f -> f.name.startsWith("ksycoca6") }?.forEach { it.delete() }
             // Open with Android app: KDE offers it for every file (all files derive
             // from application/octet-stream), so files without a KDE app open in
@@ -898,6 +937,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         NativeDesk.appsWatched = true
         val app = applicationContext
         val again = Runnable { NativeDesk.refreshAndroidApps { writeAndroidApps(app) } }
+        NativeDesk.appsRefresher = again
         val ui = android.os.Handler(Looper.getMainLooper())
         val later: () -> Unit = { ui.removeCallbacks(again); ui.postDelayed(again, 1500) }
         app.getSystemService(android.content.pm.LauncherApps::class.java).registerCallback(object : android.content.pm.LauncherApps.Callback() {
@@ -962,8 +1002,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         bmp.recycle()
                     }
                     val label = info.label.toString().replace("\n", " ")
-                    File(dir, name).writeText("[Desktop Entry]\nType=Application\nName=$label\nComment=Android app\n" +
-                        "Icon=${icon.path}\nExec=android-open android-app:$id\nCategories=$category;\n")
+                    // Hidden from search too while the desktop is on a monitor (NativeDesk.onMonitor).
+                    // Written through a new file, so KDE notices the change.
+                    val tmp = File(dir, ".$name.tmp")
+                    tmp.writeText("[Desktop Entry]\nType=Application\nName=$label\nComment=Android app\n" +
+                        "Icon=${icon.path}\nExec=android-open android-app:$id\nCategories=$category;\n" +
+                        if (NativeDesk.onMonitor) "NoDisplay=true\n" else "")
+                    tmp.renameTo(File(dir, name))
                 } catch (e: Exception) {
                     AppLog.i("Native desktop: couldn't list $id: $e")
                 }
@@ -1941,6 +1986,9 @@ class ExternalDeskActivity : NativeDeskActivity() {
  */
 class PhoneTouchpadActivity : Activity() {
     private val touchpad = NativeDeskActivity.Touchpad()
+    // The phone's own apps, which open on the phone's screen (PhoneAppDrawer).
+    private var drawer: PhoneAppDrawer? = null
+    private val drawerOpen get() = drawer?.view?.visibility == android.view.View.VISIBLE
     private lateinit var pad: NativeDeskActivity.KeyboardSurface
     private val displays by lazy { getSystemService(android.hardware.display.DisplayManager::class.java) }
     private val listener = object : android.hardware.display.DisplayManager.DisplayListener {
@@ -1949,6 +1997,7 @@ class PhoneTouchpadActivity : Activity() {
         override fun onDisplayRemoved(id: Int) {
             if (displays.displays.none { it.displayId != android.view.Display.DEFAULT_DISPLAY }) {
                 AppLog.i("Native desktop: monitor unplugged, back to the phone")
+                NativeDesk.setOnMonitor(applicationContext, false)
                 finish()
             }
         }
@@ -2043,7 +2092,11 @@ class PhoneTouchpadActivity : Activity() {
         }
         val content = ui.column(10) {
             setPadding(dp(16), dp(20), dp(16), dp(16))
-            addView(header, LinearLayout.LayoutParams(-1, -2))
+            addView(ui.row(8) {
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                addView(header, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(ui.outlineButton("APPS", P.CYAN, P.CYAN) { showDrawer(true) }, LinearLayout.LayoutParams(-2, dp(44)))
+            }, LinearLayout.LayoutParams(-1, -2))
             addView(area, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(ui.row(8) {
                 addView(ui.weight(bigButton("LEFT", P.CYAN, 1)))
@@ -2061,15 +2114,28 @@ class PhoneTouchpadActivity : Activity() {
                 gravity = android.view.Gravity.CENTER
             }, LinearLayout.LayoutParams(-1, -2))
         }
+        val apps = PhoneAppDrawer(this) { showDrawer(false) }
+        drawer = apps
+        apps.view.visibility = android.view.View.GONE
         setContentView(FrameLayout(this).apply {
             setBackgroundColor(P.BG)
             addView(content, FrameLayout.LayoutParams(-1, -1))
+            addView(apps.view, FrameLayout.LayoutParams(-1, -1))
             addView(io.deskdroid.app.ui.RainbowStrip(context), FrameLayout.LayoutParams(-1, dp(4)))
         })
         displays.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
     }
 
+    /** The app drawer over the touchpad, or the touchpad again. */
+    fun showDrawer(show: Boolean) {
+        val d = drawer ?: return
+        if (show == drawerOpen) return
+        d.view.visibility = if (show) android.view.View.VISIBLE else android.view.View.GONE
+        if (show) d.show()
+    }
+
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (drawerOpen) return false
         if (NativeDesk.surfaceW <= 0f) return false
         touchpad.wheel = Prefs.scrollWheel(this)
         touchpad.onTouch(e, NativeDesk.surfaceW, NativeDesk.surfaceH)
@@ -2077,7 +2143,10 @@ class PhoneTouchpadActivity : Activity() {
     }
 
     override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK) return true
+        // Back closes the app drawer (and otherwise does nothing here).
+        if (keyCode == KeyEvent.KEYCODE_BACK) { if (drawerOpen) drawer?.close(); return true }
+        // Typing in the drawer's search box stays there.
+        if (drawerOpen) return super.onKeyDown(keyCode, e)
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
         NativeDesk.nativeKey(keyCode, e.unicodeChar, true)
         return true
@@ -2085,6 +2154,7 @@ class PhoneTouchpadActivity : Activity() {
 
     override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) return true
+        if (drawerOpen) return super.onKeyUp(keyCode, e)
         if (VolumeKeys.isVolumeKey(keyCode)) return true
         NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
         return true
@@ -2105,6 +2175,7 @@ class PhoneTouchpadActivity : Activity() {
 
     override fun onDestroy() {
         displays.unregisterDisplayListener(listener)
+        if (drawerOpen) drawer?.close()
         if (NativeDesk.touchpad?.get() === this) NativeDesk.touchpad = null
         super.onDestroy()
     }
