@@ -119,17 +119,33 @@ object Storage {
     fun testMoves(c: Context) {
         if (!granted(c)) return
         Thread({
-            for (dir in listOf(Environment.DIRECTORY_DOWNLOADS, Environment.DIRECTORY_DCIM)) try {
-                testMovesIn(File(root, dir))
+            val dcim = File(root, Environment.DIRECTORY_DCIM)
+            val cases = listOfNotNull(
+                Triple(File(root, Environment.DIRECTORY_DOWNLOADS), "Download", "new folder"),
+                Triple(dcim, "DCIM", "new folder"),
+                // Two new folders deep: moves there failed while one deep worked.
+                Triple(dcim, "DCIM, 2 deep", "folder1/folder 2"),
+                // Camera's own folder, from a file in it, as Steven did.
+                File(dcim, "Camera").takeIf { it.isDirectory }?.let { Triple(it, "DCIM/Camera, 2 deep", "folder1/folder 2") },
+            )
+            for ((parent, label, sub) in cases) try {
+                testMovesIn(parent, label, sub)
             } catch (e: Throwable) {
-                AppLog.i("storage test: $dir: $e")
+                AppLog.i("storage test: $label: $e")
             }
         }, "storage-test").start()
     }
 
-    private fun testMovesIn(parent: File) {
+    /**
+     * In [parent]: makes DeskDroid-storage-test/[sub] (each folder new), moves a
+     * file from [parent] itself into it, copies one there, moves one back out and
+     * renames the deepest folder; then deletes all it made.
+     */
+    private fun testMovesIn(parent: File, label: String, sub: String) {
         val base = File(parent, "DeskDroid-storage-test")
+        val loose = File(parent, "DeskDroid-storage-test.txt")
         base.deleteRecursively()
+        loose.delete()
         val steps = mutableListOf<String>()
         fun step(name: String, op: () -> Unit) {
             val t = System.nanoTime()
@@ -144,18 +160,24 @@ object Storage {
         }
         fun write(f: File) = Os.close(Os.open(f.path,
             android.system.OsConstants.O_CREAT or android.system.OsConstants.O_WRONLY or android.system.OsConstants.O_TRUNC, 0x1b6))
-        val folder = File(base, "new folder")
-        step("make folders") { Os.mkdir(base.path, 0x1ff); Os.mkdir(folder.path, 0x1ff) }
-        step("new file") { write(File(base, "a.txt")) }
-        step("move into new folder") { Os.rename(File(base, "a.txt").path, File(folder, "a.txt").path) }
+        val folder = File(base, sub)
+        step("make folders") {
+            var d = parent
+            for (part in listOf(base.name) + sub.split("/")) {
+                d = File(d, part)
+                Os.mkdir(d.path, 0x1ff)
+            }
+        }
+        step("new file") { write(loose) }
+        step("move into new folder") { Os.rename(loose.path, File(folder, "a.txt").path) }
         step("copy into new folder") {
             write(File(base, "b.txt"))
             File(base, "b.txt").copyTo(File(folder, "b.txt"))
         }
         step("move back out") { Os.rename(File(folder, "a.txt").path, File(base, "a2.txt").path) }
-        step("rename folder") { Os.rename(folder.path, File(base, "renamed").path) }
-        val left = base.deleteRecursively()
-        AppLog.i("storage test: ${parent.name}: ${steps.joinToString("; ")}${if (left) "" else "; couldn't delete ${base.path}"}")
+        step("rename folder") { Os.rename(folder.path, File(folder.parentFile, "renamed").path) }
+        val left = base.deleteRecursively() and (loose.delete() || !loose.exists())
+        AppLog.i("storage test: $label ($sub): ${steps.joinToString("; ")}${if (left) "" else "; couldn't delete ${base.path}"}")
     }
 
     private fun writeUserDirs(home: File) {
