@@ -566,7 +566,7 @@ build_kwin() {
   # memfd_create and friends are API 30+; the Pixel has them, so link them weakly.
   # Big build, many fixes to come: keep going past errors so a run shows them all.
   KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -I$HERE/x11-stubs" -DCMAKE_C_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
-    -DKWIN_BUILD_X11=OFF -DKWIN_BUILD_RUNNERS=OFF -DKWIN_BUILD_TABBOX=OFF \
+    -DKWIN_BUILD_X11=OFF -DKWIN_BUILD_RUNNERS=OFF \
     -DKWIN_BUILD_ACTIVITIES=OFF -DKWIN_BUILD_EIS=OFF -DBUILD_DOC=OFF -DNATIVE_PREFIX="$QT_HOST_PATH"
 }
 
@@ -818,6 +818,48 @@ build_kcm_aboutphone() {
   find "$PREFIX/plugins" -name '*kcm_aboutphone*' | grep -q .
 }
 inputs_kcm_aboutphone() { cat "$HERE"/aboutphone/* "$HERE"/aboutphone/ui/*; }
+# Appearance & Style: plasma-workspace's Colors, Icons, Plasma Style,
+# Application Style, Fonts and Global Theme pages (workspacekcms/).
+build_kcms_workspace() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-workspace-$PLASMA_VERSION.tar.xz" "plasma-workspace-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  python3 "$HERE/workspacekcms/patch.py" "$s"
+  cp "$HERE/workspacekcms/fonts.cmake" "$s/kcms/fonts/CMakeLists.txt"
+  rm -rf "$s/_kcms" && cp -r "$HERE/workspacekcms" "$s/_kcms"
+  KEEP_GOING=1 kde_cmake "$s/_kcms" -DWORKSPACE_SRC="$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
+  # No kcminit here (it applies the style at login on Linux).
+  rm -f "$PREFIX/plugins/plasma/kcminit/kcm_style_init.so"
+  for k in colors icons desktoptheme style fonts lookandfeel; do
+    find "$PREFIX/plugins/plasma/kcms/systemsettings" -name "*kcm_$k.so" | grep -q .
+  done
+}
+inputs_kcms_workspace() { cat "$HERE"/workspacekcms/*; }
+# Apps & Windows: KWin's pages (kwinkcms/), built against the installed KWin.
+build_kcms_kwin() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kwin-$PLASMA_VERSION.tar.xz" "kwin-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  rm -rf "$s/_kcms" && cp -r "$HERE/kwinkcms" "$s/_kcms"
+  KEEP_GOING=1 kde_cmake "$s/_kcms" -DKWIN_SRC="$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -I$HERE/x11-stubs"
+  for k in kcm_kwindecoration kcm_kwinrules kcm_kwin_effects kcm_kwin_virtualdesktops kcm_animations; do
+    find "$PREFIX/plugins/plasma/kcms/systemsettings" -name "*$k.so" | grep -q .
+  done
+  for k in kcm_kwinoptions kcm_kwintabbox; do
+    find "$PREFIX/plugins/plasma/kcms/systemsettings_qwidgets" -name "*$k.so" | grep -q .
+  done
+}
+inputs_kcms_kwin() { cat "$HERE"/kwinkcms/*; }
+# Workspace › General Behavior and the Quick Settings start page:
+# plasma-desktop's pages (desktopkcms/).
+build_kcms_desktop() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-desktop-$PLASMA_VERSION.tar.xz" "plasma-desktop-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  rm -rf "$s/_kcms" && cp -r "$HERE/desktopkcms" "$s/_kcms"
+  KEEP_GOING=1 kde_cmake "$s/_kcms" -DDESKTOP_SRC="$s"
+  for k in kcm_workspace kcm_landingpage; do
+    find "$PREFIX/plugins/plasma/kcms/systemsettings" -name "*$k.so" | grep -q .
+  done
+}
+inputs_kcms_desktop() { cat "$HERE"/desktopkcms/*; }
 # Thumbnails (Dolphin, the wallpaper picker): kio-extras' thumbnail worker
 # and its thumbnailers only; the rest of kio-extras isn't needed.
 build_kio_extras() {
@@ -1385,7 +1427,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
      curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp
-     systemsettings kcm_componentchooser kcm_aboutphone)
+     systemsettings kcm_componentchooser kcm_aboutphone kcms_workspace kcms_kwin kcms_desktop)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
 inputs_kwin() { cat "$HERE"/kwin-nativedesk/*.* "$HERE"/kwin-nativedesk/CMakeLists.txt "$HERE/../nativedesk/protocol.h" "$HERE/ahb/deskdroid_ahb.h"; }
