@@ -242,7 +242,8 @@ Item {
         }
         Image {
             id: customImg
-            visible: false
+            // No shaders in Qt's software renderer: the image as it is, without MultiEffect's adjustments.
+            visible: v.effStyle === "custom" && GraphicsInfo.api === GraphicsInfo.Software
             anchors.fill: parent
             source: probe.source
             fillMode: Image.PreserveAspectFit
@@ -256,7 +257,7 @@ Item {
                 : Qt.rect(0, 0, 0, 0)
         }
         MultiEffect {
-            visible: v.effStyle === "custom" && customImg.status === Image.Ready
+            visible: v.effStyle === "custom" && customImg.status === Image.Ready && GraphicsInfo.api !== GraphicsInfo.Software
             anchors.fill: customImg
             source: customImg
             colorization: v.rainbow ? 0.6 : v.tintStrength

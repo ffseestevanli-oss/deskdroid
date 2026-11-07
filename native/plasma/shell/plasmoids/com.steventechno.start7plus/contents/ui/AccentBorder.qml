@@ -48,8 +48,10 @@ Item {
         anchors.fill: parent
         visible: ab.mode === "fill"
         opacity: ab.fillOpacity
-        layer.enabled: visible
-        layer.samples: 4
+        // DeskDroid: antialiased by Qt's curve renderer, not a multisampled layer. On
+        // DeskDroid's scaled screens the layer drew only its top-left quarter, as a
+        // small square. Qt's software renderer antialiases shapes by itself.
+        preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
             strokeWidth: -1
@@ -80,8 +82,10 @@ Item {
     Shape {
         anchors.fill: parent
         visible: ab.mode === "ring"
-        layer.enabled: visible
-        layer.samples: 4
+        // DeskDroid: antialiased by Qt's curve renderer, not a multisampled layer. On
+        // DeskDroid's scaled screens the layer drew only its top-left quarter, as a
+        // small square. Qt's software renderer antialiases shapes by itself.
+        preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
             id: ring

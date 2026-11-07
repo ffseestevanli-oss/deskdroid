@@ -43,6 +43,7 @@ Item {
     }
 
     MultiEffect {
+        visible: GraphicsInfo.api !== GraphicsInfo.Software // no shaders in Qt's software renderer
         anchors.fill: parent
         source: strip
         maskEnabled: wo.maskItem !== null
