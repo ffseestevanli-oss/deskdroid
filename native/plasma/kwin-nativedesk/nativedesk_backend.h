@@ -233,7 +233,8 @@ public:
     void setEglDisplay(std::unique_ptr<EglDisplay> &&display);
     static constexpr int BufferCount = 3;
     // A text field took (true) or lost the keyboard focus: the phone's keyboard.
-    void setTextInputActive(bool active);
+    void setTextInputActive(bool active, int purpose, int hints);
+    void text(const ndesk_msg &m);
 
 private:
     struct Buffer
@@ -261,6 +262,9 @@ private:
     std::unique_ptr<NativeDeskInputDevice> m_pointer;
     std::unique_ptr<NativeDeskInputDevice> m_keyboard;
     bool m_textInputActive = false;
+    int m_textInputPurpose = 0;
+    int m_textInputHints = 0;
+    QByteArray m_text; // a TEXT message's pieces so far
     QList<QPointer<Window>> m_minimizedForScreenOff; // NDESK_ACTION_SCREEN_OFF
 };
 

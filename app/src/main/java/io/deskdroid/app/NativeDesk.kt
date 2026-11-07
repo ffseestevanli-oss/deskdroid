@@ -42,8 +42,19 @@ object NativeDesk {
 
     @JvmStatic external fun nativeStart(surface: Surface): Boolean
     @JvmStatic external fun nativeStop()
-    @JvmStatic external fun nativePointer(x: Float, y: Float, buttons: Int)
+    @JvmStatic external fun nativePointerRaw(x: Float, y: Float, buttons: Int)
     @JvmStatic external fun nativeKey(keycode: Int, unicode: Int, down: Boolean)
+    /** Text from the phone's keyboard for the focused field (protocol.h's TEXT), in UTF-8. */
+    @JvmStatic external fun nativeText(kind: Int, utf8: ByteArray, cursor: Int)
+    private var pointerButtons = 0
+
+    /** The pointer (screen pixels) and the buttons held (bit 1 left, 2 right, 4 middle). */
+    @JvmStatic fun nativePointer(x: Float, y: Float, buttons: Int) {
+        // A click may move a text field's cursor: the phone keyboard's word ends first.
+        if (buttons != 0 && pointerButtons == 0) DeskInput.interrupted()
+        pointerButtons = buttons
+        nativePointerRaw(x, y, buttons)
+    }
     @JvmStatic external fun nativeScroll(dx: Float, dy: Float, wheel: Boolean)
     @JvmStatic external fun nativeStats(): String
     @JvmStatic external fun nativeResized()
@@ -122,8 +133,10 @@ object NativeDesk {
 
     /** From the compositor: a text field in the desktop took (or lost) the keyboard focus. */
     @JvmStatic @androidx.annotation.Keep
-    fun onIme(show: Boolean) {
+    fun onIme(show: Boolean, purpose: Int, hints: Int) {
         Handler(Looper.getMainLooper()).post {
+            // Swipe typing, corrections and suggestions where the field allows them.
+            DeskInput.onField(show, purpose, hints)
             // Manual keyboard (the default): a text field doesn't open it, only the menu does.
             val c = touchpad?.get() ?: activity?.get()
             if (show && c != null && !Prefs.autoKeyboard(c)) return@post
@@ -1518,7 +1531,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // Volume keys set the phone's volume, which is the desktop's sound too
         // (there's no KDE mixer yet): Android's own volume slider shows.
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
-        if (started) NativeDesk.physicalKey(keyCode, e, true)
+        if (started) {
+            if (!KeyEvent.isModifierKey(keyCode)) DeskInput.interrupted() // a real keyboard's key
+            NativeDesk.physicalKey(keyCode, e, true)
+        }
         return true
     }
 
@@ -1621,6 +1637,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 io.deskdroid.app.ui.Segmented(ui, listOf("Manual", "Automatic"),
                     if (Prefs.autoKeyboard(this)) 1 else 0) { i ->
                     Prefs.setAutoKeyboard(this, i == 1)
+                }.view),
+            // In desktop text fields: the phone keyboard's swipe typing,
+            // autocorrect and suggestions, or plain keys as before.
+            section("Phone keyboard typing",
+                io.deskdroid.app.ui.Segmented(ui, listOf("Plain keys", "Swipe & autocorrect"),
+                    if (Prefs.smartTyping(this)) 1 else 0) { i ->
+                    Prefs.setSmartTyping(this, i == 1)
+                    DeskInput.prefChanged(surfaceView)
                 }.view),
             section("Display options",
                 io.deskdroid.app.ui.Segmented(ui, listOf("Screen may sleep", "Keep awake"),
@@ -1881,17 +1905,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     /**
-     * The desktop's view, which takes the on-screen keyboard: its text arrives as
-     * key events (BaseInputConnection without an editor), handled like a real
-     * keyboard's in onKeyDown/onKeyUp.
+     * The desktop's view, which takes the on-screen keyboard. In a desktop text
+     * field the keyboard edits text there (DeskInput: swipe typing, corrections,
+     * suggestions); elsewhere its text arrives as key events, handled like a
+     * real keyboard's in onKeyDown/onKeyUp.
      */
     class KeyboardSurface(c: android.content.Context) : SurfaceView(c) {
         override fun onCheckIsTextEditor() = true
-        override fun onCreateInputConnection(info: android.view.inputmethod.EditorInfo): android.view.inputmethod.InputConnection {
-            info.inputType = android.text.InputType.TYPE_NULL
-            info.imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
-            return android.view.inputmethod.BaseInputConnection(this, false)
-        }
+        override fun onCreateInputConnection(info: android.view.inputmethod.EditorInfo): android.view.inputmethod.InputConnection =
+            DeskInput.connect(this, info)
     }
 
     /**
@@ -2325,6 +2347,7 @@ class PhoneTouchpadActivity : Activity() {
         // Typing in the drawer's search box stays there.
         if (drawerOpen) return super.onKeyDown(keyCode, e)
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
+        if (!KeyEvent.isModifierKey(keyCode)) DeskInput.interrupted() // a real keyboard's key
         NativeDesk.physicalKey(keyCode, e, true)
         return true
     }

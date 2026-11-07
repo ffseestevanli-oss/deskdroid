@@ -10,6 +10,7 @@
 #include "scene/workspacescene.h"
 #include "core/renderloop.h"
 #include "input.h"
+#include "inputmethod.h"
 #include "main.h"
 #include "deskdroid_ahb_server.h"
 #include "opengl/eglcontext.h"
@@ -45,8 +46,8 @@
 #include "protocol.h"
 
 // Set in KWin's InputMethod::refreshActive (add-to-kwin.py): whether the
-// focused surface has an enabled text input.
-namespace KWin { extern void (*deskdroidTextInputHook)(bool); }
+// focused surface has an enabled text input, and its purpose and hints.
+namespace KWin { extern void (*deskdroidTextInputHook)(bool, int, int); }
 
 namespace KWin
 {
@@ -764,7 +765,7 @@ bool NativeDeskBackend::initialize()
 
     static NativeDeskBackend *self;
     self = this;
-    deskdroidTextInputHook = [](bool active) { self->setTextInputActive(active); };
+    deskdroidTextInputHook = [](bool active, int purpose, int hints) { self->setTextInputActive(active, purpose, hints); };
 
     m_output = new NativeDeskOutput(this, m_size, m_scale);
     Q_EMIT outputAdded(m_output);
@@ -859,16 +860,38 @@ void NativeDeskBackend::send(const ndesk_msg &m, int passFd)
     }
 }
 
-void NativeDeskBackend::setTextInputActive(bool active)
+void NativeDeskBackend::setTextInputActive(bool active, int purpose, int hints)
 {
-    if (active == m_textInputActive) {
+    if (!active) {
+        purpose = hints = 0;
+    }
+    if (active == m_textInputActive && purpose == m_textInputPurpose && hints == m_textInputHints) {
         return;
     }
     m_textInputActive = active;
+    m_textInputPurpose = purpose;
+    m_textInputHints = hints;
     ndesk_msg m = {};
     m.op = NDESK_IME;
     m.ime.show = active;
+    m.ime.purpose = purpose;
+    m.ime.hints = hints;
     send(m);
+}
+
+void NativeDeskBackend::text(const ndesk_msg &m)
+{
+    // Text longer than a packet comes in pieces; the last one has more unset.
+    const int len = std::min<int>(m.text.len, NDESK_TEXT_CHUNK);
+    m_text.append(m.text.text, len);
+    if (m.text.more) {
+        return;
+    }
+    const QString text = QString::fromUtf8(m_text);
+    m_text.clear();
+    if (InputMethod *im = kwinApp()->inputMethod()) {
+        im->deskdroidText(m.text.kind == NDESK_TEXT_COMMIT ? 1 : 2, text, m.text.a);
+    }
 }
 
 float deskdroidSafePx[4] = {};
@@ -947,6 +970,9 @@ void NativeDeskBackend::readMessages()
             break;
         case NDESK_KEY:
             m_keyboard->key(m.key.keycode, m.key.unicode, m.key.down);
+            break;
+        case NDESK_TEXT:
+            text(m);
             break;
         case NDESK_ACTION:
             // Home on the phone: every window out of the way (Show Desktop),
