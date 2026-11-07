@@ -47,7 +47,7 @@ static QVariantMap deskdroidApp(const KService::Ptr &service)
             {QStringLiteral("name"), service->name()},
             {QStringLiteral("icon"), icon},
             {QStringLiteral("path"), path},
-            {QStringLiteral("kw"), (service->genericName() + QLatin1Char(' ') + service->keywords().join(QLatin1Char(' '))).trimmed()}};
+            {QStringLiteral("kw"), QString(service->genericName() + QLatin1Char(' ') + service->keywords().join(QLatin1Char(' '))).trimmed()}};
 }
 
 // The apps in a menu folder and its subfolders, in one list (as the script did).
