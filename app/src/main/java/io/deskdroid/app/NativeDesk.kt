@@ -76,6 +76,42 @@ object NativeDesk {
         }.start()
     }
 
+    // Keys from a real keyboard that the desktop has been told are down (main thread).
+    private val keysDown = mutableSetOf<Int>()
+    private val MODIFIERS = mapOf(
+        KeyEvent.KEYCODE_SHIFT_LEFT to KeyEvent.META_SHIFT_ON, KeyEvent.KEYCODE_SHIFT_RIGHT to KeyEvent.META_SHIFT_ON,
+        KeyEvent.KEYCODE_CTRL_LEFT to KeyEvent.META_CTRL_ON, KeyEvent.KEYCODE_CTRL_RIGHT to KeyEvent.META_CTRL_ON,
+        KeyEvent.KEYCODE_ALT_LEFT to KeyEvent.META_ALT_ON, KeyEvent.KEYCODE_ALT_RIGHT to KeyEvent.META_ALT_ON,
+        KeyEvent.KEYCODE_META_LEFT to KeyEvent.META_META_ON, KeyEvent.KEYCODE_META_RIGHT to KeyEvent.META_META_ON)
+
+    /**
+     * A real keyboard's key, from whichever DeskDroid window (or the desktop
+     * helper) got it. Each key goes down once and up once: Android's
+     * auto-repeat isn't passed on (KWin and the apps repeat keys themselves),
+     * and a modifier Android says is no longer held is let go of, in case its
+     * release went to another window.
+     */
+    fun physicalKey(keyCode: Int, e: KeyEvent, down: Boolean) {
+        for ((code, mask) in MODIFIERS) if (code != keyCode && code in keysDown && e.metaState and mask == 0) {
+            keysDown -= code; nativeKey(code, 0, false)
+        }
+        if (down) {
+            if (keyCode in keysDown) return // auto-repeat
+            keysDown += keyCode
+            nativeKey(keyCode, e.unicodeChar, true)
+        } else {
+            keysDown -= keyCode
+            nativeKey(keyCode, e.unicodeChar, false)
+        }
+    }
+
+    /** A DeskDroid window lost the keyboard: every key it had down goes up. */
+    fun releaseKeys() {
+        if (keysDown.isEmpty()) return
+        keysDown.forEach { nativeKey(it, 0, false) }
+        keysDown.clear()
+    }
+
     /** A desktop action (protocol.h's NDESK_ACTION_*): 1 shows the desktop. */
     @JvmStatic external fun nativeAction(action: Int)
 
@@ -1420,6 +1456,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        // Keys held when the keyboard moves elsewhere would otherwise stay down in the desktop.
+        if (!hasFocus) NativeDesk.releaseKeys()
         // The monitor's window took the focus: the mouse is the desktop's
         // straight away, before Android's cursor can wander to an edge.
         if (hasFocus && external && started) { captureMouse(); MonitorGuard.fullscreen(this) }
@@ -1480,14 +1518,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // Volume keys set the phone's volume, which is the desktop's sound too
         // (there's no KDE mixer yet): Android's own volume slider shows.
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
-        if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, true)
+        if (started) NativeDesk.physicalKey(keyCode, e, true)
         return true
     }
 
     override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) return true // handled in onKeyDown
         if (VolumeKeys.isVolumeKey(keyCode)) return true
-        if (started) NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
+        if (started) NativeDesk.physicalKey(keyCode, e, false)
         return true
     }
 
@@ -2264,7 +2302,7 @@ class PhoneTouchpadActivity : Activity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) captureMouse()
+        if (hasFocus) captureMouse() else NativeDesk.releaseKeys()
     }
 
     override fun onGenericMotionEvent(e: MotionEvent): Boolean {
@@ -2287,7 +2325,7 @@ class PhoneTouchpadActivity : Activity() {
         // Typing in the drawer's search box stays there.
         if (drawerOpen) return super.onKeyDown(keyCode, e)
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
-        NativeDesk.nativeKey(keyCode, e.unicodeChar, true)
+        NativeDesk.physicalKey(keyCode, e, true)
         return true
     }
 
@@ -2295,7 +2333,7 @@ class PhoneTouchpadActivity : Activity() {
         if (keyCode == KeyEvent.KEYCODE_BACK) return true
         if (drawerOpen) return super.onKeyUp(keyCode, e)
         if (VolumeKeys.isVolumeKey(keyCode)) return true
-        NativeDesk.nativeKey(keyCode, e.unicodeChar, false)
+        NativeDesk.physicalKey(keyCode, e, false)
         return true
     }
 

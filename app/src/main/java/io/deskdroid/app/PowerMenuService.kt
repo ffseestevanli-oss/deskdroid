@@ -85,13 +85,13 @@ class PowerMenuService : AccessibilityService() {
 
     override fun onKeyEvent(e: KeyEvent): Boolean {
         val down = e.action == KeyEvent.ACTION_DOWN
-        if (!down && forwarded.remove(e.keyCode)) { NativeDesk.nativeKey(e.keyCode, e.unicodeChar, false); return true }
+        if (!down && forwarded.remove(e.keyCode)) { NativeDesk.physicalKey(e.keyCode, e, false); return true }
         if (!down || !ddFocused || !NativeDesk.running || !NativeDesk.onMonitor || !Prefs.monitorGuard(this)) return false
         val meta = e.keyCode == KeyEvent.KEYCODE_META_LEFT || e.keyCode == KeyEvent.KEYCODE_META_RIGHT || e.isMetaPressed
         val altTab = e.keyCode == KeyEvent.KEYCODE_TAB && e.isAltPressed
         if (!meta && !altTab) return false
         forwarded += e.keyCode
-        NativeDesk.nativeKey(e.keyCode, e.unicodeChar, true)
+        NativeDesk.physicalKey(e.keyCode, e, true)
         return true
     }
 
