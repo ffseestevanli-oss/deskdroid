@@ -586,9 +586,22 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
     }
 
     private fun startOrOpen() {
-        if (io.deskdroid.app.NativeDesk.running || isHomeApp()) return
+        if (io.deskdroid.app.NativeDesk.running) return backToDesktop()
+        if (isHomeApp()) return
         val display = if (onMonitor) externalDisplay()?.displayId ?: Display.DEFAULT_DISPLAY else Display.DEFAULT_DISPLAY
         io.deskdroid.app.NativeSession.start(c, display)
+    }
+
+    /**
+     * The desktop is running in the background: back into it. On a monitor
+     * the desktop is still showing there, so the phone gets its touchpad back;
+     * otherwise the desktop's window (single task) comes back to the front.
+     */
+    private fun backToDesktop() {
+        if (io.deskdroid.app.NativeDesk.onMonitor && externalDisplay() != null) {
+            c.startActivity(android.content.Intent(c, io.deskdroid.app.PhoneTouchpadActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        } else io.deskdroid.app.NativeSession.start(c, Display.DEFAULT_DISPLAY)
     }
 
     override fun onShow() {
@@ -607,17 +620,20 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private fun refreshStatus() {
         val running = io.deskdroid.app.NativeDesk.running
         status.text = if (running) "LIVE" else "READY"
-        // Running already, or DeskDroid is the home app (Home opens the desktop):
-        // the button is greyed out.
+        status.setOnClickListener(if (running) android.view.View.OnClickListener { backToDesktop() } else null)
+        status.isClickable = running
+        // Running already: the button takes the user back into the desktop.
+        // DeskDroid is the home app (Home opens the desktop): greyed out.
         val home = isHomeApp()
         startButton.text = when {
-            running -> "DESKTOP RUNNING"
+            running -> "DESKTOP IS RUNNING · TAP TO RETURN"
             home -> "PRESS HOME FOR THE DESKTOP"
             else -> "START DESKTOP"
         }
-        startButton.isEnabled = !running && !home
-        startButton.isClickable = !running && !home
-        startButton.alpha = if (running || home) 0.4f else 1f
+        val tappable = running || !home
+        startButton.isEnabled = tappable
+        startButton.isClickable = tappable
+        startButton.alpha = if (tappable) 1f else 0.4f
     }
 }
 
