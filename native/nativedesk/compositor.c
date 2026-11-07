@@ -73,10 +73,11 @@ struct client {
 };
 
 struct input {
-    enum { IN_POINTER, IN_KEY, IN_SCROLL } type;
+    enum { IN_POINTER, IN_KEY, IN_SCROLL, IN_TEXT } type;
     float x, y;     /* pointer position, or scroll amount */
     int buttons;    /* or, scrolling: 1 for wheel steps */
     int keycode, unicode, down;
+    struct ndesk_msg text; /* IN_TEXT: the TEXT packet, ready to send */
 };
 
 static struct {
@@ -309,15 +310,16 @@ static void accept_client(void)
     close(fd);
 }
 
-/* The phone's on-screen keyboard, shown or hidden by the app (NativeDesk.onIme). */
-static void ime(bool show)
+/* The phone's on-screen keyboard, shown or hidden by the app (NativeDesk.onIme),
+ * with the kind of text field it is for. */
+static void ime(bool show, uint32_t purpose, uint32_t hints)
 {
     JNIEnv *env;
     if (!C.vm || !C.cls) return;
     if ((*C.vm)->GetEnv(C.vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK
         && (*C.vm)->AttachCurrentThread(C.vm, &env, NULL) != JNI_OK) return;
-    jmethodID m = (*env)->GetStaticMethodID(env, C.cls, "onIme", "(Z)V");
-    if (m) (*env)->CallStaticVoidMethod(env, C.cls, m, (jboolean)show);
+    jmethodID m = (*env)->GetStaticMethodID(env, C.cls, "onIme", "(ZII)V");
+    if (m) (*env)->CallStaticVoidMethod(env, C.cls, m, (jboolean)show, (jint)purpose, (jint)hints);
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
 }
 
@@ -428,7 +430,7 @@ static bool read_client(int i)
         break;
     }
     case NDESK_IME:
-        ime(m.ime.show != 0);
+        ime(m.ime.show != 0, m.ime.purpose, m.ime.hints);
         break;
     default:
         if (fence >= 0) close(fence);
@@ -485,6 +487,11 @@ static void handle_input(const struct input *in)
         if (i < 0) return;
         struct ndesk_msg m = { .op = NDESK_KEY, .key = { in->keycode, in->unicode, (uint32_t)in->down } };
         send_msg(C.clients[i], &m);
+        return;
+    }
+    if (in->type == IN_TEXT) { /* text goes where keys go */
+        int i = C.n_order ? C.order[C.n_order - 1] : -1;
+        if (i >= 0) send_msg(C.clients[i], &in->text);
         return;
     }
     bool pressed = in->buttons && !C.buttons;
@@ -876,6 +883,13 @@ Java_io_deskdroid_app_NativeDesk_nativeStop(JNIEnv *env, jclass cls)
 static void queue(struct input in)
 {
     pthread_mutex_lock(&C.lock);
+    /* Text mustn't be lost: wait for the loop to take what's queued. */
+    for (int tries = 0; in.type == IN_TEXT && C.n_input >= INPUT_QUEUE && tries < 100; tries++) {
+        pthread_mutex_unlock(&C.lock);
+        wake();
+        usleep(2000);
+        pthread_mutex_lock(&C.lock);
+    }
     if (C.n_input < INPUT_QUEUE) C.input[C.n_input++] = in;
     else if (in.type == IN_POINTER) C.input[INPUT_QUEUE - 1] = in; /* keep the latest position */
     pthread_mutex_unlock(&C.lock);
@@ -883,7 +897,7 @@ static void queue(struct input in)
 }
 
 JNIEXPORT void JNICALL
-Java_io_deskdroid_app_NativeDesk_nativePointer(JNIEnv *env, jclass cls, jfloat x, jfloat y, jint buttons)
+Java_io_deskdroid_app_NativeDesk_nativePointerRaw(JNIEnv *env, jclass cls, jfloat x, jfloat y, jint buttons)
 {
     (void)env; (void)cls;
     queue((struct input){ .type = IN_POINTER, .x = x, .y = y, .buttons = buttons });
@@ -894,6 +908,39 @@ Java_io_deskdroid_app_NativeDesk_nativeKey(JNIEnv *env, jclass cls, jint keycode
 {
     (void)env; (void)cls;
     queue((struct input){ .type = IN_KEY, .keycode = keycode, .unicode = unicode, .down = down });
+}
+
+/*
+ * Text from the phone's keyboard (protocol.h's TEXT), in UTF-8: kind is
+ * NDESK_TEXT_*, a the preedit's cursor in characters. Sent in pieces of whole
+ * characters; an empty text is one empty packet (an empty preedit clears it).
+ */
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeText(JNIEnv *env, jclass cls, jint kind, jbyteArray utf8, jint a)
+{
+    (void)cls;
+    const size_t len = utf8 ? (size_t)(*env)->GetArrayLength(env, utf8) : 0;
+    unsigned char *u = malloc(len + 1);
+    if (!u) return;
+    if (len) (*env)->GetByteArrayRegion(env, utf8, 0, (jsize)len, (jbyte *)u);
+    size_t off = 0;
+    do {
+        size_t piece = len - off;
+        if (piece > NDESK_TEXT_CHUNK) {
+            piece = NDESK_TEXT_CHUNK;
+            while (piece > 1 && (u[off + piece] & 0xC0) == 0x80) piece--; /* whole characters */
+        }
+        struct input in = { .type = IN_TEXT };
+        in.text.op = NDESK_TEXT;
+        in.text.text.kind = (uint8_t)kind;
+        in.text.text.more = off + piece < len;
+        in.text.text.len = (uint16_t)piece;
+        in.text.text.a = a;
+        memcpy(in.text.text.text, u + off, piece);
+        queue(in);
+        off += piece;
+    } while (off < len);
+    free(u);
 }
 
 JNIEXPORT void JNICALL

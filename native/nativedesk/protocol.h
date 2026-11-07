@@ -18,7 +18,11 @@
  *             OpenGL's default framebuffer orientation gives). The window
  *             takes the buffer's size, so resizing is committing a new size.
  *     IME     show (1) or hide (0) the phone's on-screen keyboard: a text
- *             field in the desktop took or lost the keyboard focus
+ *             field in the desktop took or lost the keyboard focus. With it,
+ *             the field's kind (purpose, NDESK_PURPOSE_*) and hints
+ *             (NDESK_HINT_*), Wayland text-input's, so the phone's keyboard
+ *             can offer swipe typing, corrections and suggestions where they
+ *             fit (and not in a password field)
  *   compositor -> app
  *     CONFIGURE  the window's id, and the screen size for a 0x0 HELLO
  *     RELEASE    the compositor no longer reads buffer <id>
@@ -38,6 +42,12 @@
  *                maximized windows keep out, the wallpaper still fills
  *     ACTION     desktops: a desktop action from the phone (NDESK_ACTION_*),
  *                such as Home minimizing every window
+ *     TEXT       desktops: text from the phone's keyboard for the focused text
+ *                field (NDESK_TEXT_*): COMMIT types text, PREEDIT shows the
+ *                word being composed (swipe typing, corrections) underlined
+ *                in the field, with the cursor <a> characters into it, and an
+ *                empty one takes it away. Text longer than one packet comes in
+ *                pieces: <more> is set on every piece but the last
  *
  * Buffers are GPU memory owned by the app (AHardwareBuffer), drawn by the app
  * with the phone's own GLES/Vulkan driver and sampled by the compositor with
@@ -67,6 +77,7 @@ enum ndesk_op {
     NDESK_SCALE,
     NDESK_SAFE,
     NDESK_ACTION,
+    NDESK_TEXT,
 };
 
 enum ndesk_action {
@@ -75,13 +86,34 @@ enum ndesk_action {
     NDESK_ACTION_SCREEN_ON = 3,    /* and on again: bring back the ones minimized for it */
 };
 
+enum ndesk_text {
+    NDESK_TEXT_COMMIT = 1,
+    NDESK_TEXT_PREEDIT = 2,
+};
+
+/* Wayland text-input's content purpose and the hints DeskDroid uses. */
+enum ndesk_purpose {
+    NDESK_PURPOSE_NORMAL = 0, NDESK_PURPOSE_ALPHA, NDESK_PURPOSE_DIGITS, NDESK_PURPOSE_NUMBER,
+    NDESK_PURPOSE_PHONE, NDESK_PURPOSE_URL, NDESK_PURPOSE_EMAIL, NDESK_PURPOSE_NAME,
+    NDESK_PURPOSE_PASSWORD, NDESK_PURPOSE_DATE, NDESK_PURPOSE_TIME, NDESK_PURPOSE_DATETIME,
+    NDESK_PURPOSE_TERMINAL, NDESK_PURPOSE_PIN,
+};
+#define NDESK_HINT_AUTO_CAPITALIZATION (1u << 2)
+#define NDESK_HINT_UPPERCASE (1u << 4)
+#define NDESK_HINT_HIDDEN (1u << 6)
+#define NDESK_HINT_SENSITIVE (1u << 7)
+#define NDESK_HINT_MULTILINE (1u << 9)
+
+/* UTF-8 bytes in one TEXT packet: the union stays HELLO's size. */
+#define NDESK_TEXT_CHUNK 64
+
 struct ndesk_msg {
     uint32_t op;
     union {
         struct { uint32_t version, width, height; char title[NDESK_TITLE_MAX]; } hello;
         struct { uint32_t id; } buffer;
         struct { uint32_t id, has_fence, y_invert; } commit;
-        struct { uint32_t show; } ime;
+        struct { uint32_t show, purpose, hints; } ime;
         struct { uint32_t window, width, height; } configure;
         struct { uint32_t id; } release;
         struct { uint64_t time_ns; } frame;
@@ -91,6 +123,7 @@ struct ndesk_msg {
         struct { float scale; } scale;
         struct { float left, top, right, bottom; } safe;
         struct { uint32_t action; } action;
+        struct { uint8_t kind, more; uint16_t len; int32_t a, b; char text[NDESK_TEXT_CHUNK]; } text;
     };
 };
 

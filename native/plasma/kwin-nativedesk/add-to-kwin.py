@@ -90,11 +90,70 @@ edit(m, "    case BackendType::Virtual: {\n",
      "    case BackendType::Virtual: {\n")
 
 # The phone's keyboard follows text fields: KWin's input method decides here
-# whether the focused surface has an enabled text input; the backend hears it.
+# whether the focused surface has an enabled text input; the backend hears it,
+# with the field's purpose and hints (a password field gets no suggestions).
 edit("src/inputmethod.cpp", "    if (m_internalContext->isEnabled()) {\n        active = true;\n    }\n    setActive(active);\n",
      "    if (m_internalContext->isEnabled()) {\n        active = true;\n    }\n"
-     "    if (deskdroidTextInputHook) {\n        deskdroidTextInputHook(active);\n    }\n    setActive(active);\n")
-edit("src/inputmethod.cpp", "namespace KWin\n{\n", "namespace KWin\n{\nvoid (*deskdroidTextInputHook)(bool) = nullptr;\n")
+     "    deskdroidReport(active);\n    setActive(active);\n")
+edit("src/inputmethod.cpp", "void InputMethod::contentTypeChanged()\n{\n",
+     "void InputMethod::contentTypeChanged()\n{\n    deskdroidReport(deskdroidActive);\n")
+edit("src/inputmethod.cpp", "namespace KWin\n{\n",
+     "namespace KWin\n{\n"
+     "void (*deskdroidTextInputHook)(bool, int, int) = nullptr;\n"
+     "static bool deskdroidActive = false;\n"
+     "static void deskdroidReport(bool active)\n"
+     "{\n"
+     "    deskdroidActive = active;\n"
+     "    if (!deskdroidTextInputHook) {\n"
+     "        return;\n"
+     "    }\n"
+     "    int purpose = 0, hints = 0;\n"
+     "    auto seat = waylandServer()->seat();\n"
+     "    if (auto t3 = seat->textInputV3(); t3 && t3->isEnabled()) {\n"
+     "        purpose = int(t3->contentPurpose());\n"
+     "        hints = t3->contentHints().toInt();\n"
+     "    } else if (auto t2 = seat->textInputV2(); t2 && t2->isEnabled()) {\n"
+     "        purpose = int(t2->contentPurpose());\n"
+     "        hints = t2->contentHints().toInt();\n"
+     "    } else if (auto t1 = seat->textInputV1(); t1 && t1->isEnabled()) {\n"
+     "        purpose = int(t1->contentPurpose());\n"
+     "        hints = t1->contentHints().toInt();\n"
+     "    }\n"
+     "    deskdroidTextInputHook(active, purpose, hints);\n"
+     "}\n")
+
+# Text from the phone's keyboard (swipe typing, corrections, suggestions): the
+# backend hands KWin's input method the words it commits and the word being
+# composed, which go to the focused app over Wayland text-input like an input
+# method's (an app without text input gets the committed text as key presses).
+edit("src/inputmethod.h", "    void setActive(bool active);\n",
+     "    void setActive(bool active);\n"
+     "    void deskdroidText(int kind, const QString &text, int cursor); // DeskDroid\n")
+edit("src/inputmethod.cpp", "void InputMethod::commitString(qint32 serial, const QString &text)\n{\n",
+     "void InputMethod::deskdroidText(int kind, const QString &text, int cursor)\n"
+     "{\n"
+     "    if (kind == 1) { // commit\n"
+     "        commitString(m_serial++, text);\n"
+     "        return;\n"
+     "    }\n"
+     "    // The word being composed, underlined in the field; the cursor in UTF-8 bytes.\n"
+     "    cursor = std::clamp(cursor, 0, int(text.size()));\n"
+     "    const int bytes = text.left(cursor).toUtf8().size();\n"
+     "    auto seat = waylandServer()->seat();\n"
+     "    if (auto t1 = seat->textInputV1(); t1 && t1->isEnabled()) {\n"
+     "        t1->setPreEditCursor(bytes);\n"
+     "        t1->preEdit(text, QString());\n"
+     "    } else if (auto t2 = seat->textInputV2(); t2 && t2->isEnabled()) {\n"
+     "        t2->setPreEditCursor(bytes);\n"
+     "        t2->preEdit(text, QString());\n"
+     "    } else if (auto t3 = seat->textInputV3(); t3 && t3->isEnabled()) {\n"
+     "        t3->sendPreEditString(text, bytes, bytes);\n"
+     "        t3->done();\n"
+     "    } else if (m_internalContext->isEnabled()) {\n"
+     "        m_internalContext->handlePreeditText(text, cursor, cursor);\n"
+     "    }\n"
+     "}\n\n"
+     "void InputMethod::commitString(qint32 serial, const QString &text)\n{\n")
 
 # Apps that draw with the GPU hand KWin their buffers (deskdroid_ahb_v1):
 # KWin takes them as wl_buffers and samples them as textures.
