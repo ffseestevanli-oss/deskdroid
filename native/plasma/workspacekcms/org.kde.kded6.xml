@@ -1,0 +1,10 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- DeskDroid: the part of kded's interface the Application Style page
+     calls (there's no kded here; the call fails and the GTK section says so). -->
+<node>
+  <interface name="org.kde.kded6">
+    <method name="loadedModules">
+      <arg type="as" direction="out"/>
+    </method>
+  </interface>
+</node>
