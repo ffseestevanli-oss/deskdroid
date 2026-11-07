@@ -4,6 +4,10 @@
 # aren't there (the app's files, $HOME) are Android's.
 #   steam-x86.sh setup        downloads Valve's Steam bootstrap into ~/.local/share/Steam
 #   steam-x86.sh run [ARGS]   starts an X server (Xwayland) and Steam in it
+#   steam-x86.sh reset        Steam's own --reset: all but the games and userdata
+#   steam-x86.sh exec FILE [ARGS]   any x86 Linux program, with an X server
+#   steam-x86.sh wine FILE [ARGS]   a Windows program through Proton (or Wine)
+#   steam-x86.sh wine-tool winecfg|uninstaller|explorer [PREFIX]
 #
 # The native desktop has no X server, and Steam's windows are X11: Xwayland
 # from the x86 system runs as one window on the desktop ("rootful"), and Steam
@@ -109,9 +113,105 @@ run() {
   return $status
 }
 
+# Steam's own --reset (steam.sh): everything in STEAMDIR but the games, the
+# players' data and the bootstrap goes, then the bootstrap is unpacked again.
+reset() {
+  [ -f "$STEAMDIR/bootstrap.tar.xz" ] || die "no bootstrap.tar.xz in $STEAMDIR (uninstall and set up Steam again)"
+  local f
+  for f in "$STEAMDIR"/* "$STEAMDIR"/.[!.]*; do
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    case "${f##*/}" in steamapps | userdata | bootstrap.tar.xz) ;; *) rm -rf "$f" ;; esac
+  done
+  tar -xJf "$STEAMDIR/bootstrap.tar.xz" -C "$STEAMDIR" || die "couldn't unpack Steam's bootstrap"
+  chmod +x "$STEAMDIR/steam.sh"
+  say "Steam reset: it downloads its client again the next time it starts (games kept)"
+}
+
+# An x86 program: X11 ones get the Xwayland window, Wayland ones the desktop.
+exec_x86() {
+  [ -n "${1:-}" ] || die "usage: steam-x86.sh exec FILE [ARGS]"
+  local wl=${WAYLAND_DISPLAY:-wayland-0}
+  XPID=""
+  start_x
+  export WAYLAND_DISPLAY=$wl
+  cd "$(dirname "$1")" 2>/dev/null || cd "$HOME"
+  say "starting $*"
+  "$@"
+  local status=$?
+  say "$1 exited ($status)"
+  [ -n "$XPID" ] && kill "$XPID" 2>/dev/null
+  return $status
+}
+
+# The newest Proton Steam has installed (Library > Tools), or the x86
+# system's Wine if someone added one.
+find_proton() {
+  local p best=""
+  for p in "$STEAMDIR"/steamapps/common/Proton*/proton; do
+    [ -f "$p" ] && best=$p
+  done
+  [ -f "$STEAMDIR/steamapps/common/Proton - Experimental/proton" ] && best="$STEAMDIR/steamapps/common/Proton - Experimental/proton"
+  echo "$best"
+}
+
+# Windows programs share one prefix of DeskDroid's own (~/.local/share/
+# deskdroid-wine/default) unless another one is named; Steam's games keep
+# theirs in steamapps/compatdata.
+wine_run() { # <prefix> <program> [args]
+  local prefix=$1; shift
+  local proton
+  proton=$(find_proton)
+  mkdir -p "$prefix"
+  if [ -n "$proton" ]; then
+    export STEAM_COMPAT_DATA_PATH=$prefix STEAM_COMPAT_CLIENT_INSTALL_PATH=$STEAMDIR
+    say "Proton: $proton, prefix $prefix"
+    python3 "$proton" run "$@"
+  elif command -v wine >/dev/null; then
+    export WINEPREFIX=$prefix/pfx
+    say "Wine: $(command -v wine), prefix $WINEPREFIX"
+    wine "$@"
+  else
+    die "no Proton yet: in Steam, install Proton (Library > Tools > Proton), then try again"
+  fi
+}
+
+wine_prefix() { # [prefix]: a prefix folder (the one with pfx/ in it)
+  if [ -n "${1:-}" ]; then echo "$1"; else echo "$HOME/.local/share/deskdroid-wine/default"; fi
+}
+
+wine_main() {
+  [ -n "${1:-}" ] || die "usage: steam-x86.sh wine FILE [ARGS]"
+  local wl=${WAYLAND_DISPLAY:-wayland-0}
+  XPID=""
+  start_x
+  export WAYLAND_DISPLAY=$wl
+  cd "$(dirname "$1")" 2>/dev/null || cd "$HOME"
+  wine_run "$(wine_prefix)" "$@"
+  local status=$?
+  [ -n "$XPID" ] && kill "$XPID" 2>/dev/null
+  return $status
+}
+
+wine_tool() {
+  case "${1:-}" in winecfg | uninstaller | explorer) ;; *) die "usage: steam-x86.sh wine-tool winecfg|uninstaller|explorer [PREFIX]" ;; esac
+  local tool=$1 wl=${WAYLAND_DISPLAY:-wayland-0}
+  XPID=""
+  start_x
+  export WAYLAND_DISPLAY=$wl
+  cd "$HOME"
+  wine_run "$(wine_prefix "${2:-}")" "$tool"
+  local status=$?
+  [ -n "$XPID" ] && kill "$XPID" 2>/dev/null
+  return $status
+}
+
 clean_env
 case "${1:-}" in
   setup) setup ;;
   run) shift; run "$@" ;;
-  *) die "usage: steam-x86.sh setup | run [ARGS]" ;;
+  reset) reset ;;
+  exec) shift; exec_x86 "$@" ;;
+  wine) shift; wine_main "$@" ;;
+  wine-tool) shift; wine_tool "$@" ;;
+  *) die "usage: steam-x86.sh setup | run [ARGS] | reset | exec FILE | wine FILE | wine-tool TOOL" ;;
 esac

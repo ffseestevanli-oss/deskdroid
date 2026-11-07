@@ -48,7 +48,10 @@ cmake --build "$WORK/build"
 DESTDIR="$WORK/root" cmake --install "$WORK/build"
 
 # Without root there's no binfmt_misc; the launchers run FEX directly.
-rm -rf "$WORK/root/usr/local/share/binfmts" "$WORK/root/usr/local/share/man"
+rm -rf "$WORK/root/usr/local/share/binfmts" "$WORK/root/usr/local/lib/binfmt.d" "$WORK/root/usr/local/share/man" "$WORK/root/usr/local/include"
+# FEX's program is bin/FEX since FEX-2604; DeskDroid's launchers (and older
+# installs) call it FEXInterpreter.
+[ -e "$WORK/root/usr/local/bin/FEXInterpreter" ] || ln -s FEX "$WORK/root/usr/local/bin/FEXInterpreter"
 # The libraries FEX needs beyond glibc's own (libstdc++, libgcc_s...).
 DEPS="$WORK/root/usr/local/lib/fex-deps"
 mkdir -p "$DEPS"

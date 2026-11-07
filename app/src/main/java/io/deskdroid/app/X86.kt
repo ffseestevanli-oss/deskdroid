@@ -30,10 +30,19 @@ import java.security.MessageDigest
  *                     steam-x86.sh (its x86 half), from assets/x86
  *
  * deskdroid-steam asks for the download with `android-open deskdroid:x86-install`
- * and follows install.log until install.state says done or failed.
+ * and follows install.log until install.state says done or failed. The Steam
+ * Installation Assistant (native/plasma/steamassistant) runs it for people.
+ *
+ * Where they come from:
+ *  - the FEX add-on APK (io.deskdroid.fex, fexpack/), when it is installed and
+ *    signed with DeskDroid's own key: its assets hold the same files as the
+ *    release, so FEX can travel as an APK while it has no download host;
+ *  - otherwise the folder named in ~/.config/deskdroid-fex-url (one URL, the
+ *    assistant's "Download from" setting), or the fex-latest release.
  */
 object X86 {
-    private const val RELEASE = "https://github.com/ffseestevanli-oss/deskdroid/releases/download/fex-latest/"
+    private const val DEFAULT_RELEASE = "https://github.com/ffseestevanli-oss/deskdroid/releases/download/fex-latest/"
+    const val ADDON = "io.deskdroid.fex"
     private const val FEX = "deskdroid-fex-arm64.tar.zst"
     private const val ROOTFS = "deskdroid-x86-rootfs.tar.zst"
     // The rootfs unpacks to about 4 GB; the download is kept until it's unpacked.
@@ -74,6 +83,8 @@ object X86 {
                     "Categories=Game;\nMimeType=x-scheme-handler/steam;x-scheme-handler/steamlink;\n" +
                     "StartupWMClass=Xwayland\nKeywords=games;x86;FEX;\n")
             if (installed(c)) writeEtc(c)
+            // For the Steam Installation Assistant: whether FEX can come from the add-on APK.
+            File(dir(c), "addon").let { f -> if (addon(c) != null) f.writeText(ADDON + "\n") else f.delete() }
         } catch (e: Exception) {
             AppLog.i("x86: couldn't prepare: $e")
         }
@@ -130,12 +141,82 @@ object X86 {
         }.apply { isDaemon = true }.start()
     }
 
+    /**
+     * Where each file comes from: ~/.config/deskdroid-fex-url holds a folder URL
+     * (each file is that folder plus its name), and/or `NAME=URL` lines for
+     * hosts without folders (a file sharing link per file). For a checksum,
+     * `NAME.sha256=` takes the hash itself as well as a URL. Without the file:
+     * the fex-latest release.
+     */
+    class Source(val base: String, private val files: Map<String, String>) {
+        fun url(name: String) = files[name] ?: "$base$name"
+        fun fixedHash(name: String) = files["$name.sha256"]?.lowercase()?.takeIf { it.matches(Regex("[0-9a-f]{64}")) }
+        override fun toString() = if (files.isEmpty()) base.removeSuffix("/") else "${base.removeSuffix("/")} (+${files.size} links)"
+    }
+
+    fun release(c: Context): Source {
+        val lines = try {
+            File(c.filesDir, ".config/deskdroid-fex-url").takeIf { it.exists() }?.readLines()
+                ?.map { it.trim() }?.filter { it.isNotEmpty() && !it.startsWith("#") }.orEmpty()
+        } catch (e: Exception) { emptyList() }
+        fun web(u: String) = u.startsWith("https://") || u.startsWith("http://")
+        val files = lines.filter { '=' in it && !web(it) }.associate { it.substringBefore('=').trim() to it.substringAfter('=').trim() }
+        val base = lines.firstOrNull { web(it) } ?: DEFAULT_RELEASE
+        return Source(if (base.endsWith("/")) base else "$base/", files)
+    }
+
+    /** The FEX add-on APK's assets, when it's installed and signed like DeskDroid. */
+    private fun addon(c: Context): android.content.res.AssetManager? = try {
+        val pm = c.packageManager
+        pm.getPackageInfo(ADDON, 0)
+        if (pm.checkSignatures(c.packageName, ADDON) != android.content.pm.PackageManager.SIGNATURE_MATCH) {
+            AppLog.i("x86: $ADDON is installed but not signed with DeskDroid's key, ignored")
+            null
+        } else c.createPackageContext(ADDON, 0).assets
+    } catch (e: Exception) { null }
+
+    private fun addonHas(assets: android.content.res.AssetManager?, name: String) =
+        assets != null && try { assets.open(name).close(); true } catch (e: Exception) { false }
+
+    /** A file from the add-on APK into dir (checked against its .sha256 there, when it has one). */
+    private fun copyFromAddon(assets: android.content.res.AssetManager, name: String, dir: File, say: (String) -> Unit): File {
+        val out = File(dir, name)
+        val md = MessageDigest.getInstance("SHA-256")
+        var done = 0L
+        var lastMb = -100L
+        assets.open(name).use { input ->
+            FileOutputStream(out).use { o ->
+                val b = ByteArray(1 shl 16)
+                while (true) {
+                    val n = input.read(b)
+                    if (n < 0) break
+                    o.write(b, 0, n); md.update(b, 0, n); done += n
+                    if (done / 1_000_000 >= lastMb + 100) { lastMb = done / 1_000_000; say("  $lastMb MB") }
+                }
+            }
+        }
+        val expected = try { assets.open("$name.sha256").use { it.readBytes() }.toString(Charsets.UTF_8).trim().substringBefore(' ').lowercase() } catch (e: Exception) { "" }
+        val actual = md.digest().joinToString("") { "%02x".format(it) }
+        if (expected.isNotEmpty() && actual != expected) { out.delete(); throw Exception("$name in the FEX add-on is damaged (checksum)") }
+        return out
+    }
+
+    private fun addonText(assets: android.content.res.AssetManager?, name: String): String? =
+        if (!addonHas(assets, name)) null else assets!!.open(name).use { it.readBytes() }.toString(Charsets.UTF_8).trim()
+
     private fun install(c: Context, say: (String) -> Unit) {
         File(dir(c), "ready").delete()
         val cache = File(c.cacheDir, "x86").apply { mkdirs() }
+        val addon = addon(c)
+        val release = release(c)
 
-        say("Downloading FEX-Emu")
-        val fex = download(c, FEX, cache, say)
+        val fex = if (addonHas(addon, FEX)) {
+            say("Copying FEX-Emu from the FEX add-on")
+            copyFromAddon(addon!!, FEX, cache, say)
+        } else {
+            say("Downloading FEX-Emu from $release")
+            download(c, release, FEX, cache, say)
+        }
         say("Unpacking FEX-Emu")
         val fexStaging = File(dir(c), "fex.new").also { removeTree(it) }
         untar(c, fex, fexStaging, strip = "usr/local/", files = 0, say = say)
@@ -144,7 +225,10 @@ object X86 {
         check(fexStaging.renameTo(fexDir(c))) { "couldn't move FEX-Emu into place" }
         check(interpreter(c).exists()) { "no FEXInterpreter in the download" }
 
-        val version = try { fetch("$RELEASE${ROOTFS.removeSuffix(".tar.zst")}.version").trim() } catch (e: Exception) { "" }
+        val rootfsInAddon = addonHas(addon, ROOTFS)
+        val base = ROOTFS.removeSuffix(".tar.zst")
+        val version = if (rootfsInAddon) addonText(addon, "$base.version").orEmpty()
+            else try { fetch(release.url("$base.version")).trim() } catch (e: Exception) { "" }
         val current = File(rootfs(c), "etc/deskdroid-x86-version").takeIf { it.exists() }?.readText()?.trim()
         if (current != null && current == version) {
             say("The x86 system ($current) is up to date")
@@ -153,9 +237,15 @@ object X86 {
             removeTree(rootfs(c))
             val free = StatFs(c.filesDir.path).availableBytes
             check(free >= NEED_BYTES) { "the x86 system needs about ${NEED_BYTES / 1_000_000_000} GB free, only ${free / 1_000_000_000} GB left" }
-            val files = try { fetch("$RELEASE${ROOTFS.removeSuffix(".tar.zst")}.files").trim().toLong() } catch (e: Exception) { 0L }
-            say("Downloading the x86 system (Ubuntu 24.04 for x86, about 1.2 GB)")
-            val tar = download(c, ROOTFS, cache, say)
+            val files = (if (rootfsInAddon) addonText(addon, "$base.files")
+                else try { fetch(release.url("$base.files")) } catch (e: Exception) { null })?.trim()?.toLongOrNull() ?: 0L
+            val tar = if (rootfsInAddon) {
+                say("Copying the x86 system from the FEX add-on (Ubuntu 24.04 for x86, about 1.2 GB)")
+                copyFromAddon(addon!!, ROOTFS, cache, say)
+            } else {
+                say("Downloading the x86 system (Ubuntu 24.04 for x86, about 1.2 GB)")
+                download(c, release, ROOTFS, cache, say)
+            }
             say("Unpacking the x86 system (about 4 GB, this takes a few minutes)")
             val staging = File(dir(c), "rootfs.new").also { removeTree(it) }
             untar(c, tar, staging, strip = "", files = files, say = say)
@@ -178,7 +268,7 @@ object X86 {
             conn.instanceFollowRedirects = false
             val code = conn.responseCode
             if (code in 300..399) { u = URL(u, conn.getHeaderField("Location")); conn.disconnect(); return@repeat }
-            if (code != 200) throw Exception("HTTP $code for ${u.path.substringAfterLast('/')} (is the fex-latest release published?)")
+            if (code != 200) throw Exception("HTTP $code for ${u.path.substringAfterLast('/')} from ${u.host} (is FEX published there? Install the FEX add-on APK, or set another download folder in the Steam Installation Assistant)")
             return conn
         }
         throw Exception("too many redirects")
@@ -186,12 +276,12 @@ object X86 {
 
     private fun fetch(url: String): String = connect(url).let { c -> c.inputStream.use { it.readBytes() }.also { c.disconnect() }.toString(Charsets.UTF_8) }
 
-    /** Downloads RELEASE/name into dir and checks it against name.sha256. */
-    private fun download(c: Context, name: String, dir: File, say: (String) -> Unit): File {
-        val expected = fetch("$RELEASE$name.sha256").trim().substringBefore(' ').lowercase()
+    /** Downloads release/name into dir and checks it against name.sha256. */
+    private fun download(c: Context, release: Source, name: String, dir: File, say: (String) -> Unit): File {
+        val expected = release.fixedHash(name) ?: fetch(release.url("$name.sha256")).trim().substringBefore(' ').lowercase()
         val out = File(dir, name)
         val md = MessageDigest.getInstance("SHA-256")
-        val conn = connect("$RELEASE$name")
+        val conn = connect(release.url(name))
         val total = conn.contentLengthLong
         var done = 0L
         var lastPercent = -10

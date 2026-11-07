@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Steam Installation Assistant
+GenericName=Set up and look after Steam
+Comment=Sets up Steam with FEX-Emu, then manages Steam, FEX-Emu and Proton
+Exec=steam-assistant
+Icon=org.deskdroid.steamassistant
+Terminal=false
+Categories=Game;System;
+Keywords=steam;fex;proton;wine;x86;games;
+StartupWMClass=steam-assistant

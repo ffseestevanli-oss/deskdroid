@@ -1,0 +1,4 @@
+build/
+fex-out/
+.gradle/
+local.properties

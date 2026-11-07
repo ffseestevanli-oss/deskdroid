@@ -30,6 +30,31 @@ jobs:
           path: out/*
           compression-level: 0
 
+  # The FEX add-on APK (fexpack/): the same FEX as an APK, for sharing it
+  # where there's no release to download from.
+  addon:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: deskdroid-fex
+          path: fex-out
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build the add-on APK
+        run: |
+          ./gradlew --no-daemon -p fexpack assembleDebug -PfexDir="$PWD/fex-out" -PdeskdroidBuildNumber=${{ github.run_number }}
+          mkdir -p out && cp fexpack/build/outputs/apk/debug/deskdroid-fex-debug.apk out/deskdroid-fex-addon.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deskdroid-fex-addon
+          path: out/*
+          compression-level: 0
+
   rootfs:
     runs-on: ubuntu-24.04
     steps:
@@ -43,7 +68,7 @@ jobs:
           compression-level: 0
 
   publish:
-    needs: [build, rootfs]
+    needs: [build, addon, rootfs]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:

@@ -825,6 +825,15 @@ build_kcm_aboutphone() {
   find "$PREFIX/plugins" -name '*kcm_aboutphone*' | grep -q .
 }
 inputs_kcm_aboutphone() { cat "$HERE"/aboutphone/* "$HERE"/aboutphone/ui/*; }
+# The Steam Installation Assistant (steamassistant/): DeskDroid's own app,
+# bin/steam-assistant, in the party look with the phone app's fonts.
+build_steam_assistant() {
+  local s="$WORK/src/steamassistant"
+  rm -rf "$s" && mkdir -p "$WORK/src" && cp -r "$HERE/steamassistant" "$s"
+  kde_cmake "$s" -DQTHOST_ENTRY="$HERE/kwin-nativedesk/qthost_entry.cpp" -DFONTS_DIR="$HERE/../../app/src/main/assets/fonts"
+  test -e "$PREFIX/lib/libsteam-assistant.so"
+}
+inputs_steam_assistant() { cat "$HERE"/steamassistant/*.* "$HERE"/steamassistant/qml/* "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
 # Appearance & Style: plasma-workspace's Colors, Icons, Plasma Style,
 # Application Style, Fonts and Global Theme pages (workspacekcms/).
 build_kcms_workspace() {
@@ -1518,7 +1527,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
      curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp
-     systemsettings kcm_componentchooser kcm_aboutphone kcms_workspace kcms_kwin kcms_desktop
+     systemsettings kcm_componentchooser kcm_aboutphone steam_assistant kcms_workspace kcms_kwin kcms_desktop
      appstream_qt qcoro purpose discover)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
