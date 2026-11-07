@@ -9,8 +9,8 @@ import android.os.HandlerThread
 import java.io.File
 
 /**
- * The phone's battery, memory and the desktop's CPU use, for the desktop's
- * widgets (Battery, CPU and RAM, native/plasma/shell/plasmoids): written to
+ * The phone's battery, memory, network and the desktop's CPU use, for the
+ * desktop's widgets (Battery, Network, CPU and RAM, native/plasma/shell/plasmoids): written to
  * files/status.json every 2 s while the desktop runs. Android lets an app see
  * only its own processes' CPU time, so CPU is the desktop's share of all cores.
  */
@@ -60,6 +60,7 @@ object PhoneStatus {
         c.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(mem)
 
         val cpu = cpuPercent()
+        val net = network(c)
         val json = org.json.JSONObject()
             .put("battery", percent)
             .put("charging", charging)
@@ -69,11 +70,57 @@ object PhoneStatus {
             .put("ramAvailable", mem.availMem)
             .put("cpu", cpu)
             .put("cores", cores)
+            .put("network", net)
             .put("time", System.currentTimeMillis())
         val out = File(c.filesDir, "status.json")
         val tmp = File(c.filesDir, "status.json.new")
         tmp.writeText(json.toString())
         tmp.renameTo(out)
+    }
+
+    /**
+     * The phone's connection, for the system tray's Network item: its type
+     * (wifi, mobile, ethernet, vpn or none), signal level 0-4, whether it
+     * reaches the internet, its speeds, and airplane mode. Wi-Fi's name needs
+     * the location permission, so it isn't shown.
+     */
+    private fun network(c: Context): org.json.JSONObject {
+        val o = org.json.JSONObject()
+        val airplane = try {
+            android.provider.Settings.Global.getInt(c.contentResolver, android.provider.Settings.Global.AIRPLANE_MODE_ON, 0) != 0
+        } catch (e: Exception) { false }
+        o.put("airplane", airplane)
+        val cm = c.getSystemService(android.net.ConnectivityManager::class.java)
+        val caps = try { cm?.getNetworkCapabilities(cm.activeNetwork) } catch (e: Exception) { null }
+        if (caps == null) return o.put("type", "none").put("level", 0).put("internet", false)
+        fun has(t: Int) = caps.hasTransport(t)
+        val type = when {
+            has(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            has(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "mobile"
+            has(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+            has(android.net.NetworkCapabilities.TRANSPORT_USB) -> "ethernet"
+            has(android.net.NetworkCapabilities.TRANSPORT_BLUETOOTH) -> "bluetooth"
+            has(android.net.NetworkCapabilities.TRANSPORT_VPN) -> "vpn"
+            else -> "other"
+        }
+        var level = -1
+        if (type == "wifi" && android.os.Build.VERSION.SDK_INT >= 30) {
+            val rssi = caps.signalStrength
+            val wm = c.applicationContext.getSystemService(android.net.wifi.WifiManager::class.java)
+            if (rssi != android.net.NetworkCapabilities.SIGNAL_STRENGTH_UNSPECIFIED && wm != null)
+                level = wm.calculateSignalLevel(rssi) * 4 / wm.maxSignalLevel.coerceAtLeast(1)
+        }
+        if (type == "mobile" && android.os.Build.VERSION.SDK_INT >= 28) {
+            level = try { c.getSystemService(android.telephony.TelephonyManager::class.java)?.signalStrength?.level ?: -1 } catch (e: Exception) { -1 }
+        }
+        o.put("type", type)
+        o.put("level", level.coerceIn(-1, 4))
+        o.put("internet", caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED))
+        o.put("vpn", has(android.net.NetworkCapabilities.TRANSPORT_VPN))
+        o.put("metered", !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
+        o.put("downKbps", caps.linkDownstreamBandwidthKbps)
+        o.put("upKbps", caps.linkUpstreamBandwidthKbps)
+        return o
     }
 
     /** The desktop's processes' CPU use since last time, in percent of all cores. */
