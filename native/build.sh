@@ -103,6 +103,10 @@ echo "== glibc"
 echo "== musl"
 # musl for ddmask, for musl programs (musl/README.md); same cross compiler.
 "$HERE/musl/build.sh" "$OUT"
+echo "== flatpak"
+# The flatpak command, from Debian's arm64 packages on DeskDroid's glibc, and
+# ddflatpak, which runs Flathub apps without bubblewrap (flatpak/README.md).
+"$HERE/flatpak/build.sh" "$OUT"
 
 install -m 755 "$WORK/ddtool/ddtool" "$OUT/libddtool.so"
 install -m 755 "$WORK/proot/proot" "$OUT/libproot.so"

@@ -362,10 +362,14 @@ static void build_env(char *const envp[], char **nenvp, struct plan *pl, int wit
  * count(argv) + EXTRA_ARGS) and nenvp (room for count(envp) + WORLDS + 3). Returns 0,
  * or -1 with errno set when it can't be started.
  */
+static int is_own_exe(const char *path);
+
 static int plan_exec(const char *path, char *const argv[], char *const envp[],
                      const char **npath, char **nargv, char **nenvp, struct plan *pl) {
     int argc = count(argv);
-    const char *cur = path;
+    /* A program started through a loader that execs /proc/self/exe (Chromium
+     * starting its helpers) means itself, not the loader. */
+    const char *cur = is_own_exe(path) ? exe_path : path;
     /* The argument vector so far; scripts prepend their interpreter. */
     int off = EXTRA_ARGS;   /* nargv[off..] holds the current argv */
     for (int i = 0; i < argc; i++) nargv[off + i] = argv[i];

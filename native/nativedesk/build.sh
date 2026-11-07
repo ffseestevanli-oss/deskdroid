@@ -91,7 +91,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Etherium (Firefox, native/firefox, published by firefox.yml) is in the
     # store too, run through ddmask like GIMP.
     [ -n "${DESKDROID_FIREFOX:-}" ] && [ -e "$DESKDROID_FIREFOX" ] && store_programs+=(firefox)
-    for app in dolphin kioworker konsole ksmserver-logout-greeter kwrite systemsettings kcolorschemeeditor; do
+    for app in dolphin kioworker konsole ksmserver-logout-greeter kwrite systemsettings kcolorschemeeditor plasma-discover; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
       bundled+=("$OUT/libdd_$app.so"); apps+=("$app")
@@ -437,7 +437,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       [ -d "$WORK/gtkshare" ] && (cd "$WORK/gtkshare" && zip -qr -X "$OUT/libkwin_data.so" share)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
-        $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/knotifications6 share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
+        $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/knotifications6 share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor share/libdiscover $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
         -x $(for a in "${store_apps[@]}" "${store_programs[@]}"; do echo "share/applications/*$a*"; done))
     fi
     echo "   data: $(du -h "$OUT/libkwin_data.so" | cut -f1)"

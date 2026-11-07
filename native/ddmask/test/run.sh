@@ -59,6 +59,9 @@ expect "a cleaned environment keeps ddmask" "$out" "argv0=child exe=$P comm=prob
 out="$(run /bin/sh -c "exec probe spawnp probe")"
 expect "posix_spawnp" "$out" "argv0=probe exe=$P comm=probe cmd0=[^ ]*ld-linux[^ ]* arg=spawned"
 
+out="$(run /bin/sh -c "exec probe execv /proc/self/exe")"
+expect "a loaded program execs itself (/proc/self/exe), as Chromium does" "$out" "argv0=/proc/self/exe exe=$P comm=probe $LOADER"
+
 out="$(run /bin/sh -c "exec script a b")"
 expect "#! script whose interpreter is masked too" "$out" "argv0=$P exe=$P .*arg=from-script arg=$T/app/bin/script arg=a arg=b"
 
