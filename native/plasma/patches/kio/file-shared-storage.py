@@ -119,3 +119,52 @@ t = t.replace(old, """            const bool isWritable = ((permissions != -1) &
                 || (m_dest.isLocalFile() && m_dest.toLocalFile().startsWith(QLatin1String("/storage/emulated/"))); // DeskDroid
 """)
 open(src, "w").write(t)
+
+# Third part: the listed folder's own entry. Android's shared storage doesn't
+# return "." when a folder is read, so the worker never listed the folder
+# itself. KIO makes up a default one only when the folder has something in
+# it; for an empty folder (one just made, like "folder 2") Dolphin had no
+# entry for the folder it shows, took it as read-only, and refused to paste
+# or drop there until a new file in it made the folder non-empty. List the
+# folder's own entry, from a real stat, whenever "." didn't come up.
+src = sys.argv[1] + "/src/kioworkers/file/file_unix.cpp"
+t = open(src).read()
+old = """    QT_DIRENT *ep;
+    while ((ep = QT_READDIR(dp)) != nullptr) {
+        entry.clear();
+
+        const QString filename = QFile::decodeName(ep->d_name);
+"""
+assert t.count(old) == 1, "listDir loop"
+t = t.replace(old, """    QT_DIRENT *ep;
+    bool deskdroidSawDot = false;
+    while ((ep = QT_READDIR(dp)) != nullptr) {
+        entry.clear();
+
+        const QString filename = QFile::decodeName(ep->d_name);
+        if (filename == QLatin1String(".")) {
+            deskdroidSawDot = true;
+        }
+""")
+old = """    closedir(dp);
+
+    return WorkerResult::pass();
+}
+"""
+# The first closedir+pass after listDir's loop.
+i = t.index("WorkerResult FileProtocol::listDir(")
+j = t.index(old, i)
+t = t[:j] + """    closedir(dp);
+
+    // DeskDroid: see native/plasma/patches/kio/file-shared-storage.py.
+    if (!deskdroidSawDot) {
+        entry.clear();
+        if (createUDSEntry(QStringLiteral("."), _path, entry, details | KIO::StatBasic | KIO::StatUser | KIO::StatTime, path)) {
+            listEntry(entry);
+        }
+    }
+
+    return WorkerResult::pass();
+}
+""" + t[j + len(old):]
+open(src, "w").write(t)
