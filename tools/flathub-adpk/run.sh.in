@@ -1,0 +1,120 @@
+#!/system/bin/sh
+# DeskDroid: starts @FPID@ (Flathub's ARM64 build, packaged by
+# tools/flathub-adpk/flathub-adpk.py) the way `flatpak run` would, without
+# the flatpak command: native/flatpak/flatpak.sh's run(), with the app, its
+# runtime (@RUNTIME@) and Mesa in store packages instead of Flatpak's folders.
+#
+#   @SID@ [--dd-command=<program in /app/bin>] [args]
+#
+# Tests on a desktop machine set DESKDROID_FILES, DESKDROID_LIBS and
+# DESKDROID_GLIBC_RUN as for flatpak.sh.
+SID=@SID@ FPID=@FPID@ CMD=@CMD@ RTPKG=@RTPKG@ MESAPKG=runtime-mesa-25.08
+TRIPLE=aarch64-linux-gnu
+P="${DDAPP_PROGRAM:-$(cd "$(dirname "$0")" && pwd)}"
+F="${DESKDROID_FILES:-${P%/store/apps/*}}"
+S="$F/store/apps"
+LOG="$S/$SID/run.log"
+exec 2>"$LOG"
+
+die() {
+  echo "$SID: $*" >&2
+  # Something to see on the desktop too, where there's no terminal.
+  [ -n "$WAYLAND_DISPLAY" ] && command -v notify-send >/dev/null 2>&1 && notify-send "$SID" "$*"
+  exit 1
+}
+
+# The APK's library folder: where the app's command links (Store.linkCommand),
+# else the folder of ddmask in LD_PRELOAD.
+L="${DESKDROID_LIBS:-}"
+if [ -z "$L" ]; then
+  l="$(readlink -f "$F/kwin/bin/$SID" 2>/dev/null)"
+  L="${l%/*}"
+fi
+if [ ! -e "$L/libdd_ld-glibc.so" ]; then
+  for p in $(echo "${LD_PRELOAD:-}" | tr ':' ' '); do
+    case "$p" in */libddmask.so) L="${p%/*}" ;; esac
+  done
+fi
+[ -e "$L/libdd_ld-glibc.so" ] || die "this DeskDroid build has no glibc loader (libdd_ld-glibc.so)"
+[ -e "$F/glibc/lib/libc.so.6" ] || die "glibc isn't unpacked yet (start the desktop once)"
+
+# The runtime and Mesa are packages of their own.
+for need in "$RTPKG" "$MESAPKG"; do
+  [ -e "$S/$need/app.txt" ] || die "needs $need.adpk installed first (Software, Install from a file)"
+done
+
+# Links, script execute bits and empty folders, once per package (ddapp.c).
+setup() {
+  [ -e "$1/.ddsetup-done" ] && return 0
+  echo "$SID: setting up ${1%/program}" >&2
+  DDAPP_SETUP="$1/layout.txt" DDAPP_ROOT="$1" /system/bin/linker64 "$P/bin/ddapp" ||
+    die "couldn't lay out ${1%/program}"
+  : > "$1/.ddsetup-done"
+}
+[ -n "${DDAPP_SETUP_CMD:-}" ] && setup() {
+  [ -e "$1/.ddsetup-done" ] && return 0
+  DDAPP_SETUP="$1/layout.txt" DDAPP_ROOT="$1" $DDAPP_SETUP_CMD || die "couldn't lay out $1"
+  : > "$1/.ddsetup-done"
+}
+setup "$P"
+setup "$S/$RTPKG/program"
+setup "$S/$MESAPKG/program"
+
+cmd="$CMD"
+case "$1" in --dd-command=*) cmd="${1#--dd-command=}"; shift ;; esac
+
+APP="$P/files"
+RT="$S/$RTPKG/program/files"
+GL="$S/$MESAPKG/program/gl"
+CX="$S/$MESAPKG/program/codecs-extra"
+meta="$P/metadata"
+
+G="${DESKDROID_GLIBC_RUN:-}"
+# Started without ddmask (not from the desktop), run glibc's loader ourselves.
+if [ -z "$G" ]; then
+  case ":${LD_PRELOAD:-}:" in
+    *libddmask.so*) ;;
+    *) G="$L/libdd_ld-glibc.so" ;;
+  esac
+fi
+
+mkdir -p "$F/flatpak-tmp"
+export DDMASK_GLIBC_LD_PRELOAD="$L/libddflatpak.so:$L/libddmask_glibc.so"
+export DDFLATPAK_TMP="$F/flatpak-tmp" TMPDIR="$F/flatpak-tmp"
+export DDFLATPAK_APP="$APP" DDFLATPAK_RUNTIME="$RT"
+export DDFLATPAK_MOUNTS="/usr/lib/$TRIPLE/GL/default=$GL;/usr/lib/$TRIPLE/GL=$GL;/usr/lib/$TRIPLE/codecs-extra=$CX;/dev/shm=$F/flatpak-tmp"
+# Folders the app's and runtime's programs name in their RUNPATH (/app/lib/<x>,
+# /usr/lib/<x>): glibc's loader opens those itself, unmapped.
+rpaths=""
+for f in "$P/libdirs.txt" "$S/$RTPKG/program/libdirs.txt"; do
+  [ -f "$f" ] || continue
+  while IFS= read -r d; do
+    case "$d" in APP:*) rpaths="$rpaths:$APP/${d#APP:}" ;; RT:*) rpaths="$rpaths:$RT/${d#RT:}" ;; esac
+  done < "$f"
+done
+export DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$APP/lib$rpaths:$RT/lib/$TRIPLE:$RT/lib:$GL/lib:$CX/lib"
+export DDFLATPAK_LIBPATH="$DDMASK_GLIBC_LD_LIBRARY_PATH"
+# The desktop's own (bionic) Qt and KDE settings would point the app's Qt at
+# the wrong plugins.
+unset QT_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH QT_QPA_PLATFORMTHEME QT_STYLE_OVERRIDE \
+  QT_QUICK_CONTROLS_STYLE KDEDIRS QTWEBENGINEPROCESS_PATH LD_LIBRARY_PATH
+# What flatpak run sets inside the sandbox; ddflatpak makes these paths real.
+export PATH=/app/bin:/usr/bin
+export XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share
+export XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg
+h="${HOME:-$F}/.var/app/$FPID"
+export XDG_DATA_HOME="$h/data" XDG_CONFIG_HOME="$h/config" XDG_CACHE_HOME="$h/cache" XDG_STATE_HOME="$h/.local/state"
+mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
+export FLATPAK_ID="$FPID" LOCPATH="$RT/lib/locale" LANG="${LANG:-C.UTF-8}"
+export GST_PLUGIN_SYSTEM_PATH=/app/lib/gstreamer-1.0:/usr/lib/extensions/gstreamer-1.0:/usr/lib/$TRIPLE/gstreamer-1.0
+# [Environment] from the app's metadata.
+envs="$(sed -n '/^\[Environment\]/,/^\[/{/^[A-Za-z_][A-Za-z0-9_]*=/p}' "$meta")"
+[ -n "$envs" ] && while IFS= read -r kv; do
+  case "${kv%%=*}" in LD_LIBRARY_PATH|LD_PRELOAD|PATH) ;; *) export "$kv" ;; esac
+done <<ENVS
+$envs
+ENVS
+echo "$SID: starting /app/bin/$cmd $*" >&2
+# The runtime's sh starts the command, so ddflatpak handles it like any
+# program the app starts (a script, zypak, an ELF program).
+exec $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"

@@ -1,0 +1,16 @@
+# Flathub id                          store id      runtime package
+io.github.aandrew_me.ytdn             ytdownloader  runtime-freedesktop-25.08  ff9d55e985852cc64ec910d182ea9c05d56d76fe1886a547716c3c643605b90c
+org.kde.kdenlive                      kdenlive      runtime-kde-6.11
+org.kde.kid3                          kid3          runtime-kde-6.11
+org.libreoffice.LibreOffice           libreoffice   runtime-freedesktop-25.08
+org.kde.krita                         krita         runtime-freedesktop-25.08
+org.kde.okular                        okular        runtime-kde-6.11
+org.kde.haruna                        haruna        runtime-kde-6.11
+org.audacityteam.Audacity             audacity      runtime-gnome-50
+org.inkscape.Inkscape                 inkscape      runtime-gnome-50
+org.qbittorrent.qBittorrent           qbittorrent   runtime-kde-6.11
+org.keepassxc.KeePassXC               keepassxc     runtime-kde-6.11
+org.kde.ark                           ark           runtime-kde-6.11
+org.kde.kolourpaint                   kolourpaint   runtime-kde-6.11
+org.strawberrymusicplayer.strawberry  strawberry    runtime-kde-6.11
+org.kde.filelight                     filelight     runtime-kde-6.11
