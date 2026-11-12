@@ -41,8 +41,9 @@ steam_ready() { [ -f "$STEAMDIR/steam.sh" ]; }
 x86() { fex_up && "$FEX" /bin/bash "$X86/bin/steam-x86.sh" "$@"; }
 
 # Starts FEXServer here, before FEX runs anything. Left to FEX, the first x86
-# program starts it and waits for it with no time limit, which is where the
-# assistant stalled at 82% ("FEX-Emu is ready") when the server didn't come up.
+# program starts it and waits for it with no time limit. It runs in the
+# foreground (-f) in a session of its own, so its messages reach fexserver.log
+# (in the background it logs nothing).
 fex_up() {
   mkdir -p "$RUN" "$TMPDIR"
   if pgrep -f "$X86/fex/bin/FEXServer" >/dev/null 2>&1 && [ -S "$FEX_SERVERSOCKETPATH" ]; then
@@ -50,9 +51,9 @@ fex_up() {
   fi
   pkill -f "$X86/fex/bin/FEXServer" 2>/dev/null
   rm -f "$FEX_SERVERSOCKETPATH"
+  echo "=== $(date) FEXServer" >>"$RUN/fexserver.log"
   # -p: stays 10 minutes after the last x86 program, so Steam's restarts reuse it.
-  # It goes to the background itself; its messages go to the setup log.
-  "$X86/fex/bin/FEXServer" -p 600 </dev/null >>"$RUN/fexserver.log" 2>&1
+  FEX_SILENTLOG=0 setsid "$X86/fex/bin/FEXServer" -f -p 600 </dev/null >>"$RUN/fexserver.log" 2>&1 &
   i=0
   while [ $i -lt 30 ]; do
     [ -S "$FEX_SERVERSOCKETPATH" ] && return 0
@@ -64,21 +65,73 @@ fex_up() {
   return 1
 }
 
-# Runs one x86 program before anything bigger, with a time limit, so a FEX
-# that can't start says so instead of waiting forever.
+# What each thread of a stuck process waits on (state and kernel wait
+# channel), and its children: where FEX hangs, from /proc.
+proc_dump() {
+  for t in /proc/"$1"/task/*; do
+    [ -r "$t/stat" ] || continue
+    st=$(sed 's/.*) //' "$t/stat" | cut -d' ' -f1)
+    echo "  pid $1 thread ${t##*/} $(cat "$t/comm" 2>/dev/null): state $st, waiting in $(cat "$t/wchan" 2>/dev/null || echo ?)"
+  done
+  for c in $(cat /proc/"$1"/task/*/children 2>/dev/null); do
+    echo "  child $c: $(tr '\0' ' ' </proc/"$c"/cmdline 2>/dev/null)"
+    proc_dump "$c"
+  done
+}
+
+# Runs one x86 program before anything bigger, in steps with time limits, so
+# a FEX that can't start says where it stopped instead of waiting forever.
+# Everything goes to files/x86/run/fex-check.log too.
 fex_check() {
   say "checking FEX-Emu (an x86 program, at most 2 minutes)"
-  fex_up || return 1
-  out=$(timeout 120 "$FEX" /bin/uname -m 2>&1)
+  CL=$RUN/fex-check.log
+  mkdir -p "$RUN"
+  # The page size and where the stack sits (how many address bits the kernel
+  # gives programs) matter to FEX.
+  { echo "=== $(date) $(uname -srm), FEX $(cat "$X86/fex/share/deskdroid-fex/version" 2>/dev/null)"
+    echo "page size $(getconf PAGESIZE 2>/dev/null), stack $(grep '\[stack\]' /proc/self/maps 2>/dev/null | cut -d' ' -f1)"
+  } >"$CL"
+  fex_up || { tail -n 20 "$RUN/fexserver.log" >>"$CL" 2>/dev/null; return 1; }
+  # 1. FEX itself (ARM64, DeskDroid's glibc) and its server connection.
+  out=$(timeout 30 "$FEX" --version 2>&1)
   status=$?
+  echo "FEX --version: exit $status: $out" >>"$CL"
+  if [ $status -ne 0 ]; then
+    [ $status -eq 124 ] && say "FEX-Emu itself didn't start in 30 seconds (before any x86 program)." \
+      || say "FEX-Emu itself couldn't start (exit $status)."
+    echo "$out" | tail -n 20 | sed 's/^/  FEX: /'
+    tail -n 10 "$RUN/fexserver.log" 2>/dev/null | sed 's/^/  FEXServer: /'
+    return 1
+  fi
+  # 2. An x86 program, with FEX's own messages on.
+  FEX_SILENTLOG=0 FEX_OUTPUTLOG=stderr "$FEX" /bin/uname -m >"$RUN/fex-uname.out" 2>&1 </dev/null &
+  pid=$!
+  i=0
+  while [ $i -lt 120 ] && kill -0 $pid 2>/dev/null; do
+    sleep 1
+    i=$((i + 1))
+  done
+  out=$(cat "$RUN/fex-uname.out" 2>/dev/null)
+  if kill -0 $pid 2>/dev/null; then
+    { echo "uname -m: still running after 120 s"; proc_dump $pid; } >>"$CL"
+    say "FEX-Emu didn't finish its first x86 program in 2 minutes. Where it stopped:"
+    proc_dump $pid | head -n 30
+    pkill -P $pid 2>/dev/null
+    kill -9 $pid 2>/dev/null
+    status=124
+  else
+    wait $pid
+    status=$?
+  fi
+  echo "uname -m: exit $status: $out" >>"$CL"
   if [ $status -eq 0 ] && [ "$(echo "$out" | tail -n 1)" = x86_64 ]; then
-    say "FEX-Emu runs x86 programs ($out)"
+    say "FEX-Emu runs x86 programs (x86_64)"
     return 0
   fi
-  [ $status -eq 124 ] && say "FEX-Emu didn't finish its first x86 program in 2 minutes." \
-    || say "FEX-Emu couldn't run its first x86 program (exit $status)."
+  [ $status -ne 124 ] && say "FEX-Emu couldn't run its first x86 program (exit $status)."
   [ -n "$out" ] && echo "$out" | tail -n 20 | sed 's/^/  FEX: /'
-  [ -s "$RUN/fexserver.log" ] && tail -n 10 "$RUN/fexserver.log" | sed 's/^/  FEXServer: /'
+  tail -n 10 "$RUN/fexserver.log" 2>/dev/null | sed 's/^/  FEXServer: /'
+  say "details: $CL"
   return 1
 }
 
