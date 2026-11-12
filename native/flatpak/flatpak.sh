@@ -95,6 +95,9 @@ cli() {
   return $rc
 }
 
+# Whether folder $1 (ending in /) holds shared libraries.
+has_libs() { for f in "$1"*.so*; do [ -e "$f" ] && return 0; done; return 1; }
+
 # flatpak run [--branch=B] [--arch=A] [--command=C] [other options] <app> [args]
 run() {
   branch="" cmd=""
@@ -132,8 +135,19 @@ run() {
     mounts="/usr/lib/$TRIPLE/GL/default=$GL;/usr/lib/$TRIPLE/GL=$GL;$mounts"
     libpath="$libpath:$GL/lib"
   fi
+  # Folders the app's and runtime's libraries name in their RUNPATH
+  # (/app/lib/kid3, /usr/lib/<triple>/pulseaudio): glibc's loader opens those
+  # itself, unmapped, so their real folders go on the path, last. Folders
+  # under lib/ that hold libraries stand in for them.
+  for d in "$APP"/lib/*/ "$RT"/lib/"$TRIPLE"/*/; do
+    has_libs "$d" && libpath="$libpath:${d%/}"
+  done
+  # LD_LIBRARY_PATH from the app's [Environment] (Audacity's /app/lib/audacity).
+  for d in $(sed -n '/^\[Environment\]/,/^\[/{s/^LD_LIBRARY_PATH *= *//p}' "$meta" | tr ':' ' '); do
+    case "$d" in /app/*) libpath="$APP/${d#/app/}:$libpath" ;; /usr/*) libpath="$RT/${d#/usr/}:$libpath" ;; esac
+  done
   export DDFLATPAK_APP="$APP" DDFLATPAK_RUNTIME="$RT" DDFLATPAK_MOUNTS="$mounts"
-  export DDMASK_GLIBC_LD_LIBRARY_PATH="$libpath"
+  export DDMASK_GLIBC_LD_LIBRARY_PATH="$libpath" DDFLATPAK_LIBPATH="$libpath"
   # The desktop's own (bionic) Qt and KDE settings would point the app's Qt at
   # the wrong plugins.
   unset QT_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH QT_QPA_PLATFORMTHEME QT_STYLE_OVERRIDE \
@@ -146,13 +160,19 @@ run() {
   export XDG_DATA_HOME="$h/data" XDG_CONFIG_HOME="$h/config" XDG_CACHE_HOME="$h/cache" XDG_STATE_HOME="$h/.local/state"
   mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
   export FLATPAK_ID="$id" LOCPATH="$RT/lib/locale"
-  # [Environment] from the app's metadata.
-  envs="$(sed -n '/^\[Environment\]/,/^\[/{/^[A-Za-z_][A-Za-z0-9_]*=/p}' "$meta")"
-  [ -n "$envs" ] && while IFS= read -r kv; do
-    case "${kv%%=*}" in LD_LIBRARY_PATH|LD_PRELOAD|PATH) ;; *) export "$kv" ;; esac
-  done <<ENVS
+  # [Environment] from the runtime's metadata (the KDE runtime's
+  # QT_PLUGIN_PATH=/app/lib/plugins:..., which Ark needs for its KPart), then
+  # the app's; "KEY = value" or "KEY=value".
+  for m in "$FLATPAK_USER_DIR/runtime/$rtref/active/metadata" "$meta"; do
+    [ -f "$m" ] || continue
+    envs="$(sed -n '/^\[Environment\]/,/^\[/{s/^\([A-Za-z_][A-Za-z0-9_]*\) *= */\1=/p}' "$m")"
+    [ -n "$envs" ] || continue
+    while IFS= read -r kv; do
+      case "${kv%%=*}" in LD_LIBRARY_PATH|LD_PRELOAD|PATH) ;; *) export "$kv" ;; esac
+    done <<ENVS
 $envs
 ENVS
+  done
   # The runtime's sh starts the command, so ddflatpak handles it like any
   # program the app starts (a script, zypak, an ELF program).
   exec $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
