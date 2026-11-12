@@ -594,6 +594,9 @@ build_aurorae() {
   grep -q "^# add_subdirectory(config)" "$s/src/CMakeLists.txt"
   sed -i 's/^add_subdirectory(themes)/# add_subdirectory(themes)/' "$s/CMakeLists.txt"
   grep -q "^# add_subdirectory(themes)" "$s/CMakeLists.txt"
+  # GLES 2's headers have no GL_RGBA8 (its value is GLES 3's and desktop GL's).
+  sed -i 's/setInternalTextureFormat(GL_RGBA8)/setInternalTextureFormat(0x8058 \/* GL_RGBA8 *\/)/' "$s/src/renderer.cpp"
+  grep -q "0x8058" "$s/src/renderer.cpp"
   unandroid "$s"
   kde_cmake "$s"
   test -e "$PREFIX/plugins/org.kde.kdecoration3/org.kde.kwin.aurorae.so"
