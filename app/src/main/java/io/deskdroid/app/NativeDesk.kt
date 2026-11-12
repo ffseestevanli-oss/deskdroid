@@ -1569,7 +1569,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             File(data, "share/aurorae/themes/$PARTY_DECO/metadata.desktop").exists()
         if (aurorae && currentScheme == "DDParty")
             Tuning.writeIfChanged(kwinrc, "[org.kde.kdecoration2]\nlibrary=org.kde.kwin.aurorae\ntheme=__aurorae__svg__$PARTY_DECO\n" +
-                "\n[Plugins]\nblurEnabled=true\ncontrastEnabled=true\n")
+                "\n[Plugins]\nblurEnabled=true\ncontrastEnabled=true\n\n[Effect-blur]\nBlurStrength=12\n")
         else kwinrc.delete()
         // GTK programs (Floorp): Breeze for GTK (breeze-gtk), light or dark as
         // Plasma's colour scheme is, at every start. A settings.ini without

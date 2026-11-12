@@ -12,15 +12,23 @@ TITLE = 40                   # TitleEdgeTop + TitleHeight + TitleEdgeBottom
 def deco_frame(active):
     f = Frame((P + CUT, PT + 16, P + CUT, PB + 12), cuts=(CUT, 0, 0, 0), inset=(P, PT, P, PB))
     # shadow: stacked, slightly lowered outlines
+    # Glass: the shadow, glow and border are drawn around the window only, as
+    # rings, so nothing but the tint covers what shows through the title bar.
+    def under(poly, paint, op):
+        f.add(("ring", poly, f.outline()) if GLASS else poly, paint, op)
     steps = 12
     for i in range(steps):
         g = -(i + 1) * (P / steps)
-        poly = [(x, y + 5) for x, y in f.outline(g)]
-        f.add(poly, "#000000", 0.035 if active else 0.025)
+        under([(x, y + 5) for x, y in f.outline(g)], "#000000", 0.035 if active else 0.025)
     if active:
-        f.add([(x, y) for x, y in f.outline(-6)], MAGENTA, 0.10)  # faint magenta glow
-    f.add(f.outline(), "#5A1A48" if active else BORDER, glass(1.0, 0.85))
-    f.add(f.outline(1), HEADER, glass(1.0, 0.22 if active else 0.16))
+        under(f.outline(-6), MAGENTA, 0.10)  # faint magenta glow
+    if GLASS:
+        # A thin, saturated tint (magenta on the focused window) over the blur.
+        f.ring("#B8105A" if active else BORDER, 1, 0.9)
+        f.add(f.outline(1), MAGENTA if active else "#2A1030", 0.30 if active else 0.24)
+    else:
+        f.add(f.outline(), "#5A1A48" if active else BORDER)
+        f.add(f.outline(1), HEADER)
     if active:
         f.band("top", 3, "rainbow-h")
     else:
@@ -33,7 +41,7 @@ def maximized(active, y):
     band = (f'<rect x="0" y="{y}" width="40" height="3" fill="url(#rbh)"/>' if active
             else f'<rect x="0" y="{y}" width="40" height="2" fill="#3A1D40"/>')
     pid = "decoration-maximized" + ("" if active else "-inactive")
-    return (f'<g id="{pid}-center"><rect x="0" y="{y}" width="40" height="{h}" fill="{HEADER}" fill-opacity="{glass(1.0, 0.22)}"/>{band}</g>', h)
+    return (f'<g id="{pid}-center"><rect x="0" y="{y}" width="40" height="{h}" fill="{glass(HEADER, MAGENTA if active else "#2A1030")}" fill-opacity="{glass(1.0, 0.30 if active else 0.24)}"/>{band}</g>', h)
 
 
 def decoration_svg():
