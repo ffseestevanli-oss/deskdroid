@@ -69,7 +69,7 @@ out="$(run /bin/sh -c "exec shscript x")"
 expect "#! script for /bin/sh" "$out" "sh-script $T/app/bin/shscript x"
 
 out="$(run "$P" execv "$T/app/bin/noexec" || true)"
-expect "a file without x stays refused" "$out" "execv: Permission denied"
+expect "a program without x runs anyway (more in compat.sh)" "$out" "argv0=$T/app/bin/noexec exe=$T/app/bin/noexec"
 
 out="$(env LD_PRELOAD="$T/lib/libddmask.so" DDMASK_ALLOW="$ALLOW" /bin/sh -c "exec /bin/true && echo unreached; echo" ; echo "status=$?")"
 expect "allowed programs run as before" "$out" "status=0"

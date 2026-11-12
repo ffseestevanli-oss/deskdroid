@@ -682,11 +682,29 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.text("DeskDroid ${BuildConfig.VERSION_NAME} · GPL-3.0", 12f, Party.DIM))
     }
 
-    /** The desktop's helpers' own logs (Set as Desktop Wallpaper...), at the end of the saved log. */
-    private fun helperLogs(): String = listOf("set-wallpaper.log").joinToString("") { name ->
-        val f = java.io.File(c.filesDir, name)
-        if (!f.exists()) "\n== $name: none\n"
-        else "\n== $name\n" + try { f.readText().takeLast(10_000) } catch (e: Exception) { "($e)" } + "\n"
+    /**
+     * The desktop's helpers' own logs, at the end of the saved log: Set as Desktop
+     * Wallpaper's; ddmask's journal (how Linux programs started, which couldn't
+     * and why, the system calls Android blocked); the programs Flatpak couldn't
+     * start; and each store app's launcher log (store/apps/<app>/run.log), so an
+     * app that doesn't open says why.
+     */
+    private fun helperLogs(): String {
+        val files = c.filesDir
+        val logs = listOf("set-wallpaper.log", "ddmask.log", "glibc/exec.log").map { java.io.File(files, it) } +
+            (java.io.File(files, "store/apps").listFiles()?.sortedBy { it.name }?.map { java.io.File(it, "run.log") }
+                ?.filter { it.exists() } ?: emptyList())
+        val blocked = java.io.File(files, "glibc/sigsys.log").takeIf { it.exists() }?.let { f ->
+            try {
+                "\n== system calls Android blocked (number: times)\n" + f.readLines().filter { it.isNotBlank() }
+                    .groupingBy { it.trim() }.eachCount().entries.joinToString(", ") { "${it.key}: ${it.value}" } + "\n"
+            } catch (e: Exception) { "\n== glibc/sigsys.log: ($e)\n" }
+        } ?: ""
+        return logs.joinToString("") { f ->
+            val name = f.relativeTo(files).path
+            if (!f.exists()) "\n== $name: none\n"
+            else "\n== $name\n" + try { f.readText().takeLast(if (name == "ddmask.log") 30_000 else 10_000) } catch (e: Exception) { "($e)" } + "\n"
+        } + blocked
     }
 
     /** Saves the log as a .txt in Downloads, like a browser download, so it can be attached anywhere. */

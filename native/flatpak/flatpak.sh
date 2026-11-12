@@ -147,6 +147,9 @@ run() {
     case "$d" in /app/*) libpath="$APP/${d#/app/}:$libpath" ;; /usr/*) libpath="$RT/${d#/usr/}:$libpath" ;; esac
   done
   export DDFLATPAK_APP="$APP" DDFLATPAK_RUNTIME="$RT" DDFLATPAK_MOUNTS="$mounts"
+  # The same paths for glibc's loader, which opens the folders programs name
+  # for their libraries (RUNPATH /app/lib/<x>) itself (ddmask/ddflatpak-audit.c).
+  [ -e "$L/libddflatpak_audit.so" ] && export DDMASK_GLIBC_LD_AUDIT="$L/libddflatpak_audit.so"
   export DDMASK_GLIBC_LD_LIBRARY_PATH="$libpath" DDFLATPAK_LIBPATH="$libpath"
   # The desktop's own (bionic) Qt and KDE settings would point the app's Qt at
   # the wrong plugins.

@@ -66,5 +66,24 @@ out="$(run "$APP/bin/probe" "exec:/app/bin/zypak-wrapper.sh" /app/bin/probe /app
 expect "zypak-wrapper starts the program itself with --no-sandbox" "$out" \
   "argv0=/app/bin/probe exe=$APP/bin/probe" "--no-sandbox fopen=no" "/app/share/probe/data fopen=app-data"
 
+# Library folders named by absolute path (RUNPATH), which glibc's loader opens
+# itself: ddflatpak-audit maps them.
+mkdir -p "$APP/lib/sub" "$RT/lib/plug"
+printf 'int sub_value(void) { return 42; }\n' > "$T/sub.c"
+printf 'int plug_value(void) { return 7; }\n' > "$T/plug.c"
+printf '#include <stdio.h>\nint sub_value(void); int plug_value(void);\nint main(void) { printf("libs=%%d,%%d\\n", sub_value(), plug_value()); return 0; }\n' > "$T/rp.c"
+"$CC" -shared -fPIC "$T/sub.c" -o "$APP/lib/sub/libsub.so"
+"$CC" -shared -fPIC "$T/plug.c" -o "$RT/lib/plug/libplug.so"
+"$CC" "$T/rp.c" -o "$APP/bin/rpprobe" -L"$APP/lib/sub" -L"$RT/lib/plug" -lsub -lplug \
+  -Wl,--enable-new-dtags -Wl,-rpath,/app/lib/sub:/usr/lib/plug
+"$CC" -O2 -Wall -shared -fPIC -nostdlib -fno-builtin -fno-stack-protector "$HERE/../ddflatpak-audit.c" \
+  -o "$T/libddflatpak_audit.so"
+out="$(run "$APP/bin/rpprobe" || true)"
+expect "without the audit library, absolute RUNPATHs point at nothing" "$out" "cannot open shared object"
+out="$(run env LD_AUDIT="$T/libddflatpak_audit.so" "$APP/bin/rpprobe")"
+expect "the audit library maps RUNPATH /app/lib/<x> and /usr/lib/<x>" "$out" "^libs=42,7$"
+out="$(run env LD_AUDIT="$T/libddflatpak_audit.so" "$APP/bin/probe" "exec:/app/bin/rpprobe")"
+expect "...in programs the app starts too" "$out" "^libs=42,7$"
+
 echo
 [ "$fails" = 0 ] && echo "all ddflatpak tests passed" || { echo "$fails failed"; exit 1; }

@@ -68,7 +68,7 @@ install -m 755 "$CACHE/lib/$ld" "$OUT/libdd_ld-glibc.so"
 "${CROSS}strip" --strip-unneeded "$OUT/libdd_ld-glibc.so"
 
 # ddmask for glibc programs (DDMASK_GLIBC: Android's folders, glibc's variables).
-"${CROSS}gcc" -O2 -Wall -Wextra -shared -fPIC -DDDMASK_GLIBC -ffile-prefix-map="$HERE/..=." \
+"${CROSS}gcc" -O2 -Wall -Wextra -shared -fPIC -DDDMASK_GLIBC -DDDMASK_GLIBC_PREFIX="\"$PREFIX\"" -ffile-prefix-map="$HERE/..=." \
   "$HERE/../ddmask/ddmask.c" -Wl,-soname,libddmask_glibc.so -Wl,--build-id=none -Wl,-z,noexecstack \
   -o "$OUT/libddmask_glibc.so"
 "${CROSS}strip" --strip-unneeded "$OUT/libddmask_glibc.so"

@@ -38,6 +38,23 @@
  * Every exec puts libddmask.so back into LD_PRELOAD, so a program that clears
  * its environment still starts its children through ddmask.
  *
+ * Beyond exec, it smooths over what keeps breaking Linux programs on Android
+ * (README.md, "Compatibility layer"):
+ *   - execute bits: zips and Android's storage drop file modes, so an ELF
+ *     program or #! script in the app's files runs without its execute bit,
+ *     and access(X_OK) says so (shells' PATH searches, [ -x ]);
+ *   - the desktop's environment: its Android-side Qt and KDE settings
+ *     (bionic plugin folders, styles only it has) are left out when a bionic
+ *     program starts a glibc or musl one, and given back when one of those
+ *     starts a bionic program again (DDMASK_HOST_<VAR>, below);
+ *   - blocked system calls (glibc and musl builds): a few that Android's
+ *     seccomp filter blocks are made with the allowed call that does the same
+ *     (accept, epoll_pwait2, faccessat2, fchmodat2, close_range); the rest
+ *     fail with ENOSYS;
+ *   - a journal ($DDMASK_JOURNAL): every program started another way, every one
+ *     that can't be started and why, and every blocked system call, so a
+ *     program that doesn't open leaves a trace.
+ *
  * Settings (environment):
  *   DDMASK_ALLOW     folders exec works in, ':'-separated. Default on Android:
  *                    /system /vendor /apex /product /odm /system_ext and
@@ -48,6 +65,15 @@
  *                    /bin/env map to /system/bin by default.
  *   DDMASK_X86_64, DDMASK_I386, DDMASK_FALLBACK   as above
  *   DDMASK_DEBUG=1   log each decision to stderr
+ *   DDMASK_JOURNAL   the journal file (kept under 256 KiB: the one before is
+ *                    <file>.old); none when unset. The desktop sets
+ *                    files/ddmask.log, which Settings' "Save log" includes
+ *   DDMASK_STRICT_EXEC=1   files without an execute bit are refused, as before
+ *   DDMASK_HOST_<VAR>      the desktop's own value of <VAR> (NativeDesk.kt sets
+ *                    them for its Qt and KDE settings): a glibc or musl program
+ *                    started from a bionic one doesn't get <VAR> while it still
+ *                    has that value, and a bionic program started from one of
+ *                    those gets it back
  *   DDMASK_LOG       a file: programs that couldn't be started are noted
  *                    there (with DDMASK_DEBUG, every decision too). For
  *                    children whose stderr goes nowhere (gpgme's).
@@ -66,9 +92,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <time.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 #define EXPORT __attribute__((visibility("default")))
@@ -140,51 +170,87 @@ static const char *env_get(char *const envp[], const char *name) {
     return NULL;
 }
 
-static void vlog_(char *const envp[], int failure, const char *fmt, va_list ap) {
+#define JOURNAL_MAX (256 * 1024)
+static char journal_path[PATH_MAX]; /* DDMASK_JOURNAL at start, for execs with a cleaned environment */
+
+static const char *journal_file(char *const envp[]) {
+    const char *j = env_get(envp, "DDMASK_JOURNAL");
+    if (j && *j) return j;
+    return journal_path[0] ? journal_path : NULL;
+}
+
+/* Appends a line to the journal; past JOURNAL_MAX the file moves to <file>.old
+ * first. Only calls that are safe in a vfork child and a signal handler. */
+static void journal_write(const char *file, const char *line, size_t n) {
+    int fd = (int)syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
+    if (fd < 0) return;
+    struct stat st;
+    if (fstat(fd, &st) == 0 && st.st_size > JOURNAL_MAX) {
+        char old[PATH_MAX + 8];
+        size_t fl = strlen(file);
+        if (fl + 5 < sizeof old) {
+            memcpy(old, file, fl);
+            memcpy(old + fl, ".old", 5);
+            close(fd);
+            rename(file, old);
+            fd = (int)syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
+            if (fd < 0) return;
+        }
+    }
+    ssize_t w = write(fd, line, n);
+    (void)w;
+    close(fd);
+}
+
+/* What to note, from least to most: */
+enum level { L_DEBUG, L_ROUTE, L_FAIL };
+
+/*
+ * One decision. With DDMASK_DEBUG, every one goes to stderr. Programs started
+ * another way (L_ROUTE) and ones that can't start (L_FAIL) go to the journal,
+ * $DDMASK_JOURNAL, with the time; failures also go to $DDMASK_LOG as before
+ * (a file flatpak.sh reads back for its own messages).
+ */
+static void vlog_(char *const envp[], enum level lv, const char *fmt, va_list ap) {
     const char *d = env_get(envp, "DDMASK_DEBUG");
-    const char *file = env_get(envp, "DDMASK_LOG");
+    const char *file = lv == L_FAIL ? env_get(envp, "DDMASK_LOG") : NULL;
+    const char *jf = lv >= L_ROUTE ? journal_file(envp) : NULL;
     int debug = d && *d && *d != '0';
-    if (!debug && !(failure && file && *file)) return;
-    char buf[PATH_MAX + 256];
-    int n = snprintf(buf, sizeof buf, "ddmask[%d]: ", (int)getpid());
+    if (file && !*file) file = NULL;
+    if (!debug && !file && !jf) return;
+    char buf[PATH_MAX + 320];
+    int t = 0;
+    if (jf) {
+        time_t now = time(NULL);
+        struct tm tm;
+        if (gmtime_r(&now, &tm)) t = (int)strftime(buf, 32, "%Y-%m-%d %H:%M:%S ", &tm);
+    }
+    int n = t + snprintf(buf + t, sizeof buf - t, "ddmask[%d]: ", (int)getpid());
     n += vsnprintf(buf + n, sizeof buf - n, fmt, ap);
     if (n > (int)sizeof buf - 2) n = sizeof buf - 2;
     buf[n++] = '\n';
-    int fd = 2, own = 0;
-    if (file && *file) {
-        fd = (int)syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
-        own = fd >= 0;
-        if (!own) fd = 2;
+    ssize_t w;
+    if (debug && !file) w = write(2, buf + t, n - t);
+    if (file) {
+        int fd = (int)syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
+        w = write(fd >= 0 ? fd : 2, buf + t, n - t);
+        if (fd >= 0) close(fd);
     }
-    ssize_t w = write(fd, buf, n);
     (void)w;
-    if (own) close(fd);
+    if (jf) journal_write(jf, buf, n);
 }
 
-/* A program that can't be started, with errno set: why. */
-static void fail_(char *const envp[], const char *fmt, ...) {
+static void note(char *const envp[], enum level lv, const char *fmt, ...) {
     int e = errno;
     va_list ap;
     va_start(ap, fmt);
-    vlog_(envp, 1, fmt, ap);
+    vlog_(envp, lv, fmt, ap);
     va_end(ap);
     errno = e;
 }
-
-static void logf_(char *const envp[], const char *fmt, ...) {
-    const char *d = env_get(envp, "DDMASK_DEBUG");
-    if (!d || !*d || *d == '0') return;
-    char buf[PATH_MAX + 256];
-    int n = snprintf(buf, sizeof buf, "ddmask[%d]: ", (int)getpid());
-    va_list ap;
-    va_start(ap, fmt);
-    n += vsnprintf(buf + n, sizeof buf - n, fmt, ap);
-    va_end(ap);
-    if (n > (int)sizeof buf - 2) n = sizeof buf - 2;
-    buf[n++] = '\n';
-    ssize_t w = write(2, buf, n);
-    (void)w;
-}
+#define logf_(envp, ...) note(envp, L_DEBUG, __VA_ARGS__)
+/* A program that can't be started, with errno set: why. */
+#define fail_(envp, ...) note(envp, L_FAIL, __VA_ARGS__)
 
 static int sys_execve(const char *path, char *const argv[], char *const envp[]) {
     if (real_execve) return real_execve(path, argv, envp);
@@ -220,14 +286,21 @@ static int exec_allowed(const char *real, char *const envp[]) {
 #endif
 }
 
-/* Whether `runner` is glibc's or musl's loader from the APK. */
-static int is_world_loader(const char *runner) {
+/* DDMASK_STRICT_EXEC=1: files without an execute bit stay refused. */
+static int strict_exec(char *const envp[]) {
+    const char *s = env_get(envp, "DDMASK_STRICT_EXEC");
+    return s && *s && *s != '0';
+}
+
+/* The world whose loader from the APK `runner` is (glibc's, musl's), or -1. */
+static int loader_world(const char *runner) {
     const char *base = strrchr(runner, '/');
     base = base ? base + 1 : runner;
     for (int w = 0; w < WORLDS; w++)
-        if (worlds[w].loader && strcmp(base, worlds[w].loader) == 0) return 1;
-    return 0;
+        if (worlds[w].loader && strcmp(base, worlds[w].loader) == 0) return w;
+    return -1;
 }
+#define is_world_loader(r) (loader_world(r) >= 0)
 
 /* Replaces `path` through DDMASK_MAP (and Android's defaults) into out; returns out or path. */
 static const char *map_path(const char *path, char *const envp[], char *out, size_t outsz) {
@@ -376,17 +449,47 @@ static int is_var(const char *entry, const char *var) {
     return strncmp(entry, var, n) == 0 && entry[n] == '=';
 }
 
-/* New environment: each of ddmask's builds that's there in its world's preload
+#define HOST_PREFIX "DDMASK_HOST_"
+#define HOST_PREFIX_LEN 12
+
+/* For "VAR=value": the desktop's own value of VAR (DDMASK_HOST_VAR), or NULL. */
+static const char *host_value(char *const envp[], const char *entry) {
+    const char *eq = strchr(entry, '=');
+    char name[HOST_PREFIX_LEN + 128];
+    size_t n = eq ? (size_t)(eq - entry) : 0;
+    if (!n || n >= sizeof name - HOST_PREFIX_LEN || strncmp(entry, HOST_PREFIX, HOST_PREFIX_LEN) == 0) return NULL;
+    memcpy(name, HOST_PREFIX, HOST_PREFIX_LEN);
+    memcpy(name + HOST_PREFIX_LEN, entry, n);
+    name[HOST_PREFIX_LEN + n] = 0;
+    return env_get(envp, name);
+}
+
+/*
+ * New environment: each of ddmask's builds that's there in its world's preload
  * variable (LD_PRELOAD, DDMASK_GLIBC_LD_PRELOAD, DDMASK_MUSL_LD_PRELOAD);
- * DDMASK_EXE/DDMASK_ARGV0 only when given. nenvp has room for count(envp) + WORLDS + 3. */
-static void build_env(char *const envp[], char **nenvp, struct plan *pl, int with_exe) {
+ * DDMASK_EXE/DDMASK_ARGV0 only when given. Going from a bionic program to a
+ * glibc or musl one (world > 0), the desktop's own settings stay behind; going
+ * back to a bionic one (world 0), they come back (DDMASK_HOST_<VAR>).
+ * nenvp has room for 2 * count(envp) + WORLDS + 3.
+ */
+static void build_env(char *const envp[], char **nenvp, struct plan *pl, int with_exe, int world) {
     int j = 0;
+    int leaving = SELF_WORLD == 0 && world > 0, returning = SELF_WORLD != 0 && world == 0;
     for (char *const *e = envp; e && *e; e++) {
         if (is_var(*e, "DDMASK_EXE") || is_var(*e, "DDMASK_ARGV0")) continue;
         int ours = 0;
         for (int w = 0; w < WORLDS; w++) if (shims[w][0] && is_var(*e, worlds[w].var)) ours = 1;
-        if (!ours) nenvp[j++] = *e;
+        if (ours) continue;
+        if (leaving || returning) {
+            const char *host = host_value(envp, *e);
+            if (host && (returning || strcmp(host, strchr(*e, '=') + 1) == 0)) continue;
+        }
+        nenvp[j++] = *e;
     }
+    if (returning)
+        for (char *const *e = envp; e && *e; e++)
+            if (strncmp(*e, HOST_PREFIX, HOST_PREFIX_LEN) == 0 && strchr(*e, '=') > *e + HOST_PREFIX_LEN)
+                nenvp[j++] = *e + HOST_PREFIX_LEN;
     for (int w = 0; w < WORLDS; w++)
         if (shims[w][0]) nenvp[j++] = with_preload(envp, worlds[w].var, shims[w], pl->preload[w], sizeof pl->preload[w]);
     if (with_exe) {
@@ -398,7 +501,7 @@ static void build_env(char *const envp[], char **nenvp, struct plan *pl, int wit
 
 /*
  * Works out how to start `path` with `argv`: fills *npath and nargv (room for
- * count(argv) + EXTRA_ARGS) and nenvp (room for count(envp) + WORLDS + 3). Returns 0,
+ * count(argv) + EXTRA_ARGS) and nenvp (room for 2 * count(envp) + WORLDS + 3). Returns 0,
  * or -1 with errno set when it can't be started.
  */
 static int is_own_exe(const char *path);
@@ -416,27 +519,50 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
     if (argc == 0) { nargv[off] = (char *)path; nargv[off + 1] = NULL; argc = 1; }
     pl->env_exe[0] = pl->env_argv0[0] = 0;
     int with_exe = 0;
+    int world = 0;     /* what the program that finally runs is: bionic, glibc, musl; -1 not known */
+    int opaque = 0;    /* started by ddload: nothing to say about its world */
+    char how[96];      /* the way it starts, for the journal */
+    size_t hl = 0;
+    how[0] = 0;
+#define HOW(s) do { int k_ = snprintf(how + hl, sizeof how - hl, "%s%s", hl ? ", " : "", s); \
+                    if (k_ > 0 && hl + k_ < sizeof how) hl += k_; } while (0)
 
     for (int depth = 0;; depth++) {
         char resolved[PATH_MAX];
         if (!realpath(cur, resolved) || exec_allowed(resolved, envp)) {
             /* Let the kernel do it (or report why it can't). */
             *npath = cur;
+            int lw = loader_world(cur);
+            world = opaque ? -1 : lw >= 0 ? lw : 0;
             break;
         }
         struct stat st;
         if (stat(resolved, &st) != 0) { fail_(envp, "%s: %s", resolved, strerror(errno)); return -1; }
-        if (!S_ISREG(st.st_mode) || !(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))) {
+        if (!S_ISREG(st.st_mode)) {
             errno = EACCES;
-            fail_(envp, "%s: not an executable file (mode %o)", resolved, (unsigned)st.st_mode);
+            fail_(envp, "%s: not a file (mode %o)", resolved, (unsigned)st.st_mode);
             return -1;
         }
+        /* Zips (the store's packages, Flatpak's files after the app unpacks
+         * them) and shared storage don't keep execute bits: a program or
+         * script runs without one, as it would have with it. */
+        int no_x = !(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH));
         if (depth >= MAX_DEPTH) { errno = ELOOP; fail_(envp, "%s: too many interpreters", cur); return -1; }
         /* A file opened by fd (fexecve, execveat) may close on exec: name it by its real path. */
         const char *prog = strncmp(cur, "/proc/self/fd/", 14) == 0 ? strcpy(pl->real, resolved) : cur;
         int machine, appimage = 0;
         char *interp = pl->interp[depth], *arg = pl->arg[depth];
         enum kind k = classify(resolved, interp, PATH_MAX, arg, LINE_MAX_SCRIPT, &machine, &appimage);
+        if (no_x && (k == RUN_NOEXEC || strict_exec(envp))) {
+            errno = EACCES;
+            fail_(envp, "%s: no execute bit, and not a program or script (mode %o)", resolved, (unsigned)st.st_mode);
+            return -1;
+        }
+        if (no_x) {
+            /* Give it its bits back where the folder keeps them, for programs that look at the mode. */
+            chmod(resolved, st.st_mode | ((st.st_mode & 0444) >> 2));
+            HOW("no execute bit");
+        }
         const char *runner = NULL;
         const char *argv0_opt = NULL; /* glibc's and musl's loaders take the program's argv[0] as --argv0 */
         int keep_argv0 = 0;           /* ddload and the AppImage runner take: <program> <argv[0]> <args> */
@@ -446,19 +572,27 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
         const char *raw = env_get(envp, "DDMASK_APPIMAGE_RAW");
         if (appimage && !(raw && *raw && *raw != '0') && self_dir[0]) {
             snprintf(pl->emu, sizeof pl->emu, "%s/libdd_appimage.so", self_dir);
-            if (access(pl->emu, F_OK) == 0) { runner = pl->emu; keep_argv0 = 1; k = RUN_FALLBACK; }
+            if (access(pl->emu, F_OK) == 0) { runner = pl->emu; keep_argv0 = 1; k = RUN_FALLBACK; HOW("AppImage"); }
         }
         switch (runner ? RUN_FALLBACK : k) {
         case RUN_AS_IS:
             *npath = cur;
+            world = -1;
             goto done;
         case RUN_NOEXEC:
             errno = ENOEXEC;
+            logf_(envp, "%s: not a program or script (ENOEXEC)", cur);
             return -1;
         case RUN_LOADER:
             runner = map_path(interp, envp, pl->mapped[depth], PATH_MAX);
-            if (access(runner, F_OK) != 0) runner = NULL; /* glibc's loader on Android... */
+            if (access(runner, F_OK) != 0) {
+                /* glibc's loader on Android... */
+                fail_(envp, "%s: its loader %s isn't there", cur, runner);
+                runner = NULL;
+            }
             if (runner) {
+                int lw = loader_world(runner);
+                HOW(lw > 0 ? (lw == 1 ? "glibc" : "musl") : strstr(runner, "linker") ? "bionic" : "loader");
                 snprintf(pl->env_exe, sizeof pl->env_exe, "DDMASK_EXE=%s", resolved);
                 if (is_world_loader(runner)) argv0_opt = nargv[off];
                 else if ((size_t)snprintf(pl->env_argv0, sizeof pl->env_argv0, "DDMASK_ARGV0=%s", nargv[off]) >= sizeof pl->env_argv0)
@@ -470,7 +604,7 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
             /* No loader to start it through: ddmask's own (ddload.c). */
             if (self_dir[0]) {
                 snprintf(pl->emu, sizeof pl->emu, "%s/libdd_static.so", self_dir);
-                if (access(pl->emu, F_OK) == 0) { runner = pl->emu; keep_argv0 = 1; }
+                if (access(pl->emu, F_OK) == 0) { runner = pl->emu; keep_argv0 = 1; opaque = 1; HOW("static"); }
             }
             break;
         case RUN_EMULATOR: {
@@ -480,6 +614,13 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
                 if (access(pl->emu, F_OK) == 0) e = pl->emu;
             }
             runner = e && *e ? e : NULL;
+            HOW(machine == EM_X86_64 ? "x86-64" : "i386");
+            if (!runner) {
+                errno = EACCES;
+                fail_(envp, "%s: an %s program, and no emulator is set up for it yet (DeskDroid downloads FEX the first time Steam starts)",
+                      cur, machine == EM_X86_64 ? "x86-64" : "i386");
+                return -1;
+            }
             break;
         }
         case RUN_FALLBACK:
@@ -491,6 +632,7 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
             if (arg[0]) nargv[--off] = arg;
             nargv[--off] = (char *)in;
             logf_(envp, "%s: script, interpreter %s", cur, in);
+            HOW("script");
             cur = in;
             continue;
         }
@@ -504,7 +646,8 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
         }
         if (!runner) {
             errno = EACCES;
-            fail_(envp, "%s: can't be started (no loader for it)", cur);
+            fail_(envp, "%s: can't be started (no loader for it: machine %d%s)", cur, machine,
+                  k == RUN_STATIC ? ", static" : "");
             return -1;
         }
         /* runner [--argv0 name] program args... ; or runner program argv0 args... */
@@ -521,7 +664,9 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
         /* The runner itself must be allowed to run (linker64, the APK's box64...): check it next round. */
     }
 done:
-    build_env(envp, nenvp, pl, with_exe);
+    if (hl) note(envp, L_ROUTE, "%s: %s, through %s", path, how, *npath);
+#undef HOW
+    build_env(envp, nenvp, pl, with_exe, world);
     /* Move argv to the front. */
     int i = 0;
     while (nargv[off + i]) { nargv[i] = nargv[off + i]; i++; }
@@ -532,7 +677,7 @@ done:
 static int dd_execve(const char *path, char *const argv[], char *const envp[]) {
     if (!path) { errno = EFAULT; return -1; }
     char *nargv[count(argv) + EXTRA_ARGS + 2];
-    char *nenvp[count(envp) + WORLDS + 3];
+    char *nenvp[2 * count(envp) + WORLDS + 3];
     struct plan pl;
     const char *npath;
     if (plan_exec(path, argv, envp, &npath, nargv, nenvp, &pl) != 0) return -1;
@@ -651,7 +796,7 @@ EXPORT int execveat(int dirfd, const char *path, char *const argv[], char *const
 static int dd_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *fa,
                     const posix_spawnattr_t *attr, char *const argv[], char *const envp[]) {
     if (!real_posix_spawn) return ENOSYS;
-    size_t na = count(argv) + EXTRA_ARGS + 2, ne = count(envp) + WORLDS + 3;
+    size_t na = count(argv) + EXTRA_ARGS + 2, ne = 2 * count(envp) + WORLDS + 3;
     char **nargv = malloc(na * sizeof *nargv), **nenvp = malloc(ne * sizeof *nenvp);
     struct plan *pl = malloc(sizeof *pl);
     int r;
@@ -716,6 +861,214 @@ EXPORT ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t size) {
     return syscall(SYS_readlinkat, dirfd, path, buf, size);
 }
 
+/* ---- execute bits ---- */
+
+/*
+ * access(X_OK) on a file without an execute bit that ddmask starts anyway (an
+ * ELF program or #! script in the app's files): yes, so shells find it on PATH
+ * and [ -x ] agrees with exec. It also gets its execute bits, where the folder
+ * keeps them, so programs that look at the mode (stat) see them next time.
+ */
+static int runs_anyway(int dirfd, const char *path) {
+    if (!path || !*path || strict_exec(environ)) return 0;
+    char full[PATH_MAX], resolved[PATH_MAX];
+    if (path[0] != '/' && dirfd != AT_FDCWD) {
+        if ((size_t)snprintf(full, sizeof full, "/proc/self/fd/%d/%s", dirfd, path) >= sizeof full) return 0;
+        path = full;
+    }
+    if (!realpath(path, resolved) || exec_allowed(resolved, environ)) return 0;
+    struct stat st;
+    if (stat(resolved, &st) != 0 || !S_ISREG(st.st_mode)) return 0;
+    char interp[PATH_MAX], arg[LINE_MAX_SCRIPT];
+    int machine, appimage;
+    enum kind k = classify(resolved, interp, sizeof interp, arg, sizeof arg, &machine, &appimage);
+    if (k == RUN_NOEXEC || k == RUN_AS_IS || (k == RUN_FALLBACK && !appimage)) return 0;
+    chmod(resolved, st.st_mode | ((st.st_mode & 0444) >> 2));
+    return 1;
+}
+
+typedef int (*access_fn)(const char *, int);
+typedef int (*faccessat_fn)(int, const char *, int, int);
+static access_fn real_access;
+static faccessat_fn real_faccessat;
+
+/* After the real check failed (r != 0): whether X_OK was all that was missing. */
+static int x_retry(int r, int dirfd, const char *path, int mode, int flags) {
+    if (r == 0 || !(mode & X_OK) || errno != EACCES) return r;
+    int e = errno;
+    int rest = mode & ~X_OK;
+    int ok = rest ? (real_faccessat ? real_faccessat(dirfd, path, rest, flags)
+                                    : (int)syscall(SYS_faccessat, dirfd, path, rest)) == 0 : 1;
+    if (ok && runs_anyway(dirfd, path)) return 0;
+    errno = e;
+    return r;
+}
+
+EXPORT int access(const char *path, int mode) {
+    int r = real_access ? real_access(path, mode) : (int)syscall(SYS_faccessat, AT_FDCWD, path, mode);
+    return x_retry(r, AT_FDCWD, path, mode, 0);
+}
+
+EXPORT int faccessat(int dirfd, const char *path, int mode, int flags) {
+    int r = real_faccessat ? real_faccessat(dirfd, path, mode, flags) : (int)syscall(SYS_faccessat, dirfd, path, mode);
+    return x_retry(r, dirfd, path, mode, flags);
+}
+
+#ifdef __GLIBC__
+/* glibc's euidaccess and eaccess (bash's test -x) check through faccessat inside glibc. */
+EXPORT int euidaccess(const char *path, int mode) { return faccessat(AT_FDCWD, path, mode, AT_EACCESS); }
+EXPORT int eaccess(const char *path, int mode) { return faccessat(AT_FDCWD, path, mode, AT_EACCESS); }
+#endif
+
+/* ---- blocked system calls (glibc and musl programs) ---- */
+
+#if SELF_WORLD != 0 && (defined(__aarch64__) || defined(__x86_64__))
+#define DDMASK_SIGSYS 1
+#ifndef SYS_faccessat2
+#define SYS_faccessat2 439
+#endif
+#ifndef SYS_epoll_pwait2
+#define SYS_epoll_pwait2 441
+#endif
+#ifndef SYS_close_range
+#define SYS_close_range 436
+#endif
+#ifndef SYS_fchmodat2
+#define SYS_fchmodat2 452
+#endif
+#ifndef DDMASK_GLIBC_PREFIX
+#define DDMASK_GLIBC_PREFIX "/data/data/io.deskdroid.app/files/glibc"
+#endif
+static char sigsys_log[PATH_MAX];       /* the numbers, one a line, as glibc's loader notes them */
+static unsigned char sigsys_seen[128];  /* calls already in the journal */
+
+static size_t put_num(char *p, unsigned long v) {
+    char t[24];
+    size_t n = 0, i = 0;
+    do t[n++] = (char)('0' + v % 10); while ((v /= 10) && n < sizeof t);
+    while (n) p[i++] = t[--n];
+    return i;
+}
+
+static size_t put_str(char *p, size_t room, const char *s) {
+    size_t n = strlen(s);
+    if (n > room) n = room;
+    memcpy(p, s, n);
+    return n;
+}
+
+static long call_or_errno(long r) { return r == -1 ? -errno : r; }
+
+/*
+ * Android's seccomp filter traps a system call an app may not make (SIGSYS).
+ * glibc's loader (native/glibc/patch.py) already makes them fail with ENOSYS;
+ * this handler, installed once the program's libraries are loaded, first
+ * makes the ones that have an allowed twin with that twin, so the program gets
+ * what it asked for. Each call is noted in the journal once per process.
+ */
+static void on_sigsys(int sig, siginfo_t *si, void *ctx) {
+    (void)sig;
+    ucontext_t *uc = ctx;
+    int e = errno;
+#if defined(__aarch64__)
+    unsigned long long *rg = (unsigned long long *)uc->uc_mcontext.regs;
+#define ARG(i) ((long)rg[i])
+#define SET_RET(v) (rg[0] = (unsigned long long)(v))
+#else
+    greg_t *g = uc->uc_mcontext.gregs;
+    static const int argreg[6] = { REG_RDI, REG_RSI, REG_RDX, REG_R10, REG_R8, REG_R9 };
+#define ARG(i) ((long)g[argreg[i]])
+#define SET_RET(v) (g[REG_RAX] = (greg_t)(v))
+#endif
+    /* Sent by kill() rather than seccomp (SYS_SECCOMP, 1): no call to make,
+     * just ENOSYS as glibc's loader answers (its test sends one that way). */
+    long nr = si->si_code == 1 ? si->si_syscall : -1, ret = -ENOSYS;
+    const char *as = NULL;
+    switch (nr) {
+#ifdef SYS_accept
+    case SYS_accept:
+        ret = call_or_errno(syscall(SYS_accept4, ARG(0), ARG(1), ARG(2), 0));
+        as = "accept4";
+        break;
+#endif
+    case SYS_epoll_pwait2: {
+        const struct timespec *ts = (const struct timespec *)ARG(3);
+        long ms = ts ? ts->tv_sec * 1000 + (ts->tv_nsec + 999999) / 1000000 : -1;
+        if (ms > 0x7fffffffL) ms = 0x7fffffffL;
+        ret = call_or_errno(syscall(SYS_epoll_pwait, ARG(0), ARG(1), ARG(2), ms, ARG(4), ARG(5)));
+        as = "epoll_pwait";
+        break;
+    }
+    case SYS_faccessat2:
+        if (ARG(3) == 0) {
+            ret = call_or_errno(syscall(SYS_faccessat, ARG(0), ARG(1), ARG(2)));
+            as = "faccessat";
+        }
+        break;
+    case SYS_fchmodat2:
+        if (ARG(3) == 0) {
+            ret = call_or_errno(syscall(SYS_fchmodat, ARG(0), ARG(1), ARG(2)));
+            as = "fchmodat";
+        }
+        break;
+    case SYS_close_range: {
+        /* close_range(first, last, flags): each one, up to the open-file limit;
+         * CLOSE_RANGE_CLOEXEC (4) marks them instead. Not CLOSE_RANGE_UNSHARE. */
+        unsigned long first = (unsigned long)ARG(0), last = (unsigned long)ARG(1), fl = (unsigned long)ARG(2);
+        if (fl & ~4UL) break;
+        struct { unsigned long cur, max; } lim = { 1024, 1024 };
+        syscall(SYS_prlimit64, 0, RLIMIT_NOFILE, NULL, &lim);
+        if (last >= lim.cur) last = lim.cur ? lim.cur - 1 : 0;
+        for (unsigned long fd = first; fd <= last && fd < (1UL << 20); fd++) {
+            if (fl & 4) syscall(SYS_fcntl, (long)fd, F_SETFD, FD_CLOEXEC);
+            else syscall(SYS_close, (long)fd);
+        }
+        ret = first > (unsigned long)ARG(1) ? -EINVAL : 0;
+        as = fl & 4 ? "fcntl" : "close";
+        break;
+    }
+    }
+    SET_RET(ret);
+#undef ARG
+#undef SET_RET
+    char line[PATH_MAX + 160];
+    size_t n = 0;
+    if (nr < 0) { errno = e; return; }
+    if (sigsys_log[0]) {
+        n = put_num(line, (unsigned long)nr);
+        line[n++] = '\n';
+        journal_write(sigsys_log, line, n);
+    }
+    if (journal_path[0] && nr >= 0 && nr < (long)sizeof sigsys_seen * 8
+        && !(sigsys_seen[nr / 8] & (1u << (nr % 8)))) {
+        sigsys_seen[nr / 8] |= (unsigned char)(1u << (nr % 8));
+        n = put_str(line, 32, "ddmask[");
+        n += put_num(line + n, (unsigned long)getpid());
+        n += put_str(line + n, 8, "]: ");
+        n += put_str(line + n, PATH_MAX, exe_path[0] ? exe_path : "(this program)");
+        n += put_str(line + n, 64, ": Android blocks system call ");
+        n += put_num(line + n, (unsigned long)nr);
+        if (as) { n += put_str(line + n, 16, ", made as "); n += put_str(line + n, 32, as); }
+        else n += put_str(line + n, 32, ", failed with ENOSYS");
+        line[n++] = '\n';
+        journal_write(journal_path, line, n);
+    }
+    errno = e;
+}
+
+static void catch_sigsys(void) {
+    const char *off = getenv("DDMASK_SIGSYS");
+    if (off && *off == '0') return;
+    const char *l = getenv("DDMASK_SIGSYS_LOG");
+    snprintf(sigsys_log, sizeof sigsys_log, "%s", l ? l : DDMASK_GLIBC_PREFIX "/sigsys.log");
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = on_sigsys;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSYS, &sa, NULL);
+}
+#endif
+
 /* ---- in every process ---- */
 
 __attribute__((constructor)) static void ddmask_init(int argc, char **argv, char **envp) {
@@ -724,6 +1077,10 @@ __attribute__((constructor)) static void ddmask_init(int argc, char **argv, char
     real_posix_spawn = (spawn_fn)dlsym(RTLD_NEXT, "posix_spawn");
     real_readlink = (readlink_fn)dlsym(RTLD_NEXT, "readlink");
     real_readlinkat = (readlinkat_fn)dlsym(RTLD_NEXT, "readlinkat");
+    real_access = (access_fn)dlsym(RTLD_NEXT, "access");
+    real_faccessat = (faccessat_fn)dlsym(RTLD_NEXT, "faccessat");
+    const char *jf = getenv("DDMASK_JOURNAL");
+    if (jf && *jf) snprintf(journal_path, sizeof journal_path, "%s", jf);
 
     Dl_info info;
     if (dladdr((void *)ddmask_init, &info) && info.dli_fname) {
@@ -763,4 +1120,7 @@ __attribute__((constructor)) static void ddmask_init(int argc, char **argv, char
         const char *name = strrchr(exe_path, '/');
         prctl(PR_SET_NAME, name ? name + 1 : exe_path, 0, 0, 0);
     }
+#ifdef DDMASK_SIGSYS
+    catch_sigsys();
+#endif
 }

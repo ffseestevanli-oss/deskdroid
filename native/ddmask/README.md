@@ -19,7 +19,7 @@ the folders Android allows, it runs:
 |---|---|
 | an ARM64 Android (bionic) program | `/system/bin/linker64 <program> <args>` (its own `PT_INTERP`) |
 | a `#!` script | its interpreter (`/bin/sh` and `/usr/bin/env` map to `/system/bin`), then these same rules for the interpreter |
-| a file without an exec bit | refused with `EACCES`, as before |
+| a file without an exec bit | run by these same rules when it is an ELF program or `#!` script (zips drop file modes; see "Compatibility layer"), else refused with `EACCES` |
 | an ARM64 glibc (ordinary Linux) program | DeskDroid's glibc loader, `libdd_ld-glibc.so --argv0 <argv[0]> <program> <args>` (`/lib/ld-linux-aarch64.so.1` maps to it; see `../glibc/README.md`) |
 | an ARM64 musl program (Alpine's) | DeskDroid's musl, `libdd_ld-musl.so --argv0 <argv[0]> <program> <args>` (`/lib/ld-musl-aarch64.so.1` maps to it; see `../musl/README.md`) |
 | a static ARM64 program (Go, Rust, static musl or glibc) | ddmask's own loader, `libdd_static.so <program> <argv[0]> <args>` (`ddload.c`, below) |
@@ -39,6 +39,24 @@ library folder) are exec'd as before. ddmask follows symlinks first, so
 `bin/<app>` links into the APK run as before too.
 
 A file named `ddmask-off` in the app's files folder turns it off.
+
+## Compatibility layer
+
+Starting a program is only the first thing that goes wrong for Linux
+programs on Android. ddmask also handles the problems that kept coming back
+app after app, so each new app needs less of its own troubleshooting:
+
+| Problem | What ddmask does |
+|---|---|
+| Zips (the store's packages, Flatpak's files as the app unpacks them) and shared storage drop execute bits, so scripts and programs were refused with `EACCES` | An ELF program or `#!` script in the app's files runs without its execute bit, `access(X_OK)` agrees (shells' `PATH` search, `[ -x ]`), and the file gets its bits back where the folder keeps them. A file that is neither still gets `EACCES`. `DDMASK_STRICT_EXEC=1` restores the old rule. |
+| The desktop's own Qt and KDE settings (the APK's plugin folder in `QT_PLUGIN_PATH`, the `org.kde.desktop` style, the `deskdroid-ahb` buffer plugin) leaked into Linux programs, whose Qt then looked for plugins and styles it doesn't have | `NativeDesk.kt` copies each of those settings into `DDMASK_HOST_<name>`. When a bionic program starts a glibc or musl one, a setting that still has the desktop's value is left out; a launcher that set its own value (Flatpak's `QT_PLUGIN_PATH=/app/lib/plugins`) keeps it. When a Linux program starts a bionic one again (`xdg-open`, a link that opens the desktop's browser), the desktop's values come back. |
+| Android's seccomp filter blocks newer system calls that some programs make without a fallback | The glibc and musl builds catch `SIGSYS` once the program's libraries are loaded. Calls with an allowed twin are made with it: `accept` (`accept4`), `epoll_pwait2` (`epoll_pwait`), `faccessat2` and `fchmodat2` without flags (`faccessat`, `fchmodat`), `close_range` (`close` or `fcntl` on each). The rest fail with `ENOSYS`, as glibc's loader already does (`../glibc/README.md`). Each number goes to `files/glibc/sigsys.log` as before (`DDMASK_SIGSYS_LOG`); `DDMASK_SIGSYS=0` leaves glibc's handler alone. |
+| Library folders written into programs as absolute paths (`RUNPATH /app/lib/kid3`, `/usr/lib/<triple>/pulseaudio`) are opened by glibc's loader itself, which ddflatpak's preload never sees | `ddflatpak-audit.c` (`libddflatpak_audit.so`) is an audit library for glibc's loader (`rtld-audit(7)`): the loader asks it about every folder a program or library names, and it answers with ddflatpak's mapping. `flatpak.sh` and the store's Flathub launchers load it with `DDMASK_GLIBC_LD_AUDIT`. It has no C library, so the loader doesn't search for one along the program's `RUNPATH` before asking it. |
+| A program that didn't open left nothing behind | The journal, `$DDMASK_JOURNAL` (`files/ddmask.log` on the desktop): one timestamped line for each program started another way (how, and through what), each one that can't start and why (no loader, an x86 program before FEX is installed, not a program at all), and each blocked system call (once per process). Settings' **Save log** adds it, the programs Flatpak couldn't start (`files/glibc/exec.log`), a count of blocked system calls and each store app's own launcher log (`store/apps/<app>/run.log`). It is kept under 256 KiB, the one before as `ddmask.log.old`. |
+
+`test/compat.sh` tests all of these on desktop Linux, the blocked system
+calls with a seccomp filter that traps them the way Android's does;
+`test/flatpak.sh` tests the audit library.
 
 ## Static programs: ddload
 
@@ -92,6 +110,11 @@ All optional; the defaults are right for DeskDroid.
 | `DDMASK_ALLOW` | Folders exec works in, `:`-separated. Default on Android: the system's folders and `libddmask.so`'s own folder. Elsewhere: everything (ddmask does nothing). |
 | `DDMASK_MAP` | Interpreters to replace, `from=to:from=to`, for `#!` lines and `PT_INTERP`. |
 | `DDMASK_DEBUG=1` | Logs each decision to stderr. |
+| `DDMASK_JOURNAL` | The journal file (above). The desktop sets `files/ddmask.log`. |
+| `DDMASK_LOG` | A file for programs that couldn't start, without times (`flatpak.sh` reads it back for its messages). |
+| `DDMASK_HOST_<name>` | The desktop's own value of `<name>` (above). |
+| `DDMASK_STRICT_EXEC=1` | Files without an execute bit are refused. |
+| `DDMASK_SIGSYS=0`, `DDMASK_SIGSYS_LOG` | Leave blocked system calls to glibc's loader; where their numbers go. |
 | `DDMASK_X86_64`, `DDMASK_I386` | The emulator for x86-64 and i386 programs. The app sets both to FEX's `FEXInterpreter` once it's installed. |
 | `DDMASK_FALLBACK` | A last resort (proot...) for anything else the linker can't run. Unused. |
 

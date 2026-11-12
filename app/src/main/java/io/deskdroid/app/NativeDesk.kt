@@ -981,6 +981,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("KDE_DEBUG", "1")
                     put("QT_LOGGING_RULES", "js=true;kde.plasma.activitiesstats=false;qt.sql.qsqldatabase=false") // no KCrash handler: our own prints where a crash happened
                     put("KWIN_FORCE_OWN_QPA", "1") // KWin only takes its own Qt platform plugin when the program is named kwin_wayland; ours is app_process
+                    ddmaskHostEnv(this)
                 }
             }.start()
             apps += p
@@ -1115,6 +1116,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("DESKDROID_BIN", bin.path) // help in the terminal lists these apps
                     put("SHELL", "/system/bin/sh") // terminals (Konsole, Kate's, Dolphin's) start Android's shell
                     sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
+                    ddmaskHostEnv(this)
                 }
             }.start()
             apps += p
@@ -1164,10 +1166,29 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * Android allows where exec isn't. A file named ddmask-off in the app's
      * files folder turns it off.
      */
+    /**
+     * The desktop's Android-side (bionic) Qt and KDE settings, copied into
+     * DDMASK_HOST_<name>: ddmask leaves them out when a desktop program starts a
+     * Linux (glibc, musl) program, whose own Qt would try the APK's plugins and
+     * a style it doesn't have, and gives them back to Android programs those
+     * start. Called once the rest of the environment is set.
+     */
+    private fun ddmaskHostEnv(env: MutableMap<String, String>) {
+        if (env["LD_PRELOAD"]?.contains("libddmask.so") != true) return
+        for (name in listOf("QT_PLUGIN_PATH", "QML_IMPORT_PATH", "QML2_IMPORT_PATH", "QT_QPA_PLATFORMTHEME",
+                "QT_QUICK_CONTROLS_STYLE", "QT_STYLE_OVERRIDE", "QT_WAYLAND_CLIENT_BUFFER_INTEGRATION",
+                "KWIN_FORCE_OWN_QPA", "KDEDIRS", "QTWEBENGINEPROCESS_PATH"))
+            env[name]?.let { env["DDMASK_HOST_$name"] = it }
+    }
+
     private fun ddmask(env: MutableMap<String, String>, libs: String) {
         val lib = File(libs, "libddmask.so")
         if (lib.exists() && !File(filesDir, "ddmask-off").exists()) {
             env["LD_PRELOAD"] = lib.path
+            // Its journal: each program it starts another way, each one that
+            // can't start and why, each system call Android blocks. In Settings'
+            // saved log.
+            env["DDMASK_JOURNAL"] = File(filesDir, "ddmask.log").path
             try { glibcRuntime(libs) } catch (e: Exception) { AppLog.i("Native desktop test: glibc runtime: $e") }
             X86.env(this, env) // x86 programs through FEX, once it's installed
         }

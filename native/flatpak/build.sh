@@ -12,6 +12,7 @@
 #                        updates with flatpak itself, runs apps with ddflatpak
 #   libdd_nobwrap.so     stands in for bubblewrap, which Android can't run
 #   libddflatpak.so      ddflatpak.c built against glibc (aarch64)
+#   libddflatpak_audit.so  ddflatpak-audit.c: its paths for glibc's loader
 # The packages are cached in $DESKDROID_FLATPAK_CACHE (default
 # ~/.cache/deskdroid/flatpak), keyed by this folder's contents.
 set -euo pipefail
@@ -68,4 +69,9 @@ install -m 755 "$HERE/nobwrap.sh" "$OUT/libdd_nobwrap.so"
 "${CROSS}gcc" -O2 -Wall -Wextra -shared -fPIC -ffile-prefix-map="$HERE/..=." "$HERE/../ddmask/ddflatpak.c" -ldl \
   -Wl,-soname,libddflatpak.so -Wl,--build-id=none -Wl,-z,noexecstack -o "$OUT/libddflatpak.so"
 "${CROSS}strip" --strip-unneeded "$OUT/libddflatpak.so"
+# Its paths for glibc's loader too (RUNPATH folders), as an audit library: no C library.
+"${CROSS}gcc" -O2 -Wall -Wextra -shared -fPIC -nostdlib -fno-builtin -fno-stack-protector -ffile-prefix-map="$HERE/..=." \
+  "$HERE/../ddmask/ddflatpak-audit.c" -Wl,-soname,libddflatpak_audit.so -Wl,--build-id=none -Wl,-z,noexecstack \
+  -o "$OUT/libddflatpak_audit.so"
+"${CROSS}strip" --strip-unneeded "$OUT/libddflatpak_audit.so"
 echo "   flatpak: $(du -h "$OUT/libdd_flatpakcli.so" | cut -f1) ($(wc -l < "$CACHE/usr/share/deskdroid-flatpak-packages.txt") Debian packages)"
