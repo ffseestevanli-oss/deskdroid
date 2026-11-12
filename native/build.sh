@@ -107,6 +107,10 @@ echo "== flatpak"
 # The flatpak command, from Debian's arm64 packages on DeskDroid's glibc, and
 # ddflatpak, which runs Flathub apps without bubblewrap (flatpak/README.md).
 "$HERE/flatpak/build.sh" "$OUT"
+echo "== sound"
+# The sound server for Linux programs: Debian's PulseAudio on DeskDroid's glibc
+# (sound/README.md).
+"$HERE/sound/build.sh" "$OUT"
 
 install -m 755 "$WORK/ddtool/ddtool" "$OUT/libddtool.so"
 install -m 755 "$WORK/proot/proot" "$OUT/libproot.so"

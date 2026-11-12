@@ -186,6 +186,8 @@ object NativeDesk {
     // activity's surface away, but the compositor, KWin, Plasma and the apps
     // keep running under NativeDeskService until the user stops the desktop.
     val apps = mutableListOf<Process>()
+    // Plays the sound server's output (startSound) while the desktop runs.
+    @Volatile var sound: AudioBridge? = null
     @Volatile var running = false
     @Volatile var activity: java.lang.ref.WeakReference<Activity>? = null
     // The window the compositor draws into now (the phone's or a monitor's), and its size.
@@ -541,6 +543,8 @@ object NativeDesk {
             apps.forEach { it.destroy() }
             apps.clear()
         }
+        sound?.stop()
+        sound = null
         openWatcher?.stopWatching()
         openWatcher = null
         AndroidWidgets.stop()
@@ -948,6 +952,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             NativeDesk.refreshAndroidApps { writeAndroidApps(applicationContext); AndroidWidgets.writeCatalog(applicationContext) } // before plasmashell reads the menu (KWin starts first)
             watchAndroidApps()
             val bus = startSessionBus(libs, data, runtime)
+            startSound(libs, runtime)
             val scale = NativeDesk.desktopScale(this).toDouble()
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
@@ -962,6 +967,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("HOME", filesDir.path)
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", runtime.path)
+                    put("PULSE_SERVER", "unix:" + File(runtime, "pulse/native").path) // Linux programs: the sound server (startSound)
                     put("XDG_DATA_DIRS", dataDirs(data))
                     put("XDG_CONFIG_HOME", config.path)
                     put("XDG_CONFIG_DIRS", kdeDefaultsDirs(config))
@@ -1081,6 +1087,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("LANG", java.util.Locale.getDefault().let { "${it.language}_${it.country}.UTF-8" }) // the phone's language, for dates, times and text
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", runtime.path)
+                    put("PULSE_SERVER", "unix:" + File(runtime, "pulse/native").path) // Linux programs: the sound server (startSound)
                     put("XDG_DATA_DIRS", dataDirs(data))
                     put("XDG_CONFIG_HOME", config.path)
                     put("XDG_CONFIG_DIRS", kdeDefaultsDirs(config))
@@ -1215,6 +1222,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // The flatpak command's programs and libraries (native/flatpak), which
         // run on this glibc; the flatpak command itself is bin/flatpak.
         File(libs, "libdd_flatpakcli.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "flatpak-cli")) }
+        // The sound server (native/sound): Debian's PulseAudio on this glibc.
+        File(libs, "libdd_soundsrv.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "sound")) }
         val uid = android.os.Process.myUid()
         val home = File(filesDir, "home").apply { mkdirs() }
         val dns = try {
@@ -1742,6 +1751,36 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * dbus-daemon, listening in KWin's runtime folder. Returns its address,
      * or null (KWin runs without one) if it didn't start.
      */
+    /**
+     * The sound server for Linux programs (native/sound): Debian's PulseAudio,
+     * unmodified, on DeskDroid's glibc, listening where libpulse looks
+     * ($XDG_RUNTIME_DIR/pulse/native, also PULSE_SERVER). It writes into a FIFO
+     * that AudioBridge plays through an AudioTrack, like any app's sound.
+     * The desktop's own (bionic) programs keep playing through Android directly.
+     */
+    private fun startSound(libs: String, runtime: File) {
+        val script = File(libs, "libdd_sound.so")
+        if (!script.exists() || !File(libs, "libdd_ld-glibc.so").exists() || !File(filesDir, "sound/usr/bin/pulseaudio").exists()) return
+        try {
+            NativeDesk.sound?.stop()
+            NativeDesk.sound = AudioBridge(File(runtime, "pulse/android.pipe")).also { it.start() }
+            val p = ProcessBuilder("/system/bin/sh", script.path, runtime.path).redirectErrorStream(true).also { pb ->
+                pb.environment().apply {
+                    remove("LD_PRELOAD")
+                    put("DESKDROID_FILES", filesDir.path)
+                    put("HOME", File(filesDir, "home").apply { mkdirs() }.path)
+                }
+            }.start()
+            apps += p
+            Thread {
+                p.inputStream.bufferedReader().outputLines { AppLog.i("[sound] $it") }
+                AppLog.i("[sound] exited (${p.waitFor()})")
+            }.apply { isDaemon = true }.start()
+        } catch (e: Exception) {
+            AppLog.i("Native desktop test: couldn't start the sound server: $e")
+        }
+    }
+
     private fun startSessionBus(libs: String, data: File, runtime: File): String? {
         val exe = File(libs, "libdd_dbus-daemon.so")
         if (!exe.exists()) return null

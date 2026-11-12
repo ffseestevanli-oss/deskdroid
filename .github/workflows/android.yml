@@ -21,6 +21,9 @@ jobs:
       # ddmask (native/ddmask), tested on the runner with glibc's loader standing in for Android's.
       - name: Test ddmask
         run: native/ddmask/test/run.sh && native/ddmask/test/compat.sh && native/ddmask/test/flatpak.sh
+      # The sound server (native/sound), built from Debian's amd64 packages and run on the runner.
+      - name: Test the sound server
+        run: native/sound/test.sh
       # glibc for ddmask (native/glibc): built with the cross compiler, kept in a
       # cache keyed on its sources, tested under qemu.
       - name: Install the glibc cross compiler
