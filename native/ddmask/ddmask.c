@@ -48,6 +48,9 @@
  *                    /bin/env map to /system/bin by default.
  *   DDMASK_X86_64, DDMASK_I386, DDMASK_FALLBACK   as above
  *   DDMASK_DEBUG=1   log each decision to stderr
+ *   DDMASK_LOG       a file: programs that couldn't be started are noted
+ *                    there (with DDMASK_DEBUG, every decision too). For
+ *                    children whose stderr goes nowhere (gpgme's).
  *
  * The exec wrappers can run in a vfork() child, so they don't allocate: all
  * buffers are on the stack.
@@ -135,6 +138,37 @@ static const char *env_get(char *const envp[], const char *name) {
     for (char *const *e = envp; *e; e++)
         if (strncmp(*e, name, n) == 0 && (*e)[n] == '=') return *e + n + 1;
     return NULL;
+}
+
+static void vlog_(char *const envp[], int failure, const char *fmt, va_list ap) {
+    const char *d = env_get(envp, "DDMASK_DEBUG");
+    const char *file = env_get(envp, "DDMASK_LOG");
+    int debug = d && *d && *d != '0';
+    if (!debug && !(failure && file && *file)) return;
+    char buf[PATH_MAX + 256];
+    int n = snprintf(buf, sizeof buf, "ddmask[%d]: ", (int)getpid());
+    n += vsnprintf(buf + n, sizeof buf - n, fmt, ap);
+    if (n > (int)sizeof buf - 2) n = sizeof buf - 2;
+    buf[n++] = '\n';
+    int fd = 2, own = 0;
+    if (file && *file) {
+        fd = (int)syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
+        own = fd >= 0;
+        if (!own) fd = 2;
+    }
+    ssize_t w = write(fd, buf, n);
+    (void)w;
+    if (own) close(fd);
+}
+
+/* A program that can't be started, with errno set: why. */
+static void fail_(char *const envp[], const char *fmt, ...) {
+    int e = errno;
+    va_list ap;
+    va_start(ap, fmt);
+    vlog_(envp, 1, fmt, ap);
+    va_end(ap);
+    errno = e;
 }
 
 static void logf_(char *const envp[], const char *fmt, ...) {
@@ -391,9 +425,13 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
             break;
         }
         struct stat st;
-        if (stat(resolved, &st) != 0) return -1;
-        if (!S_ISREG(st.st_mode) || !(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))) { errno = EACCES; return -1; }
-        if (depth >= MAX_DEPTH) { errno = ELOOP; return -1; }
+        if (stat(resolved, &st) != 0) { fail_(envp, "%s: %s", resolved, strerror(errno)); return -1; }
+        if (!S_ISREG(st.st_mode) || !(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))) {
+            errno = EACCES;
+            fail_(envp, "%s: not an executable file (mode %o)", resolved, (unsigned)st.st_mode);
+            return -1;
+        }
+        if (depth >= MAX_DEPTH) { errno = ELOOP; fail_(envp, "%s: too many interpreters", cur); return -1; }
         /* A file opened by fd (fexecve, execveat) may close on exec: name it by its real path. */
         const char *prog = strncmp(cur, "/proc/self/fd/", 14) == 0 ? strcpy(pl->real, resolved) : cur;
         int machine, appimage = 0;
@@ -465,8 +503,8 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
             pl->env_exe[0] = pl->env_argv0[0] = 0;
         }
         if (!runner) {
-            logf_(envp, "%s: can't be started (no loader for it)", cur);
             errno = EACCES;
+            fail_(envp, "%s: can't be started (no loader for it)", cur);
             return -1;
         }
         /* runner [--argv0 name] program args... ; or runner program argv0 args... */
@@ -498,7 +536,9 @@ static int dd_execve(const char *path, char *const argv[], char *const envp[]) {
     struct plan pl;
     const char *npath;
     if (plan_exec(path, argv, envp, &npath, nargv, nenvp, &pl) != 0) return -1;
-    return sys_execve(npath, nargv, nenvp);
+    sys_execve(npath, nargv, nenvp);
+    fail_(envp, "%s (as %s): %s", path, npath, strerror(errno));
+    return -1;
 }
 
 /* execvp's search, as POSIX describes it, through dd_execve. */

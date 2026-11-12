@@ -61,10 +61,19 @@ cli() {
   fi
   export DDFLATPAK_RUNTIME="$CLI/usr" DDFLATPAK_MOUNTS="/etc/ssl=$CLI/etc/ssl;/usr/etc=$CLI/etc"
   export DDMASK_GLIBC_LD_LIBRARY_PATH="$GLIBC_LIB:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib"
+  # Flatpak's own helpers (gpgconf and gpg, which check Flathub's signatures)
+  # start straight through the APK's glibc loader, by ddflatpak, as in the
+  # ARM test that installed from Flathub; ddmask only sees the loader.
+  export DDFLATPAK_LOADER="$L/libdd_ld-glibc.so" DDFLATPAK_LIBPATH="$DDMASK_GLIBC_LD_LIBRARY_PATH"
   export FLATPAK_BWRAP="$L/libdd_nobwrap.so" GIO_USE_VFS=local GSETTINGS_BACKEND=memory
-  rm -f "$F/glibc/sigsys.log"
+  # Helpers that can't start are noted here (gpgme hides their errors).
+  export DDMASK_LOG="$F/glibc/exec.log"
+  rm -f "$F/glibc/sigsys.log" "$DDMASK_LOG"
   $G "$CLI/usr/bin/flatpak" "$@"
   rc=$?
+  if [ $rc -ne 0 ] && [ -s "$DDMASK_LOG" ]; then
+    echo "flatpak: programs that couldn't start: $(sort -u "$DDMASK_LOG" | head -3 | tr '\n' ' ')" >&2
+  fi
   # Killed on a system call Android blocks (SIGSYS, 128+31): say which ones
   # glibc caught along the way (../glibc/patch.py logs them), for the report.
   if [ $rc -eq 159 ]; then

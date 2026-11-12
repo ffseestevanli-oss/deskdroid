@@ -57,7 +57,7 @@ mkdir -p /system/bin && rm -f /system/bin/sh && cp /bin/dash /system/bin/sh
 fp() {
   env -i PATH=/usr/bin:/bin HOME="$F/home" TMPDIR="$F/flatpak-tmp" \
     ${HTTPS_PROXY:+HTTPS_PROXY=$HTTPS_PROXY https_proxy=$HTTPS_PROXY} \
-    DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_FLATPAK_ARCH=x86_64 DDMASK_ALLOW="$L" \
+    DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_FLATPAK_ARCH=x86_64 \
     DESKDROID_GLIBC_RUN="$L/android-sim $L/libdd_ld-glibc.so" QT_QPA_PLATFORM=offscreen \
     /bin/sh "$L/libdd_flatpak.so" "$@"
 }

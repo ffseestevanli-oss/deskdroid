@@ -275,7 +275,10 @@ static const char *resolve(const char *path, char *const argv[], char ***out, ch
         close(fd);
         if (n < 0) n = 0;
         hdr[n] = 0;
-        if (n >= 4 && !memcmp(hdr, "\177ELF", 4) && env_loader) {
+        /* Only the runtime's and the app's programs: others (Android's
+         * /system/bin/sh) aren't for this loader. */
+        if (n >= 4 && !memcmp(hdr, "\177ELF", 4) && env_loader
+            && (under(m, env_rt) || (env_app && under(m, env_app)))) {
             /* [loader, --library-path, P, --argv0, argv0, m, args...] */
             int extra = env_libpath ? 5 : 3;
             memmove(a + extra + 1, a + 1, argc * sizeof(char *));
@@ -314,12 +317,31 @@ static const char *resolve(const char *path, char *const argv[], char ***out, ch
     return NULL;
 }
 
+/* A program that couldn't start: into $DDMASK_LOG, if set (flatpak.sh
+ * reports it; programs like gpgme send the child's stderr to /dev/null). */
+static void exec_failed(const char *p, const char *f, int e) {
+    const char *log = getenv("DDMASK_LOG");
+    if (!log || !*log) return;
+    char line[2 * PATH_MAX + 64];
+    int n = snprintf(line, sizeof line, "ddflatpak: %s (%s): %s\n", p, f ? f : "-", strerror(e));
+    if (n <= 0) return;
+    if (n >= (int)sizeof line) n = sizeof line - 1;
+    REAL(open);
+    int fd = real_open(log, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
+    if (fd < 0) return;
+    ssize_t w = write(fd, line, n); (void)w;
+    close(fd);
+}
+
 int execve(const char *p, char *const argv[], char *const envp[]) {
     char b[PATH_MAX]; char **a; REAL(execve);
     const char *f = resolve(p, argv, &a, b);
-    if (!f) return -1;
+    /* (A program that isn't there is just a probe: gpgme tries gpgsm.) */
+    if (!f) { if (errno != ENOENT) exec_failed(p, NULL, errno); return -1; }
     real_execve(f, a, envp);
-    int e = errno; free(a); errno = e;
+    int e = errno;
+    exec_failed(p, f, e);
+    free(a); errno = e;
     return -1;
 }
 
