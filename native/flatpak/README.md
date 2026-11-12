@@ -74,7 +74,7 @@ What Android changes, and how it's handled:
 |---|---|---|
 | No hard links in app data (`EACCES`) | OSTree creates files as `O_TMPFILE` and links them in; checkout hard-links from the repo | ddflatpak: `O_TMPFILE` fails with `EOPNOTSUPP` (OSTree then writes named temp files), `link`/`linkat` `EACCES` becomes `EPERM` (OSTree copies instead) |
 | seccomp kills on calls it blocks (set_robust_list, rseq...) | "Bad system call" | glibc: `SIGSYS` returns `ENOSYS`; no clone3/rseq; set_robust_list only where it worked (`../glibc`) |
-| Can't exec files in app data | gpg, the triggers, flatpak itself | ddmask (glibc build) runs them through the APK's loader; `flatpak.sh` too, when started without ddmask (Discover) |
+| Can't exec files in app data | gpg, the triggers, flatpak itself | Flatpak's helpers (gpgconf, gpg): ddflatpak starts them through the APK's glibc loader (`DDFLATPAK_LOADER`); other programs: ddmask (glibc build); flatpak itself: `flatpak.sh`, when started without ddmask (Discover). A helper that can't start is noted in `files/glibc/exec.log` (`DDMASK_LOG`) and named in flatpak's error |
 | Zips unpack without modes | the shell won't start them | `flatpak.sh` sets them (globs, not `find`) |
 | No user namespaces | no bubblewrap | `nobwrap.sh` for triggers, ddflatpak for `flatpak run` |
 
