@@ -785,7 +785,11 @@ build_breeze_gtk() {
     && sh build_theme.sh -c BreezeLight -t "$PREFIX/share/themes/Breeze" -r "$PREFIX/share/color-schemes")
   # DD Party, DeskDroid's default look: Breeze for GTK in its colours, the
   # same way (its colour scheme from native/plasma/shell/ddparty).
-  (cd "$s/src" && sh build_theme.sh -c DDParty -t "$PREFIX/share/themes/DD-Party" -r "$HERE/shell/ddparty/color-schemes")
+  # build_theme.sh reads BreezeLight.colors (the base scheme) from the same
+  # folder, so both go into one.
+  local cs="$s/dd-color-schemes"; mkdir -p "$cs"
+  cp "$PREFIX/share/color-schemes/BreezeLight.colors" "$HERE/shell/ddparty/color-schemes/DDParty.colors" "$cs/"
+  (cd "$s/src" && sh build_theme.sh -c DDParty -t "$PREFIX/share/themes/DD-Party" -r "$cs")
   cp "$s/src/settings.ini" "$PREFIX/share/themes/DD-Party/settings.ini"
   test -s "$PREFIX/share/themes/DD-Party/gtk-3.0/gtk.css"
   cp "$s/src/gtk-dark-3.0.css" "$PREFIX/share/themes/Breeze/gtk-3.0/gtk-dark.css"
