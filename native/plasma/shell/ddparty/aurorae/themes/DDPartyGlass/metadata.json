@@ -1,0 +1,15 @@
+{
+  "KPlugin": {
+    "Authors": [
+      {
+        "Name": "DeskDroid"
+      }
+    ],
+    "Description": "Chamfered, rainbow-lit title bars from DeskDroid",
+    "Id": "DDPartyGlass",
+    "License": "GPL-2.0-or-later",
+    "Name": "DD Party Glass",
+    "Version": "1.0"
+  },
+  "X-Plasma-API": "declarativeappletscript"
+}

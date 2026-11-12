@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=DD Party Glass
+Comment=Chamfered, rainbow-lit title bars from DeskDroid
+X-KDE-PluginInfo-Author=DeskDroid
+X-KDE-PluginInfo-Name=DDPartyGlass
+X-KDE-PluginInfo-Version=1.0
+X-KDE-PluginInfo-License=GPL-2.0-or-later
+X-Plasma-API=declarativeappletscript

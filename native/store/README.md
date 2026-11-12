@@ -40,3 +40,12 @@ Ubuntu). `release` in `apps.json` names the current one, and each app's
      store's icon);
    - optionally `$PREFIX/share/metainfo/<id>.metainfo.xml` with a
      `<release version="...">`, the version the store shows.
+
+## Themes
+
+`themes/<id>/` holds a store package that is only data: `share/` (installed
+into `~/.local/share`), `app.json` (id, name, summary, version) and
+`icon.png`. `native/nativedesk/build.sh` zips each one with an `open.txt`, so
+Software's Open button opens Global Theme instead of running a program.
+`themes/dd-party/` is the flat DD Party, made by `theme/dd-party/gen/native.sh`
+(DeskDroid's default is DD Party Glass, in the APK).

@@ -104,6 +104,17 @@ void Backend::dismiss()
 
 void Backend::launch(const QString &id)
 {
+    // A theme has no program: its "open" (open.txt, Store.kt) says what to run.
+    for (const QVariant &a : std::as_const(m_apps)) {
+        const QVariantMap m = a.toMap();
+        if (m.value(QStringLiteral("id")).toString() != id) continue;
+        QStringList cmd = QProcess::splitCommand(m.value(QStringLiteral("open")).toString());
+        if (!cmd.isEmpty()) {
+            const QString program = cmd.takeFirst();
+            QProcess::startDetached(program, cmd, home());
+            return;
+        }
+    }
     QProcess::startDetached(id, {}, home());
 }
 
