@@ -70,3 +70,11 @@ Aurorae, so there apps and window borders are Breeze, in DD Party's colours;
 the Plasma style, icons, colours, editor and terminal colours are the same.
 NativeDesk.kt sets it for new users and, once, for users still on the old
 Breeze Dark default.
+
+GTK programs there get `DD-Party`, Breeze for GTK built in DD Party's
+colours (native/plasma/build-deps.sh). On a Plasma desktop, System Settings
+does the same for Breeze GTK by itself.
+
+Etherium, DeskDroid's browser, gets the look from
+`native/firefox/etherium/chrome/`: its AutoConfig (`theme.js`) registers those
+style sheets at startup, so every profile has them, new ones too.

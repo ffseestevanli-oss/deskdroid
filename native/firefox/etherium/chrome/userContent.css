@@ -1,0 +1,36 @@
+/* DD Party for Etherium (DeskDroid): the new tab page, Home and the
+   browser's own pages in DeskDroid's colours (registered with
+   userChrome.css, see there). */
+
+@-moz-document url("about:home"), url("about:newtab"), url("about:privatebrowsing"), url("about:blank") {
+  :root, body {
+    --newtab-background-color: #07070D !important;
+    --newtab-background-color-secondary: #12121E !important;
+    --newtab-text-primary-color: #F2F2F7 !important;
+    --newtab-primary-action-background: #990045 !important;
+    --newtab-element-hover-color: #1A0F22 !important;
+    --newtab-border-color: #2A2A3D !important;
+    background-color: #07070D !important;
+  }
+  .search-handoff-button, .search-wrapper input, .top-site-outer .tile {
+    border-radius: 0 !important;
+  }
+}
+
+@-moz-document url-prefix("about:") {
+  :root {
+    --in-content-page-background: #07070D !important;
+    --in-content-page-color: #F2F2F7 !important;
+    --in-content-box-background: #10101B !important;
+    --in-content-border-color: #2A2A3D !important;
+    --in-content-primary-button-background: #990045 !important;
+    --in-content-primary-button-background-hover: #B8105A !important;
+    --in-content-primary-button-background-active: #B8105A !important;
+    --color-accent-primary: #FF4D94 !important;
+    --color-accent-primary-hover: #FF6FA8 !important;
+    --color-accent-primary-active: #B8105A !important;
+    --button-border-radius: 0 !important;
+    --border-radius-small: 0 !important;
+    --border-radius-medium: 0 !important;
+  }
+}

@@ -60,6 +60,16 @@ G = {
     "debian": '<path d="M4 8 L12 4 L20 8 V16 L12 20 L4 16 Z M4 8 L12 12 L20 8 M12 12 V20 M8 6 L16 10"/>',
     "palette": '<path d="M12 3.5 A8.5 8.5 0 1 0 12 20.5 C14 20.5 13.5 18 15 17 C16.5 16 20.5 17.5 20.5 12 A8.5 8.5 0 0 0 12 3.5 Z"/><circle cx="8" cy="11" r="1.2" class="f"/><circle cx="11" cy="7.5" r="1.2" class="f"/><circle cx="15.5" cy="8.5" r="1.2" class="f"/>',
     "wine": '<path d="M8 3 H16 L15.5 9 A3.5 3.5 0 0 1 8.5 9 Z M12 12.5 V19 M8.5 20 H15.5"/>',
+    "cap": '<path d="M2.5 9.5 L12 5 L21.5 9.5 L12 14 Z M6.5 11.5 V16 C9 18.5 15 18.5 17.5 16 V11.5 M21.5 9.5 V15"/>',
+    "flask": '<path d="M9.5 3.5 H14.5 M10.5 3.5 V9.5 L5 19 C4.5 20 5 20.5 6 20.5 H18 C19 20.5 19.5 20 19 19 L13.5 9.5 V3.5 M7.5 15 H16.5"/>',
+    "toolbox": '<path d="M3.5 9 H20.5 V19 H3.5 Z M9 9 V6 H15 V9 M3.5 13.5 H20.5 M10.5 12 V15 M13.5 12 V15"/>',
+    "power": '<path d="M12 3.5 V11.5 M7.2 6.5 A7.5 7.5 0 1 0 16.8 6.5"/>',
+    "reboot": '<path d="M19.5 12 A7.5 7.5 0 1 1 16.8 6.2 M17.5 2.8 V6.8 H13.5"/>',
+    "moon": '<path d="M15.5 3.8 A8.5 8.5 0 1 0 20.2 15.5 A7 7 0 0 1 15.5 3.8 Z"/>',
+    "logout": '<path d="M14 4 H20 V20 H14 M4 12 H14 M8 8 L4 12 L8 16"/>',
+    "clock": '<circle cx="12" cy="12" r="8.5"/><path d="M12 7 V12 L15.5 14"/>',
+    "grid": '<path d="M4 4 H10 V10 H4 Z M14 4 H20 V10 H14 Z M4 14 H10 V20 H4 Z M14 14 H20 V20 H14 Z"/>',
+    "compass": '<circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5 L13.2 13.2 L8.5 15.5 L10.8 10.8 Z"/>',
 }
 
 
@@ -98,6 +108,16 @@ def tile(color, g, bar=None):
          f'<path d="M4 14 L14 4 H60 V50 L50 60 H4 Z" fill="{CARD}" stroke="{BORDER}" stroke-width="2" stroke-linejoin="round"/>'
          f'<path d="M5 52 H58 L54 56 V56 L52 58 H5 Z" fill="{fill_bar}"/>'
          + glyph(g, 32, 29.5, 1.35, color, 2.0))
+    return doc(s)
+
+
+def start_icon():
+    """The application menu button: the tile shape in #990045 with a menu key's three lines."""
+    s = (f'<defs><linearGradient id="rb" x1="0" x2="1">{rainbow_stops()}</linearGradient></defs>'
+         f'<path d="M4 14 L14 4 H60 V50 L50 60 H4 Z" fill="{MAGENTA}" stroke="{MAGENTA_HI}" stroke-width="2" stroke-linejoin="round"/>'
+         f'<path d="M5 52 H58 L54 56 V56 L52 58 H5 Z" fill="url(#rb)"/>'
+         f'<g stroke="{TEXT}" stroke-width="5" stroke-linecap="round">'
+         '<path d="M17 18 H47"/><path d="M17 29 H47"/><path d="M17 40 H47"/></g>')
     return doc(s)
 
 
@@ -199,11 +219,25 @@ APPS = {
     "preferences-desktop-theme-global": (PINK, "palette"), "preferences-desktop-color": (PINK, "palette"),
     "preferences-desktop-icons": (YELLOW, "star"), "preferences-desktop-wallpaper": (PINK, "image"),
     "org.kde.plasma.search": (CYAN, "search"), "system-search": (CYAN, "search"),
-    "wine": (ORANGE, "wine"), 
+    "wine": (ORANGE, "wine"),
+    # Application menu categories (Kickoff asks for their -symbolic names,
+    # which fall back to these within DD-Party)
+    "applications-education": (YELLOW, "cap"), "applications-graphics": (PINK, "palette"),
+    "applications-internet": (CYAN, "globe"), "applications-network": (CYAN, "globe"),
+    "applications-multimedia": (RED, "play"), "applications-office": (CYAN, "documents"),
+    "applications-science": (GREEN, "flask"), "applications-system": (PURPLE, "computer"),
+    "applications-utilities": (ORANGE, "toolbox"), "applications-toys": (YELLOW, "star"),
+    "help-about": (CYAN, "info"), "applications-all": (PINK, "grid"), "compass": (CYAN, "compass"),
+    # Recent files and places (Dolphin, Kickoff)
+    "document-open-recent": (PURPLE, "clock"), "folder-open-recent": (PURPLE, "clock"), "view-history": (PURPLE, "clock"),
+    # Session (Kickoff's footer, the logout screen)
+    "system-shutdown": (RED, "power"), "system-reboot": (ORANGE, "reboot"), "system-suspend": (PURPLE, "moon"),
+    "system-log-out": (CYAN, "logout"), "system-lock-screen": (YELLOW, "lock"),
 }
 
-LOGO_NAMES = ["start-here", "start-here-kde", "start-here-kde-plasma", "start-here-kde-symbolic", "distributor-logo",
-              "org.deskdroid.app", "deskdroid"]
+START_NAMES = ["start-here", "start-here-kde", "start-here-kde-plasma", "start-here-kde-symbolic", "start-here-symbolic",
+               "distributor-logo"]
+LOGO_NAMES = ["org.deskdroid.app", "deskdroid"]
 
 
 def write_set(base, d, fn):
@@ -228,10 +262,14 @@ if __name__ == "__main__":
     write_set(f"{out}/scalable/mimetypes", MIMES, filetype)
     write_set(f"{out}/scalable/devices", DEVICES, tile)
     write_set(f"{out}/scalable/apps", APPS, tile)
-    open(f"{out}/scalable/apps/start-here-kde.svg", "w").write(logo(logo_png))
-    for n in LOGO_NAMES:
+    open(f"{out}/scalable/apps/start-here-kde.svg", "w").write(start_icon())
+    for n in START_NAMES:
         if n != "start-here-kde":
             os.symlink("start-here-kde.svg", f"{out}/scalable/apps/{n}.svg")
+    open(f"{out}/scalable/apps/deskdroid.svg", "w").write(logo(logo_png))
+    for n in LOGO_NAMES:
+        if n != "deskdroid":
+            os.symlink("deskdroid.svg", f"{out}/scalable/apps/{n}.svg")
     os.makedirs(f"{out}/scalable/places", exist_ok=True)
     os.symlink("../apps/start-here-kde.svg", f"{out}/scalable/places/start-here-kde.svg")
     os.symlink("../apps/start-here-kde.svg", f"{out}/scalable/places/distributor-logo.svg")

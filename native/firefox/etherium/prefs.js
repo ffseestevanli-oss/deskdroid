@@ -173,3 +173,10 @@ pref("browser.attribution.enabled", false);
 // Wayland Firefox paces scrolling by the compositor's frame callbacks, and
 // stalls when they pause. Its own timer instead.
 pref("widget.wayland.vsync.enabled", false);
+
+// ---- DD Party: dark like the rest of DeskDroid -----------------------------
+// The browser's own pages and toolbars dark, and sites that offer a dark
+// version show it (Settings › General › Website appearance changes it).
+pref("browser.theme.toolbar-theme", 0);
+pref("browser.theme.content-theme", 0);
+pref("layout.css.prefers-color-scheme.content-override", 0);

@@ -780,14 +780,20 @@ build_breeze_gtk() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/breeze-gtk-$PLASMA_VERSION.tar.xz" "breeze-gtk-$PLASMA_VERSION.tar.xz")"
   command -v sassc >/dev/null && python3 -c "import cairo" 2>/dev/null || sudo apt-get install -y -q sassc python3-cairo >/dev/null
   sed 's|@Python3_EXECUTABLE@|python3|g' "$s/src/build_theme.sh.cmake" > "$s/src/build_theme.sh"
-  rm -rf "$PREFIX/share/themes/Breeze" "$PREFIX/share/themes/Breeze-Dark"
+  rm -rf "$PREFIX/share/themes/Breeze" "$PREFIX/share/themes/Breeze-Dark" "$PREFIX/share/themes/DD-Party"
   (cd "$s/src" && sh build_theme.sh -c BreezeDark -t "$PREFIX/share/themes/Breeze-Dark" -r "$PREFIX/share/color-schemes" \
     && sh build_theme.sh -c BreezeLight -t "$PREFIX/share/themes/Breeze" -r "$PREFIX/share/color-schemes")
+  # DD Party, DeskDroid's default look: Breeze for GTK in its colours, the
+  # same way (its colour scheme from native/plasma/shell/ddparty).
+  (cd "$s/src" && sh build_theme.sh -c DDParty -t "$PREFIX/share/themes/DD-Party" -r "$HERE/shell/ddparty/color-schemes")
+  cp "$s/src/settings.ini" "$PREFIX/share/themes/DD-Party/settings.ini"
+  test -s "$PREFIX/share/themes/DD-Party/gtk-3.0/gtk.css"
   cp "$s/src/gtk-dark-3.0.css" "$PREFIX/share/themes/Breeze/gtk-3.0/gtk-dark.css"
   cp "$s/src/settings.ini" "$PREFIX/share/themes/Breeze/settings.ini"
   cp "$s/src/settings.ini" "$PREFIX/share/themes/Breeze-Dark/settings.ini"
   test -s "$PREFIX/share/themes/Breeze-Dark/gtk-3.0/gtk.css"
 }
+inputs_breeze_gtk() { cat "$HERE/shell/ddparty/color-schemes/DDParty.colors"; }
 build_breeze_icons() {
   local s d; s="$(kf_src breeze-icons)"; d="$(mktemp -d)"
   sed -i -E 's/^add_subdirectory\((autotests|src)\)/# &/' "$s/CMakeLists.txt"

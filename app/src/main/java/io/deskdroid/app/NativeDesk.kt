@@ -1537,9 +1537,12 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val scheme = (Regex("(?m)^ColorScheme=(.*)$").find(if (globals.exists()) globals.readText() else "")
                 ?: Regex("(?m)^ColorScheme=(.*)$").find(defaults))?.groupValues?.get(1).orEmpty()
             val light = scheme.contains("Light", ignoreCase = true) || scheme == "Breeze"
+            // DD Party's own GTK theme (Breeze for GTK in its colours, build-deps.sh)
+            // and icons with its colour scheme.
+            val party = scheme == "DDParty" && File(data, "share/themes/DD-Party/gtk-3.0/gtk.css").exists()
             gtk.parentFile?.mkdirs()
-            gtk.writeText("$GTK_MARK\n[Settings]\ngtk-theme-name=${if (light) "Breeze" else "Breeze-Dark"}\n" +
-                "gtk-icon-theme-name=${if (light) "breeze" else "breeze-dark"}\n" +
+            gtk.writeText("$GTK_MARK\n[Settings]\ngtk-theme-name=${if (party) "DD-Party" else if (light) "Breeze" else "Breeze-Dark"}\n" +
+                "gtk-icon-theme-name=${if (party) PARTY_ICONS else if (light) "breeze" else "breeze-dark"}\n" +
                 "gtk-application-prefer-dark-theme=${!light}\ngtk-cursor-theme-name=breeze_cursors\n")
         }
     }

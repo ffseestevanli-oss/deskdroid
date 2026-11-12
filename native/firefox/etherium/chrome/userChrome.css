@@ -1,0 +1,141 @@
+/* DD Party for Etherium (DeskDroid): the browser in DeskDroid's own look,
+   near-black with #990045 magenta, a rainbow strip and chamfered corners
+   (theme/dd-party). Etherium's AutoConfig (theme.js, settings.sh) registers
+   it as a user style sheet at startup, so no profile setup is needed; it
+   works as a profile's chrome/userChrome.css too. Scoped to the browser's
+   own windows, since a registered sheet applies to web pages as well. */
+
+@-moz-document url-prefix("chrome://") {
+  :root {
+    --dd-bg: #07070D;
+    --dd-surface: #12121E;
+    --dd-panel: #0C0C16;
+    --dd-card: #10101B;
+    --dd-card-on: #1A0F22;
+    --dd-border: #2A2A3D;
+    --dd-text: #F2F2F7;
+    --dd-muted: #A6A6C0;
+    --dd-magenta: #990045;
+    --dd-magenta-hi: #B8105A;
+    --dd-magenta-text: #FF4D94;
+    --dd-rainbow: linear-gradient(90deg, #FF3B5C, #FF9F1C, #FFE14D, #3DFF8B, #2EC5FF, #8B5CFF, #FF4FD8);
+    --dd-cut: 8px;
+
+    /* Firefox's own colours */
+    --toolbox-bgcolor: var(--dd-panel) !important;
+    --toolbox-bgcolor-inactive: var(--dd-bg) !important;
+    --toolbox-textcolor: var(--dd-muted) !important;
+    --toolbox-textcolor-inactive: var(--dd-muted) !important;
+    --toolbar-bgcolor: var(--dd-surface) !important;
+    --toolbar-color: var(--dd-text) !important;
+    --tab-selected-bgcolor: var(--dd-surface) !important;
+    --tab-selected-textcolor: var(--dd-text) !important;
+    --tab-hover-background-color: var(--dd-card-on) !important;
+    --tab-loading-fill: var(--dd-magenta-text) !important;
+    --tab-border-radius: 0 !important;
+    --toolbar-field-background-color: var(--dd-bg) !important;
+    --toolbar-field-focus-background-color: var(--dd-bg) !important;
+    --toolbar-field-color: var(--dd-text) !important;
+    --toolbar-field-focus-color: var(--dd-text) !important;
+    --toolbar-field-border-color: var(--dd-border) !important;
+    --toolbar-field-focus-border-color: var(--dd-magenta-text) !important;
+    --toolbarbutton-border-radius: 0 !important;
+    --toolbarbutton-hover-background: var(--dd-card-on) !important;
+    --toolbarbutton-active-background: var(--dd-magenta) !important;
+    --focus-outline-color: var(--dd-magenta-text) !important;
+    --arrowpanel-background: var(--dd-card) !important;
+    --arrowpanel-color: var(--dd-text) !important;
+    --arrowpanel-border-color: var(--dd-border) !important;
+    --arrowpanel-border-radius: 0 !important;
+    --panel-item-hover-bgcolor: var(--dd-card-on) !important;
+    --urlbarView-highlight-background: var(--dd-magenta) !important;
+    --urlbarView-highlight-color: var(--dd-text) !important;
+    --urlbarView-hover-background: var(--dd-card-on) !important;
+    --urlbar-box-bgcolor: var(--dd-card) !important;
+    --urlbar-box-hover-bgcolor: var(--dd-card-on) !important;
+    --urlbar-box-active-bgcolor: var(--dd-magenta) !important;
+    --sidebar-background-color: var(--dd-panel) !important;
+    --sidebar-text-color: var(--dd-text) !important;
+    --sidebar-border-color: var(--dd-border) !important;
+    --chrome-content-separator-color: var(--dd-border) !important;
+    --color-accent-primary: var(--dd-magenta-text) !important;
+    --color-accent-primary-hover: #FF6FA8 !important;
+    --color-accent-primary-active: var(--dd-magenta-hi) !important;
+    --button-primary-bgcolor: var(--dd-magenta) !important;
+    --button-primary-hover-bgcolor: var(--dd-magenta-hi) !important;
+    --button-primary-active-bgcolor: var(--dd-magenta-hi) !important;
+    --button-primary-color: var(--dd-text) !important;
+    --button-border-radius: 0 !important;
+    --border-radius-small: 0 !important;
+    --border-radius-medium: 0 !important;
+    --input-border-radius: 0 !important;
+    --lwt-accent-color: var(--dd-panel) !important;
+    --lwt-text-color: var(--dd-muted) !important;
+    --lwt-selected-tab-background-color: var(--dd-surface) !important;
+  }
+
+  /* The rainbow strip along the top, as on every DeskDroid screen */
+  #navigator-toolbox {
+    border-top: 3px solid transparent !important;
+    border-image: var(--dd-rainbow) 1 !important;
+    border-bottom-color: var(--dd-border) !important;
+  }
+
+  /* Tabs: chamfered top-left and bottom-right; the open one with a rainbow underline */
+  .tab-background {
+    border-radius: 0 !important;
+    clip-path: polygon(var(--dd-cut) 0, 100% 0, 100% calc(100% - var(--dd-cut)), calc(100% - var(--dd-cut)) 100%, 0 100%, 0 var(--dd-cut));
+  }
+  .tab-background:is([selected], [multiselected]) {
+    background-color: var(--dd-surface) !important;
+    background-image: var(--dd-rainbow) !important;
+    background-size: 100% 2px !important;
+    background-position: bottom !important;
+    background-repeat: no-repeat !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  .tabbrowser-tab:not([selected]):hover .tab-background {
+    background-color: var(--dd-card-on) !important;
+  }
+  .tab-label { font-weight: 500; }
+
+  /* Address bar and search fields: chamfered, magenta when focused */
+  #urlbar-background, #searchbar, .searchbar-textbox, #urlbar[focused] #urlbar-background {
+    border-radius: 0 !important;
+  }
+  #urlbar:not([breakout-extend]) #urlbar-background {
+    clip-path: polygon(var(--dd-cut) 0, 100% 0, 100% calc(100% - var(--dd-cut)), calc(100% - var(--dd-cut)) 100%, 0 100%, 0 var(--dd-cut));
+  }
+  #urlbar[focused] #urlbar-background {
+    outline: 1px solid var(--dd-magenta-text) !important;
+    outline-offset: -1px !important;
+  }
+
+  /* Buttons */
+  toolbarbutton, .toolbarbutton-icon, .toolbarbutton-badge-stack, .toolbarbutton-text {
+    border-radius: 0 !important;
+  }
+
+  /* Menus and panels: square, with the rainbow strip on top */
+  menupopup, panel {
+    --panel-border-radius: 0 !important;
+    --panel-background: var(--dd-card) !important;
+    --panel-color: var(--dd-text) !important;
+    --panel-border-color: var(--dd-border) !important;
+  }
+  menupopup > menuitem, menupopup > menu {
+    border-radius: 0 !important;
+  }
+  menupopup > menuitem[_moz-menuactive], menupopup > menu[_moz-menuactive] {
+    background-color: var(--dd-magenta) !important;
+    color: var(--dd-text) !important;
+  }
+  .panel-arrowcontent, panelview, .panel-viewstack {
+    border-radius: 0 !important;
+  }
+  #appMenu-popup panelview, #unified-extensions-panel panelview, #downloadsPanel panelview {
+    border-top: 3px solid transparent;
+    border-image: var(--dd-rainbow) 1;
+  }
+}
