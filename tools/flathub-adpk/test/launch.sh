@@ -7,4 +7,4 @@ P="$F/store/apps/$id/program"
 export HOME="$F" DDAPP_RUN="$P/run.sh" DDAPP_PROGRAM="$P"
 export DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$L/qemu-loader.sh" DDFLATPAK_LOADER="$L/qemu-loader.sh"
 export DDAPP_SETUP_CMD=${DDAPP_HOST:?build ddapp.c for this machine and set DDAPP_HOST}
-exec /system/bin/sh "$P/run.sh" "$@"
+cd "$F/home" && exec /system/bin/sh "$P/run.sh" "$@"

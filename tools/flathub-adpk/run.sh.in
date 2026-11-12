@@ -92,6 +92,10 @@ for f in "$P/libdirs.txt" "$S/$RTPKG/program/libdirs.txt"; do
     case "$d" in APP:*) rpaths="$rpaths:$APP/${d#APP:}" ;; RT:*) rpaths="$rpaths:$RT/${d#RT:}" ;; esac
   done < "$f"
 done
+# LD_LIBRARY_PATH from the app's [Environment] (Audacity's /app/lib/audacity).
+for d in $(sed -n '/^\[Environment\]/,/^\[/{s/^LD_LIBRARY_PATH=//p}' "$P/metadata" | tr ':' ' '); do
+  case "$d" in /app/*) rpaths="$rpaths:$APP/${d#/app/}" ;; /usr/*) rpaths="$rpaths:$RT/${d#/usr/}" ;; esac
+done
 export DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$APP/lib$rpaths:$RT/lib/$TRIPLE:$RT/lib:$GL/lib:$CX/lib"
 export DDFLATPAK_LIBPATH="$DDMASK_GLIBC_LD_LIBRARY_PATH"
 # The desktop's own (bionic) Qt and KDE settings would point the app's Qt at
@@ -107,13 +111,17 @@ export XDG_DATA_HOME="$h/data" XDG_CONFIG_HOME="$h/config" XDG_CACHE_HOME="$h/ca
 mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
 export FLATPAK_ID="$FPID" LOCPATH="$RT/lib/locale" LANG="${LANG:-C.UTF-8}"
 export GST_PLUGIN_SYSTEM_PATH=/app/lib/gstreamer-1.0:/usr/lib/extensions/gstreamer-1.0:/usr/lib/$TRIPLE/gstreamer-1.0
-# [Environment] from the app's metadata.
-envs="$(sed -n '/^\[Environment\]/,/^\[/{/^[A-Za-z_][A-Za-z0-9_]*=/p}' "$meta")"
-[ -n "$envs" ] && while IFS= read -r kv; do
-  case "${kv%%=*}" in LD_LIBRARY_PATH|LD_PRELOAD|PATH) ;; *) export "$kv" ;; esac
-done <<ENVS
+# [Environment] from the runtime's metadata (QT_PLUGIN_PATH=/app/lib/plugins...),
+# then the app's ("KEY = value" or "KEY=value").
+for m in "$S/$RTPKG/program/metadata" "$meta"; do
+  envs="$(sed -n '/^\[Environment\]/,/^\[/{s/^\([A-Za-z_][A-Za-z0-9_]*\) *= */\1=/p}' "$m")"
+  [ -n "$envs" ] || continue
+  while IFS= read -r kv; do
+    case "${kv%%=*}" in LD_LIBRARY_PATH|LD_PRELOAD|PATH) ;; *) export "$kv" ;; esac
+  done <<ENVS
 $envs
 ENVS
+done
 echo "$SID: starting /app/bin/$cmd $*" >&2
 # The runtime's sh starts the command, so ddflatpak handles it like any
 # program the app starts (a script, zypak, an ELF program).
