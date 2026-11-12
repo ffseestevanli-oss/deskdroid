@@ -56,6 +56,70 @@ static int sashaMain(int argc, char **argv)
     return tn_host_main(argc, argv, reinterpret_cast<const char *>(sashaQml), sizeof sashaQml);
 }''')
 PY
+# Audio diagnostics in DeskDroid's log: the audio outputs Qt sees, a short
+# test of Qt's audio output on its own (silence), and Qt Multimedia's debug
+# messages (QtHost turns them on; DeskDroid's handler drops debug ones).
+cat >> "$w/entry.cpp" <<'CPP'
+#include <QAudioDevice>
+#include <QAudioFormat>
+#include <QAudioSink>
+#include <QCoreApplication>
+#include <QIODevice>
+#include <QMediaDevices>
+#include <QTimer>
+#include <cstdio>
+#include <cstring>
+static QtMessageHandler sashaPreviousHandler = nullptr;
+static int sashaDebugLines = 0;
+static void sashaMessages(QtMsgType type, const QMessageLogContext &context, const QString &message)
+{
+    if (type == QtDebugMsg && context.category && strncmp(context.category, "qt.multimedia", 13) == 0) {
+        if (sashaDebugLines++ < 600) {
+            fprintf(stdout, "debug: %s: %s\n", context.category, qPrintable(message));
+            fflush(stdout);
+        }
+        return;
+    }
+    if (sashaPreviousHandler)
+        sashaPreviousHandler(type, context, message);
+}
+static void sashaAudioDiagnostics()
+{
+    QTimer::singleShot(0, qApp, [] {
+        sashaPreviousHandler = qInstallMessageHandler(sashaMessages);
+        const QList<QAudioDevice> outputs = QMediaDevices::audioOutputs();
+        const QAudioDevice device = QMediaDevices::defaultAudioOutput();
+        qInfo("sasha audio: %d outputs, default \"%s\" (id %s)", int(outputs.size()),
+              qPrintable(device.description()), device.id().constData());
+        for (const QAudioDevice &d : outputs)
+            qInfo("sasha audio:   output \"%s\" (id %s)", qPrintable(d.description()), d.id().constData());
+        QAudioFormat format;
+        format.setSampleRate(48000);
+        format.setChannelCount(2);
+        format.setSampleFormat(QAudioFormat::Float);
+        auto *sink = new QAudioSink(device, format, qApp);
+        QObject::connect(sink, &QAudioSink::stateChanged, qApp, [sink](QAudio::State state) {
+            qInfo("sasha audio: test output state %d, error %d", int(state), int(sink->error()));
+        });
+        QIODevice *io = sink->start();
+        if (!io) {
+            qWarning("sasha audio: test output didn't start, error %d", int(sink->error()));
+            return;
+        }
+        const QByteArray silence(format.bytesForDuration(300000), 0);
+        const qint64 written = io->write(silence);
+        qInfo("sasha audio: test output started: state %d, buffer %lld, free %lld, wrote %lld",
+              int(sink->state()), qint64(sink->bufferSize()), qint64(sink->bytesFree()), written);
+        QTimer::singleShot(1500, sink, [sink] {
+            qInfo("sasha audio: test output after 1.5 s: state %d, error %d, played %lld us, free %lld",
+                  int(sink->state()), int(sink->error()), qint64(sink->processedUSecs()), qint64(sink->bytesFree()));
+            sink->stop();
+            sink->deleteLater();
+        });
+    });
+}
+Q_COREAPP_STARTUP_FUNCTION(sashaAudioDiagnostics)
+CPP
 entry="$(dirname "$0")/../../plasma/kwin-nativedesk/qthost_entry.cpp"
 sed -e 's/args.push_back("kwin_wayland")/args.push_back("sasha")/' -e 's/return kwinMain(/return sashaMain(/' "$entry" >> "$w/entry.cpp"
 if grep -q -e kwinMain -e '"kwin_wayland"' "$w/entry.cpp"; then echo "::error::QtHost entry not adapted"; exit 1; fi
