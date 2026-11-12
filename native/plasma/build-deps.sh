@@ -307,6 +307,10 @@ qt_find_args() {
 }
 qt_module() { # <module> [cmake options...]: one module on top of qtbase
   local s; s="$(qt_src "$1")"; shift
+  qt_module_in "$s" "$@"
+}
+qt_module_in() { # <unpacked source> [cmake options...]: qt_module on a source a recipe changed first
+  local s="$1"; shift
   mkdir -p "$s/_android"
   (cd "$s/_android" && PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig" \
     "$PREFIX/bin/qt-configure-module" "$s" -- $(qt_find_args) "$@")
@@ -346,17 +350,21 @@ build_qtdeclarative() { qt_module qtdeclarative; }
 build_qtsvg() { qt_module qtsvg; }
 build_qt5compat() { qt_module qt5compat; }
 build_qtsensors() { qt_module qtsensors; }
-# Gwenview plays videos with Qt Multimedia (Android's own media backend).
-# FFmpeg for Qt Multimedia's FFmpeg backend, which Sasha plays music with:
-# audio decoders (and cover art's), no programs, no network, no encoders.
+# FFmpeg for Qt Multimedia's FFmpeg backend, the only one desktop programs
+# have (Sasha's music, Gwenview's videos): nothing goes through Android's
+# media service, so the desktop plays on its own, beside Android's apps.
+# Software decoders for common audio and video, no programs, no network, no
+# encoders, no MediaCodec (that is Android's media service too).
 # Static, in a folder of its own: it goes into Qt's FFmpeg plugin, and other
 # recipes' pkg-config doesn't find it (GEGL would pick it up).
 build_ffmpeg() {
   local s; s="$(unpack https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n7.1.1.tar.gz ffmpeg-7.1.1.tar.gz)"
   local dec="mp1,mp1float,mp2,mp2float,mp3,mp3float,mp3adu,mp3adufloat,mp3on4,mp3on4float,aac,aac_fixed,aac_latm"
   dec+=",alac,flac,vorbis,opus,wavpack,ape,tta,wmav1,wmav2,wmapro,wmalossless,ac3,eac3,dca,truehd,mlp"
-  dec+=",mpc7,mpc8,pcm_*,adpcm_*,dsd_*,mjpeg,png"
+  dec+=",mpc7,mpc8,pcm_*,adpcm_*,dsd_*,mjpeg,png,gif,webp"
+  dec+=",h264,hevc,vp8,vp9,mpeg4,mpeg2video,mpeg1video,h263,h263p,msmpeg4v1,msmpeg4v2,msmpeg4v3,wmv1,wmv2,wmv3,vc1,theora,flv"
   local dmx="mp3,aac,flac,ogg,mov,matroska,wav,w64,aiff,ape,wv,tta,asf,ac3,eac3,dts,truehd,mlp,dsf,caf,au,mpc,mpc8"
+  dmx+=",avi,mpegps,mpegts,flv,h264,hevc,m4v,mpegvideo,ivf"
   # Hidden symbols: the aarch64 assembly addresses FFmpeg's tables PC-relative,
   # which lld refuses against an exportable symbol inside Qt's shared plugin.
   rm -rf "$PREFIX/ffmpeg"
@@ -367,17 +375,28 @@ build_ffmpeg() {
     --disable-avdevice --disable-avfilter --disable-postproc --disable-network \
     --disable-autodetect --enable-pthreads --enable-zlib --enable-jni \
     --disable-everything --enable-decoder="$dec" --enable-demuxer="$dmx" \
-    --enable-parser=mpegaudio,aac,aac_latm,flac,vorbis,opus,ac3,dca,mlp,mjpeg,png \
+    --enable-parser=mpegaudio,aac,aac_latm,flac,vorbis,opus,ac3,dca,mlp,mjpeg,png,gif,webp,h264,hevc,vp8,vp9,mpeg4video,mpegvideo,h263,vc1 \
     --enable-protocol=file,pipe && make -j"$JOBS" && make install)
   test -e "$PREFIX/ffmpeg/lib/libavcodec.a"
   test -e "$PREFIX/ffmpeg/lib/libswscale.a"
 }
-# Qt Multimedia with both backends: Android's (MediaPlayer, the default for
-# apps, Gwenview's videos) and FFmpeg's (Sasha), with FFmpeg linked in.
+# Qt Multimedia with FFmpeg's backend only, FFmpeg linked in. Android's
+# backend (MediaPlayer, Android's media service) isn't built, and its plugin
+# from older builds goes. Qt's audio output (OpenSL ES) still asks Android's
+# AudioManager to switch the phone's audio mode and routing for each sound
+# (QtAudioDeviceManager.setAudioOutput): that would change calls and
+# Android's apps too, so it only notes the device; Android routes the sound.
 build_qtmultimedia() {
-  qt_module qtmultimedia -DFEATURE_ffmpeg=ON -DFFMPEG_DIR="$PREFIX/ffmpeg" \
+  local s; s="$(qt_src qtmultimedia)"
+  local j="$s/src/android/jar/src/org/qtproject/qt/android/multimedia/QtAudioDeviceManager.java"
+  perl -0pi -e 's/(private static void setAudioOutput\(AudioDeviceInfo deviceInfo,[^)]*\)\s*\{).*?(\n\s*m_currentOutputId = deviceInfo\.getId\(\);)/$1\n        \/\/ DeskDroid: the desktop leaves the phone audio mode and routing alone.$2/s' "$j"
+  grep -q "DeskDroid: the desktop leaves" "$j"
+  ! grep -q "m_audioManager.setMode(mode)" "$j"
+  rm -f "$PREFIX"/plugins/multimedia/*androidmediaplugin*
+  qt_module_in "$s" -DFEATURE_ffmpeg=ON -DFFMPEG_DIR="$PREFIX/ffmpeg" -DFEATURE_native_android_backend=OFF \
     -DFEATURE_spatialaudio=OFF -DFEATURE_spatialaudio_quick3d=OFF
   test -n "$(find "$PREFIX/plugins" -name '*ffmpegmediaplugin*.so' | head -1)"
+  test -z "$(find "$PREFIX/plugins" -name '*androidmediaplugin*' | head -1)"
 }
 inputs_qtmultimedia() { declare -f build_ffmpeg; }
 # Text to speech, which KTextEditor needs (its "Say" actions); Qt Speech
