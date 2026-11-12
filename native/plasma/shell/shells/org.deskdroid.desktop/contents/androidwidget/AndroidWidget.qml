@@ -1,7 +1,12 @@
 // An Android widget on the desktop. Each of the phone's widgets is a plasmoid
 // of its own (org.deskdroid.android.*, written by AndroidWidgets.kt into
-// files/.local/share/plasma/plasmoids), whose main.qml is just this with the
-// widget's provider filled in.
+// files/.local/share/plasma/plasmoids), whose main.qml is a PlasmoidItem with
+// this as its full representation and the widget's provider filled in.
+//
+// This file must not use Plasmoid: it lives outside the applet's package, so
+// its QML context isn't the applet's and the attached Plasmoid object can't be
+// created here ("Could not create attached properties object 'Plasma::Applet'").
+// main.qml passes in the token and calls removed() instead.
 //
 // The phone runs the widget (AppWidgetHost) and draws it at this plasmoid's
 // size into files/android-widgets/<token>.png, with its state in
@@ -11,13 +16,11 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
-import org.kde.plasma.plasmoid
-import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.plasma.private.kicker as Kicker
 import org.kde.kirigami as Kirigami
 
-PlasmoidItem {
+Item {
     id: root
 
     // Filled in by the generated main.qml.
@@ -32,20 +35,18 @@ PlasmoidItem {
         var i = here.indexOf("/kwin/share/");
         return i < 0 ? "" : here.substring(0, i) + "/android-widgets";
     }
-    readonly property string token: Plasmoid.configuration.token || ""
+    property string token            // main.qml: Plasmoid.configuration.token
+    signal tokenMade(string token)   // main.qml saves it in the plasmoid's settings
     property var info: ({})          // <token>.json: state, serial, w, h, msg
     readonly property string widgetState: info.state || ""
     readonly property real dpr: Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
     readonly property int pxWidth: Math.round(width * dpr)
     readonly property int pxHeight: Math.round(height * dpr)
 
-    Plasmoid.title: label
-    Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground // Android widgets draw their own
-    preferredRepresentation: fullRepresentation
-    switchWidth: 0
-    switchHeight: 0
-    toolTipMainText: label
-    toolTipSubText: "Android widget"
+    Layout.preferredWidth: defaultWidth
+    Layout.preferredHeight: defaultHeight
+    Layout.minimumWidth: Kirigami.Units.gridUnit * 3
+    Layout.minimumHeight: Kirigami.Units.gridUnit * 2
 
     Kicker.ProcessRunner { id: runner }
     function send(what) { runner.runCommand("android-open deskdroid:widget:" + what) }
@@ -56,10 +57,7 @@ PlasmoidItem {
     }
 
     Component.onCompleted: {
-        if (!token) {
-            Plasmoid.configuration.token = Date.now().toString(36) + Math.floor(Math.random() * 0x7fffffff).toString(36);
-            if (Plasmoid.configuration.writeConfig) Plasmoid.configuration.writeConfig();
-        }
+        if (!token) root.tokenMade(Date.now().toString(36) + Math.floor(Math.random() * 0x7fffffff).toString(36));
         announceTimer.restart();
     }
     onPxWidthChanged: announceTimer.restart()
@@ -75,13 +73,10 @@ PlasmoidItem {
 
     // Removed from the desktop: the phone lets the widget go (a minute later,
     // so Undo can still bring it back).
-    Connections {
-        target: Plasmoid
-        function onDestroyedChanged(destroyed) {
-            if (!root.token) return;
-            root.send((destroyed ? "remove:" : "keep:") + root.token);
-            if (!destroyed) root.announce();
-        }
+    function removed(destroyed) {
+        if (!root.token) return;
+        root.send((destroyed ? "remove:" : "keep:") + root.token);
+        if (!destroyed) root.announce();
     }
 
     function readState() {
@@ -105,12 +100,9 @@ PlasmoidItem {
         onTriggered: root.readState()
     }
 
-    fullRepresentation: Item {
+    Item {
         id: full
-        Layout.preferredWidth: root.defaultWidth
-        Layout.preferredHeight: root.defaultHeight
-        Layout.minimumWidth: Kirigami.Units.gridUnit * 3
-        Layout.minimumHeight: Kirigami.Units.gridUnit * 2
+        anchors.fill: parent
 
         // Two images: the next frame loads in the hidden one and only then
         // takes the place of the shown one, so updates never flash.

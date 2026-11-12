@@ -591,16 +591,41 @@ object AndroidWidgets {
                         "  <kcfgfile name=\"\"/>\n  <group name=\"General\">\n" +
                         "    <entry name=\"token\" type=\"String\"><default></default></entry>\n" +
                         "  </group>\n</kcfg>\n")
+                    // The PlasmoidItem (and everything using Plasmoid) has to be in this
+                    // file, the applet's own: AndroidWidget.qml, outside the package,
+                    // can't reach the applet. It does the rest.
+                    val q = JSONObject.quote(name)
                     writeIfChanged(File(pkg, "contents/ui/main.qml"),
                         "// Written by DeskDroid (AndroidWidgets.kt): ${comp.flattenToShortString()}\n" +
                         "import QtQuick\n" +
+                        "import org.kde.plasma.plasmoid\n" +
+                        "import org.kde.plasma.core as PlasmaCore\n" +
                         "import ${JSONObject.quote("file://" + base.path)} as DeskDroid\n\n" +
-                        "DeskDroid.AndroidWidget {\n" +
-                        "    provider: ${JSONObject.quote(comp.flattenToString())}\n" +
-                        "    profile: $serial\n" +
-                        "    label: ${JSONObject.quote(name)}\n" +
-                        "    defaultWidth: $dw\n" +
-                        "    defaultHeight: $dh\n" +
+                        "PlasmoidItem {\n" +
+                        "    Plasmoid.title: $q\n" +
+                        "    Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground // Android widgets draw their own\n" +
+                        "    preferredRepresentation: fullRepresentation\n" +
+                        "    switchWidth: 0\n" +
+                        "    switchHeight: 0\n" +
+                        "    toolTipMainText: $q\n" +
+                        "    toolTipSubText: \"Android widget\"\n\n" +
+                        "    fullRepresentation: DeskDroid.AndroidWidget {\n" +
+                        "        id: widget\n" +
+                        "        provider: ${JSONObject.quote(comp.flattenToString())}\n" +
+                        "        profile: $serial\n" +
+                        "        label: $q\n" +
+                        "        defaultWidth: $dw\n" +
+                        "        defaultHeight: $dh\n" +
+                        "        token: Plasmoid.configuration.token || \"\"\n" +
+                        "        onTokenMade: t => {\n" +
+                        "            Plasmoid.configuration.token = t;\n" +
+                        "            if (Plasmoid.configuration.writeConfig) Plasmoid.configuration.writeConfig();\n" +
+                        "        }\n" +
+                        "        Connections {\n" +
+                        "            target: Plasmoid\n" +
+                        "            function onDestroyedChanged(destroyed) { widget.removed(destroyed) }\n" +
+                        "        }\n" +
+                        "    }\n" +
                         "}\n")
                     keep += id
                     list += JSONObject().put("plugin", id).put("name", name).put("description", "$appLabel$where")
