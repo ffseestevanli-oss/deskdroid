@@ -20,7 +20,7 @@ def deco_frame(active):
     if active:
         f.add([(x, y) for x, y in f.outline(-6)], MAGENTA, 0.10)  # faint magenta glow
     f.add(f.outline(), "#5A1A48" if active else BORDER, glass(1.0, 0.85))
-    f.add(f.outline(1), HEADER, glass(1.0, 0.40 if active else 0.32))
+    f.add(f.outline(1), HEADER, glass(1.0, 0.22 if active else 0.16))
     if active:
         f.band("top", 3, "rainbow-h")
     else:
@@ -33,7 +33,7 @@ def maximized(active, y):
     band = (f'<rect x="0" y="{y}" width="40" height="3" fill="url(#rbh)"/>' if active
             else f'<rect x="0" y="{y}" width="40" height="2" fill="#3A1D40"/>')
     pid = "decoration-maximized" + ("" if active else "-inactive")
-    return (f'<g id="{pid}-center"><rect x="0" y="{y}" width="40" height="{h}" fill="{HEADER}" fill-opacity="{glass(1.0, 0.40)}"/>{band}</g>', h)
+    return (f'<g id="{pid}-center"><rect x="0" y="{y}" width="40" height="{h}" fill="{HEADER}" fill-opacity="{glass(1.0, 0.22)}"/>{band}</g>', h)
 
 
 def decoration_svg():
@@ -96,7 +96,7 @@ def button_svg(kind):
     for st, (fill, stroke, glyph, op) in states.items():
         outer = chamfer_poly(0.5, 0.5, 27.5, 23.5, tl=6, br=6)
         d = "M" + " L".join(f"{fmt(x)},{fmt(yy)}" for x, yy in outer) + " Z"
-        fop = glass(1.0, 0.45) if fill in (BUTTON, "#2A0F18", "#1A0D14") else 1.0
+        fop = glass(1.0, 0.30) if fill in (BUTTON, "#2A0F18", "#1A0D14") else 1.0
         parts.append(f'<g id="{st}-center" opacity="{op}" transform="translate(0,{y})">'
                      f'<rect width="28" height="24" fill="#000" fill-opacity="0.004"/>'
                      f'<path d="{d}" fill="{fill}" fill-opacity="{fop}" stroke="{stroke}" stroke-width="1"/>'

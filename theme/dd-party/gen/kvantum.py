@@ -176,6 +176,11 @@ def build_svg(base_svg, out_svg):
     new = ET.fromstring(f'<svg xmlns="{SVGNS}"><defs>{DEFS}</defs>' + "\n".join(o.parts) + "</svg>")
     for child in list(new):
         root.append(child)
+    if GLASS:
+        # Toolbars and menu bars: mostly clear, so the glass window shows through.
+        for el in root.iter():
+            if (el.get("id") or "").startswith(("menubar-normal", "toolbar")):
+                el.set("style", (el.get("style", "") + ";fill-opacity:0.25").lstrip(";"))
     root.set("height", str(o.y + 20))
     if root.get("viewBox"):
         vb = root.get("viewBox").split()
