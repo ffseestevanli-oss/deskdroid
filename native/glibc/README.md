@@ -30,6 +30,9 @@ changes upstream glibc so it fits:
   thread also registered rseq with signals blocked; that's off by default.
   And set_robust_list, which Android blocks, glibc made again in each new
   thread and in fork's child; it's now only made where the first one worked.
+- **accept is accept4.** Android allows only accept4 (what bionic makes), so
+  glibc's `accept()` makes accept4 with no flags. FEX-Emu's server takes its
+  clients with `accept()`.
   `sigsys.log` in the runtime's folder lists the calls Android blocked.
 
 `build.sh` builds it with an aarch64 glibc cross compiler and outputs three
