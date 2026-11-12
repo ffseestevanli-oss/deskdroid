@@ -69,8 +69,20 @@ cli() {
   # Helpers that can't start are noted here (gpgme hides their errors).
   export DDMASK_LOG="$F/glibc/exec.log"
   rm -f "$F/glibc/sigsys.log" "$DDMASK_LOG"
-  $G "$CLI/usr/bin/flatpak" "$@"
+  # flatpak's errors, kept to check them below (shown as they were after).
+  errs="$F/flatpak-tmp/stderr.$$"
+  $G "$CLI/usr/bin/flatpak" "$@" 2>"$errs"
   rc=$?
+  cat "$errs" >&2
+  # gpg's engine missing: gpgme hides why. Start gpgconf as gpgme does, and
+  # say what it did.
+  if [ $rc -ne 0 ] && grep -q GPGME "$errs"; then
+    sys="$F/glibc/sigsys.log"; rm -f "$sys"
+    out="$("$L/libdd_ld-glibc.so" --library-path "$DDFLATPAK_LIBPATH" "$CLI/usr/bin/gpgconf" --list-dirs 2>&1)"
+    grc=$?
+    echo "flatpak: gpgconf check: exit $grc, $(printf '%s\n' "$out" | grep -c .) lines, first: $(printf '%s\n' "$out" | head -1)$([ -s "$sys" ] && echo "; blocked calls: $(sort -un "$sys" | tr '\n' ' ')")" >&2
+  fi
+  rm -f "$errs"
   if [ $rc -ne 0 ] && [ -s "$DDMASK_LOG" ]; then
     echo "flatpak: programs that couldn't start: $(sort -u "$DDMASK_LOG" | head -3 | tr '\n' ' ')" >&2
   fi

@@ -124,7 +124,7 @@ void DeskDroidBackend::runSteps(const QList<QStringList> &steps, std::function<v
     connect(p, &QProcess::finished, this, [this, p, steps, done](int code, QProcess::ExitStatus st) {
         p->deleteLater();
         if (st != QProcess::NormalExit || code != 0) {
-            m_lastOutput = QString::fromUtf8(p->readAll()).trimmed().section(u'\n', -3);
+            m_lastOutput = QString::fromUtf8(p->readAll()).trimmed().section(u'\n', -4);
             qWarning() << "flatpak" << steps.first() << "failed:" << m_lastOutput;
             done(false);
             return;
