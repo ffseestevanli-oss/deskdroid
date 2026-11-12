@@ -138,10 +138,11 @@ edit(pr + "h", "    Q_INVOKABLE static void runMenuEditor(QString arg = QString(
 edit(pr + "cpp", '#include "moc_processrunner.cpp"',
      (here / "processrunner-deskdroid.cpp").read_text() + '\n#include "moc_processrunner.cpp"')
 
-# ---- End Session: Kickoff's Log Out and KDE's logout screen ----------------
-# Kickoff's "Log Out" is "End Session": the desktop is a session inside
-# DeskDroid, and ending it closes the desktop, not a login.
-edit("applets/kicker/systementry.cpp", 'return i18n("Log Out");', 'return QStringLiteral("End Session"); // DeskDroid')
+# ---- Session: Kickoff's Log Out and KDE's logout screen -------------------
+# Kickoff's "Log Out" is "Session": it opens the Session screen (KDE's logout
+# screen), which has Restart Desktop, End Session and Lock Private Profile.
+# The desktop is a session inside DeskDroid; ending it closes the desktop.
+edit("applets/kicker/systementry.cpp", 'return i18n("Log Out");', 'return QStringLiteral("Session"); // DeskDroid')
 # No ksmserver here: SessionManagement asks the logout screen
 # (ksmserver-logout-greeter, an app on PATH) to show itself directly, instead
 # of over D-Bus activation, which this session bus doesn't do.
@@ -180,7 +181,7 @@ for inc in ("#include <netwm.h>\n", "#include <X11/Xatom.h>\n", "#include <X11/X
 a = t.index("    if (KWindowSystem::isPlatformX11()) {\n        constexpr auto role")
 b = t.index("NET::SkipSwitcher);\n    }\n", a) + len("NET::SkipSwitcher);\n    }\n")
 t = t[:a] + t[b:]
-# Close Desktop: DeskDroid watches $HOME/open-requests and ends the desktop
+# End Session: DeskDroid watches $HOME/open-requests and ends the desktop
 # for an end-session request.
 old = "void KSMShutdownDlg::slotLogout()\n{\n    m_session.requestLogout(SessionManagement::ConfirmationMode::Skip);\n"
 if old not in t:
@@ -192,34 +193,64 @@ t = t.replace(old, "void KSMShutdownDlg::slotLogout()\n{\n"
               "    if (f.open(QIODevice::WriteOnly)) {\n        f.write(\"end-session\\n\");\n        f.close();\n"
               "        QFile::remove(d + QStringLiteral(\"/end-session.req\"));\n"
               "        f.rename(d + QStringLiteral(\"/end-session.req\"));\n    }\n", 1)
-# Restart or Power Off: Android's power menu (DeskDroid opens it through its
-# accessibility service), for a power-menu request.
-old = "void KSMShutdownDlg::slotReboot()\n{\n"
+# Restart Desktop (the Restart button) and Lock Private Profile (the Lock
+# button): requests DeskDroid acts on. No power options: the phone's own
+# power button has those.
+def deskdroid_request(slot, name):
+    global t
+    old = f"void KSMShutdownDlg::{slot}()\n{{\n"
+    if old not in t:
+        sys.exit(f"add-to-workspace: {slot} changed")
+    t = t.replace(old, old +
+                  "    {\n        const QString d = QDir::homePath() + QStringLiteral(\"/open-requests\");\n"
+                  "        QDir().mkpath(d);\n"
+                  f"        QFile f(d + QStringLiteral(\"/.{name}\"));\n"
+                  f"        if (f.open(QIODevice::WriteOnly)) {{\n            f.write(\"{name}\\n\");\n            f.close();\n"
+                  f"            QFile::remove(d + QStringLiteral(\"/{name}.req\"));\n"
+                  f"            f.rename(d + QStringLiteral(\"/{name}.req\"));\n        }}\n"
+                  "        reject(); // the Session screen closes; DeskDroid does the rest\n        return;\n    }\n", 1)
+deskdroid_request("slotReboot", "restart-desktop")
+deskdroid_request("slotLockScreen", "lock-private")
+# What to offer, from files/deskdroid/session (NativeDesk.writeSessionState):
+# home=1 (DeskDroid is the home app: no End Session), private=1 (an unlocked
+# Private Space: Lock Private Profile).
+old = '    context->setContextProperty(QStringLiteral("canLogout"), m_session.canLogout());\n'
 if old not in t:
-    sys.exit("add-to-workspace: slotReboot changed")
+    sys.exit("add-to-workspace: canLogout context property changed")
 t = t.replace(old, old +
-              "    {\n        const QString d = QDir::homePath() + QStringLiteral(\"/open-requests\");\n"
-              "        QDir().mkpath(d);\n"
-              "        QFile f(d + QStringLiteral(\"/.power-menu\"));\n"
-              "        if (f.open(QIODevice::WriteOnly)) {\n            f.write(\"power-menu\\n\");\n            f.close();\n"
-              "            QFile::remove(d + QStringLiteral(\"/power-menu.req\"));\n"
-              "            f.rename(d + QStringLiteral(\"/power-menu.req\"));\n        }\n"
-              "        reject(); // the logout screen closes, the desktop stays\n        return;\n    }\n", 1)
+              "    {\n        QFile state(QDir::homePath() + QStringLiteral(\"/deskdroid/session\"));\n"
+              "        QByteArray s;\n        if (state.open(QIODevice::ReadOnly)) {\n            s = state.readAll();\n        }\n"
+              "        context->setContextProperty(QStringLiteral(\"deskdroidHome\"), s.contains(\"home=1\"));\n"
+              "        context->setContextProperty(QStringLiteral(\"deskdroidPrivate\"), s.contains(\"private=1\"));\n    }\n", 1)
 t = t.replace("#include <QFile>\n", "#include <QDir>\n#include <QFile>\n", 1)
 sd.write_text(t)
 for word in ("X11/", "XChangeProperty", "fixx11h"):
     assert word not in t, word
-# "Log Out" in KDE's logout screen is "Close Desktop".
+# KDE's logout screen is the Session screen: Restart Desktop, End Session
+# ("Log Out"; not as the home app, which can only restart), Lock Private
+# Profile while the Private Space is unlocked, Cancel.
 lo = "lookandfeel/org.kde.breeze/contents/logout/Logout.qml"
 edit(lo, 'text: root.showAllOptions ? i18nd("plasma_lookandfeel_org.kde.lookandfeel", "&Log Out")\n'
          '                                          : i18nd("plasma_lookandfeel_org.kde.lookandfeel", "&Log Out Now")',
-     'text: "Close Desktop" // DeskDroid')
-edit(lo, "            LogoutButton {\n                id: cancelButton\n",
-     "            LogoutButton { // DeskDroid: Android's power menu\n"
-     "                id: phonePowerButton\n"
-     "                icon.name: \"system-shutdown\"\n"
-     "                text: \"Restart or Power Off\"\n"
+     'text: "End Session" // DeskDroid')
+edit(lo, "                visible: canLogout && (sdtype === ShutdownType.ShutdownTypeNone || root.showAllOptions)\n",
+     "                visible: canLogout && !deskdroidHome // DeskDroid\n")
+edit(lo, "            LogoutButton {\n                id: logoutButton\n",
+     "            LogoutButton { // DeskDroid\n"
+     "                id: restartDesktopButton\n"
+     "                icon.name: \"system-reboot\"\n"
+     "                text: \"Restart Desktop\"\n"
      "                onClicked: rebootRequested()\n"
+     "                focus: deskdroidHome\n"
+     "            }\n"
+     "            LogoutButton {\n                id: logoutButton\n")
+edit(lo, "            LogoutButton {\n                id: cancelButton\n",
+     "            LogoutButton { // DeskDroid: the Private Space's apps keep memory\n"
+     "                id: lockPrivateButton\n"
+     "                icon.name: \"object-locked\"\n"
+     "                text: \"Lock Private Profile\"\n"
+     "                onClicked: lockScreenRequested()\n"
+     "                visible: deskdroidPrivate\n"
      "            }\n"
      "            LogoutButton {\n                id: cancelButton\n")
 # --logout: show the logout prompt at start (SessionManagement starts it).

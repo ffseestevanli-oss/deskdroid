@@ -1491,6 +1491,8 @@ build_plasma_desktop_packages() {
   rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kicker"
   cp -r "$s/applets/kicker/package" "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kicker"
   test -e "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kicker/contents/ui/main.qml"
+  # No power options in either menu (Session only), apps sorted A to Z.
+  python3 "$HERE/patches/desktoppackage/menus.py" "$PREFIX/share/plasma/plasmoids"
   # Add Panel's choices (Default Panel, Empty Panel): without them its menu
   # was empty. The default panel leaves out widgets not built yet.
   python3 "$HERE/patches/desktoppackage/layout-templates.py" "$s" "$PREFIX/share/plasma/layout-templates"

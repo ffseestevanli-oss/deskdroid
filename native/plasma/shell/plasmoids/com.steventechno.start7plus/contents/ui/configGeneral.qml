@@ -77,7 +77,7 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 22
             wrapMode: Text.WordWrap
             opacity: 0.7
-            text: i18n("One pane puts your pinned programs on top, then Programs, Recents, Settings and Search as flyouts, then Help, Terminal, Log out and Shut down, with an optional banner down the side. Reopen the menu after changing this.")
+            text: i18n("One pane puts your pinned programs on top, then Programs, Recents, Settings and Search as flyouts, then Help, Terminal and Session, with an optional banner down the side. Reopen the menu after changing this.")
         }
 
         QQC2.CheckBox {
@@ -215,6 +215,7 @@ KCM.SimpleKCM {
 
         QQC2.CheckBox {
             id: softCheck
+            visible: false // DeskDroid: Session only, no power options
             Kirigami.FormData.label: i18n("Power:")
             text: i18n("Use Soft Shut Down and Soft Restart")
         }
@@ -222,6 +223,7 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 22
             wrapMode: Text.WordWrap
             opacity: 0.7
+            visible: softCheck.visible
             text: i18n("Enable this if you want to use a gentle shut down. Otherwise, Leave disabled for a faster experience.")
         }
 

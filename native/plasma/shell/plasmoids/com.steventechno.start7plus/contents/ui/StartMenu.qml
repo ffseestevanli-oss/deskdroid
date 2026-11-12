@@ -89,7 +89,6 @@ Item {
         if (open) { pinHeight = true; unpinTimer.restart() }
         else { unpinTimer.stop(); pinHeight = true }
         if (!open) {
-            powerMenu.close()
             appMenu.close()
             folderMenu.close()
             folderItemMenu.close()
@@ -1591,7 +1590,8 @@ Item {
             }
 
 
-            // Shut down split button
+            // Session: DeskDroid's Session screen (Restart Desktop, End
+            // Session, Lock Private Profile). No power options or arrow menu.
             RowLayout {
                 Layout.alignment: Qt.AlignLeft
                 Layout.margins: Kirigami.Units.smallSpacing
@@ -1600,59 +1600,10 @@ Item {
                 PlasmaComponents.Button {
                     id: shutBtn
                     Layout.fillHeight: true
-                    text: i18n("Shut down")
-                    icon.name: "system-shutdown"
+                    text: i18n("Session")
+                    icon.name: "system-log-out"
                     highlighted: menu.navKey === "shutdown"
                     onClicked: menu.shutDown()
-                }
-                PlasmaComponents.Button {
-                    id: powerArrow
-                    // same height as Shut down (an icon-only button is otherwise a little shorter)
-                    Layout.fillHeight: true
-                    Layout.preferredHeight: shutBtn.implicitHeight
-                    Layout.minimumHeight: shutBtn.implicitHeight
-                    icon.name: "arrow-right"
-                    onClicked: powerMenu.popup(powerArrow, powerArrow.width, 0)
-
-                    Win7Menu {
-                        id: powerMenu
-                        host: menu
-                        fixedCorner: true
-                        cornerMarginX: Kirigami.Units.smallSpacing * 2
-                        cornerMarginY: powerArrow.height + Kirigami.Units.smallSpacing * 3
-                        MenuEntry {
-                            visible: menu.gamingModeAvailable
-                            text: i18n("Return to gaming mode")
-                            icon.name: "input-gamepad"
-                            onTriggered: menu.returnToGamingMode()
-                        }
-                        MenuEntry { separator: true; visible: menu.gamingModeAvailable }
-                        MenuEntry {
-                            text: i18n("Lock")
-                            icon.name: "system-lock-screen"
-                            onTriggered: { menu.runCommand("loginctl lock-session"); menu.launched() }
-                        }
-                        MenuEntry {
-                            text: i18n("Log off")
-                            icon.name: "system-log-out"
-                            onTriggered: { menu.runCommand("dbus-send --session --type=method_call --dest=org.kde.LogoutPrompt /LogoutPrompt org.kde.LogoutPrompt.promptLogout"); menu.launched() }
-                        }
-                        MenuEntry {
-                            text: i18n("Restart")
-                            icon.name: "system-reboot"
-                            onTriggered: menu.restart()
-                        }
-                        MenuEntry {
-                            text: i18n("Sleep")
-                            icon.name: "system-suspend"
-                            onTriggered: { menu.runCommand("systemctl suspend"); menu.launched() }
-                        }
-                        MenuEntry {
-                            text: i18n("Hibernate")
-                            icon.name: "system-suspend-hibernate"
-                            onTriggered: { menu.runCommand("systemctl hibernate"); menu.launched() }
-                        }
-                    }
                 }
             }
         }

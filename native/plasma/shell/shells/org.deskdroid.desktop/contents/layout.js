@@ -22,8 +22,8 @@ var panel = new Panel("org.kde.panel");
 panel.location = "bottom";
 panel.height = 2 * Math.floor(gridUnit * 2.5 / 2);
 var kickoff = panel.addWidget("org.kde.plasma.kickoff");
-// The menu's power buttons: End Session only (DeskDroid has no sleep,
-// restart or shut down for the phone yet).
+// The menu's footer: Session only (the Session screen: Restart Desktop, End
+// Session, Lock Private Profile); no power options, the phone has those.
 kickoff.currentConfigGroup = ["General"];
 kickoff.writeConfig("systemFavorites", "logout");
 

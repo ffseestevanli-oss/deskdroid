@@ -285,6 +285,7 @@ object NativeDesk {
 
     fun watchOpenRequests(c: android.content.Context) {
         if (openWatcher != null) return
+        writeSessionState(c)
         val dir = File(c.filesDir, "open-requests").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() } // left from an earlier session
         @Suppress("DEPRECATION")
@@ -294,15 +295,23 @@ object NativeDesk {
                 val req = File(dir, name)
                 val path = try { req.readText().trim() } catch (e: Exception) { "" }
                 req.delete()
-                // KDE's logout screen: Close Desktop (patched in add-to-workspace.py).
+                // The Session screen (KDE's logout screen, patched in
+                // add-to-workspace.py): End Session, Restart Desktop, Lock Private Profile.
                 if (name == "end-session.req") {
-                    AppLog.i("Native desktop: Close Desktop from the logout screen")
-                    Handler(Looper.getMainLooper()).post { stop(c, "Close Desktop") }
+                    AppLog.i("Native desktop: End Session from the Session screen")
+                    Handler(Looper.getMainLooper()).post {
+                        // As the home app the desktop can't end (Android opens it again): it restarts.
+                        if (isHomeApp(c)) restart(c, "End Session as the home app") else stop(c, "End Session")
+                    }
                     return
                 }
-                // Restart or Power Off on the logout screen: Android's power menu.
-                if (name == "power-menu.req") {
-                    Handler(Looper.getMainLooper()).post { PowerMenuService.open(activity?.get() ?: c) }
+                if (name == "restart-desktop.req") {
+                    AppLog.i("Native desktop: Restart Desktop from the Session screen")
+                    Handler(Looper.getMainLooper()).post { restart(c, "Restart Desktop") }
+                    return
+                }
+                if (name == "lock-private.req") {
+                    Handler(Looper.getMainLooper()).post { lockPrivateProfile(activity?.get() ?: c) }
                     return
                 }
                 // The desktop's Software app asking the app store (SoftwareBridge.kt).
@@ -434,6 +443,77 @@ object NativeDesk {
         } catch (e: Exception) {
             AppLog.i("Native desktop: couldn't open ${file.path} with an Android app: $e")
         }
+    }
+
+    /** DeskDroid is the phone's home app (launcher mode): the desktop restarts, it doesn't end. */
+    fun isHomeApp(c: android.content.Context): Boolean {
+        val home = android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME)
+        return runCatching {
+            c.packageManager.resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName == c.packageName
+        }.getOrDefault(false)
+    }
+
+    /**
+     * The phone's Private Space while it's unlocked (its apps can run, and
+     * keep memory), or null. Android shows it only to the home app (Android 15+).
+     */
+    fun openPrivateProfile(c: android.content.Context): android.os.UserHandle? {
+        if (Build.VERSION.SDK_INT < 35) return null
+        val launcher = c.getSystemService(android.content.pm.LauncherApps::class.java)
+        val users = c.getSystemService(android.os.UserManager::class.java)
+        val me = android.os.Process.myUserHandle()
+        return runCatching {
+            launcher.profiles.firstOrNull { u ->
+                u != me && launcher.getLauncherUserInfo(u)?.userType == android.os.UserManager.USER_TYPE_PROFILE_PRIVATE &&
+                    !users.isQuietModeEnabled(u)
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * What the Session screen offers, in files/deskdroid/session for KDE's
+     * logout screen (add-to-workspace.py): home=1 hides End Session (the home
+     * app can only restart), private=1 shows Lock Private Profile. Written at
+     * the start and whenever the apps or profiles change.
+     */
+    fun writeSessionState(c: android.content.Context) {
+        runCatching {
+            Tuning.writeIfChanged(File(c.filesDir, "deskdroid/session"),
+                "home=${if (isHomeApp(c)) 1 else 0}\nprivate=${if (openPrivateProfile(c) != null) 1 else 0}\n")
+        }.onFailure { AppLog.i("Native desktop: couldn't write the session state: $it") }
+    }
+
+    /** Lock Private Profile: Android stops the Private Space's apps and locks it. */
+    fun lockPrivateProfile(c: android.content.Context) {
+        val user = openPrivateProfile(c) ?: run { AppLog.i("Native desktop: no unlocked Private Space to lock"); return }
+        try {
+            c.getSystemService(android.os.UserManager::class.java).requestQuietModeEnabled(true, user)
+            AppLog.i("Native desktop: locked the Private Space")
+        } catch (e: Exception) {
+            // Only the home app (in front) may; otherwise Android's own Private Space settings.
+            AppLog.i("Native desktop: couldn't lock the Private Space: $e")
+            android.widget.Toast.makeText(c, "Lock Private Space from Android's settings", android.widget.Toast.LENGTH_LONG).show()
+            runCatching {
+                val i = android.content.Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (onMonitor) c.startActivity(i, phoneScreenOptions()) else c.startActivity(i)
+            }
+        }
+        writeSessionState(c)
+    }
+
+    /**
+     * Restart Desktop: the desktop ends (its apps, KWin, Plasma) and starts
+     * again in a new window, on the monitor if it was on one.
+     */
+    fun restart(c: android.content.Context, why: String) {
+        val app = c.applicationContext
+        val display = if (onMonitor) MonitorGuard.monitor(app)?.displayId ?: android.view.Display.DEFAULT_DISPLAY
+                      else android.view.Display.DEFAULT_DISPLAY
+        stop(c, why)
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (!running) runCatching { NativeSession.start(app, display) }
+                .onFailure { AppLog.i("Native desktop: couldn't start again after $why: $it") }
+        }, 800)
     }
 
     /** Ends the desktop: its processes, the compositor, the service and the window. */
@@ -783,6 +863,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             File(config, "kcminputrc").takeUnless { it.exists() }
                 ?.writeText("[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24\n")
             applyDarkDefault(config, data)
+            applyFontDefaults(config)
             // KDE's app database (ksycoca) lists only the apps a menu file takes in;
             // with none, Plasma finds no apps. KDE's own menu, with its categories,
             // plus the Android folders, and a fresh database each start so it
@@ -1297,6 +1378,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // Apps uninstalled since the last start (and a locked Private Space's).
         if (!failed) dir.listFiles { f -> f.name.startsWith("android-") && f.name !in keep }?.forEach { it.delete() }
         AppLog.i("Native desktop: ${keep.size} Android apps in the menu")
+        NativeDesk.writeSessionState(c)
     }
 
     /**
@@ -1409,7 +1491,32 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * values out, as on Linux, where startplasma puts that folder in
      * XDG_CONFIG_DIRS. Without it there the theme never applied.
      */
-    private fun kdeDefaultsDirs(config: File) = File(config, "kdedefaults").path + ":/etc/xdg"
+    private fun kdeDefaultsDirs(config: File) =
+        File(config, "kdedefaults").path + ":" + File(config.parentFile, "deskdroid-xdg").path + ":/etc/xdg"
+
+    /**
+     * KDE's fonts (apps, menus, toolbars, window titles) are Roboto, as
+     * system defaults in files/deskdroid-xdg (after kdedefaults in
+     * XDG_CONFIG_DIRS, so System Settings' Fonts page still wins). KDE's own
+     * default, Noto Sans, isn't on Android: Qt took a per-script Android
+     * font for it, which drew spaces and digits itself (wide, thin) and
+     * left the letters to Roboto, so numbers in window titles and the
+     * desktop widgets looked lighter than the words around them. A Noto
+     * Sans already saved in kdeglobals (the Fonts page applied before) is
+     * Roboto too.
+     */
+    private fun applyFontDefaults(config: File) {
+        fun font(size: Int) = "Roboto,$size,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
+        val xdg = File(config.parentFile, "deskdroid-xdg").apply { mkdirs() }
+        Tuning.writeIfChanged(File(xdg, "kdeglobals"), ("[General]\nfont=${font(10)}\nmenuFont=${font(10)}\n" +
+            "toolBarFont=${font(10)}\nsmallestReadableFont=${font(8)}\n\n[WM]\nactiveFont=${font(10)}\n").toByteArray())
+        for (f in listOf(File(config, "kdeglobals"), File(config, "kdedefaults/kdeglobals"))) {
+            if (!f.exists()) continue
+            val text = f.readText()
+            val fixed = text.replace(Regex("(?m)^((?:font|menuFont|toolBarFont|smallestReadableFont|activeFont)=)Noto Sans,"), "$1Roboto,")
+            if (fixed != text) f.writeText(fixed)
+        }
+    }
     private fun kdeDefaults(config: File, name: String) =
         File(config, "kdedefaults/$name").let { if (it.exists()) it.readText() else "" }
     private val GTK_MARK = "# Written by DeskDroid to match Plasma's colors; delete this line to keep your own."
@@ -1858,24 +1965,40 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             addView(settings, FrameLayout.LayoutParams(-1, -2))
         }, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val stop = ui.text("STOP", 12f, 0xFFFF6B82.toInt()).apply {
-            typeface = P.orbitron(context)
-            letterSpacing = 0.12f
-            gravity = android.view.Gravity.CENTER
-            minHeight = dp(44)
-            background = io.deskdroid.app.ui.ChamferDrawable(dp(12f), stroke = P.RED, strokeWidth = dp(1.5f))
-            setOnClickListener { confirmStop() }
-        }
         val actions = listOf(
             ui.tile("Keyboard", P.CYAN) { showMenu(false); toggleKeyboard() },
             ui.tile("Software", P.GREEN) {
                 showMenu(false)
                 startActivity(android.content.Intent(this@NativeDeskActivity, StoreActivity::class.java))
             },
-            stop,
         )
         panel.addView(ui.row(6) { actions.forEach { addView(ui.weight(it)) } },
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+
+        // Session: Restart Desktop, End Session (not as the home app, which
+        // can only restart), and Lock Private Profile while the Private Space
+        // is open (its apps keep memory), as on the desktop's Session screen.
+        fun sessionButton(label: String, color: Int, onTap: () -> Unit) = ui.text(label, 12f, color).apply {
+            typeface = P.orbitron(context)
+            letterSpacing = 0.08f
+            gravity = android.view.Gravity.CENTER
+            minHeight = dp(44)
+            setPadding(dp(6), 0, dp(6), 0)
+            background = io.deskdroid.app.ui.ChamferDrawable(dp(12f), stroke = color, strokeWidth = dp(1.5f))
+            setOnClickListener { onTap() }
+        }
+        val session = buildList {
+            add(sessionButton("RESTART DESKTOP", P.YELLOW) { confirmSession(restart = true) })
+            if (!NativeDesk.isHomeApp(this@NativeDeskActivity))
+                add(sessionButton("END SESSION", 0xFFFF6B82.toInt()) { confirmSession(restart = false) })
+            if (NativeDesk.openPrivateProfile(this@NativeDeskActivity) != null)
+                add(sessionButton("\uD83D\uDD12 LOCK PRIVATE PROFILE", P.CYAN) {
+                    showMenu(false)
+                    NativeDesk.lockPrivateProfile(this@NativeDeskActivity)
+                })
+        }
+        panel.addView(ui.row(6) { session.forEach { addView(ui.weight(it)) } },
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
 
         // A fixed height, about half the screen (most of it when the screen is
         // wide and short); the settings scroll inside it.
@@ -2105,11 +2228,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
-    private fun confirmStop() {
+    private fun confirmSession(restart: Boolean) {
         android.app.AlertDialog.Builder(this)
-            .setTitle("Stop the desktop?")
+            .setTitle(if (restart) "Restart the desktop?" else "End the session?")
             .setMessage("Unsaved work in desktop apps will be lost.")
-            .setPositiveButton("Stop") { _, _ -> NativeDesk.stop(this, "Stop in the menu") }
+            .setPositiveButton(if (restart) "Restart Desktop" else "End Session") { _, _ ->
+                if (restart) NativeDesk.restart(this, "Restart Desktop in the menu") else NativeDesk.stop(this, "End Session in the menu")
+            }
             .setNegativeButton("Cancel", null)
             .show()
     }

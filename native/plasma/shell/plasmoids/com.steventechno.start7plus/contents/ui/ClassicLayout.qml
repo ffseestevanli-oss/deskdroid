@@ -317,16 +317,8 @@ Item {
         Win7Item {
             Layout.fillWidth: true
             iconSize: Kirigami.Units.iconSizes.medium
-            text: i18n("Log out")
+            text: i18n("Session")
             iconSource: "system-log-out"
-            onClicked: cl.doAction("logoff")
-            onHoveredChanged: if (hovered) cl.hoverMain("", null)
-        }
-        Win7Item {
-            Layout.fillWidth: true
-            iconSize: Kirigami.Units.iconSizes.medium
-            text: i18n("Shut down")
-            iconSource: "system-shutdown"
             onClicked: cl.doAction("shutdown")
             onHoveredChanged: if (hovered) cl.hoverMain("", null)
         }
