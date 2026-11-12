@@ -25,6 +25,10 @@ patch.py <glibc source dir> <prefix>
    glibc makes again in every new thread and in fork's child, both with every
    signal blocked. Built as for kernels without it: glibc checks the result of
    its first call at start and skips the rest.
+7. accept, which Android blocks (bionic makes accept4 instead): glibc's
+   accept() makes accept4 with no flags, as on architectures without accept.
+   FEX-Emu's server takes its clients with accept() ("FEXServer failed to
+   establish client connection: error 38").
 """
 import pathlib
 import re
@@ -177,4 +181,7 @@ edit("sysdeps/nptl/_Fork.c", """      INTERNAL_SYSCALL_CALL (set_robust_list, &s
       if (__nptl_set_robust_list_avail)
 #endif
       INTERNAL_SYSCALL_CALL (set_robust_list, &self->robust_head,""")
+# 7. accept as accept4 (see above).
+edit("sysdeps/unix/sysv/linux/accept.c", "#ifdef __ASSUME_ACCEPT_SYSCALL\n",
+     "#if 0 /* DeskDroid: Android blocks accept; accept4 as bionic does */\n")
 print(f"patch.py: {changed} files with paths under {prefix}")
