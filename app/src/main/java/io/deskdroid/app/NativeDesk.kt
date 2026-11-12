@@ -1786,8 +1786,12 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      */
     private fun startSound(libs: String, runtime: File) {
         val script = File(libs, "libdd_sound.so")
-        if (!script.exists() || !File(libs, "libdd_ld-glibc.so").exists() || !File(filesDir, "sound/usr/bin/pulseaudio").exists()) return
+        if (!script.exists() || !File(libs, "libdd_ld-glibc.so").exists()) return
         try {
+            // Unpacked here too: this runs before KWin's environment (glibcRuntime)
+            // on the first start of a new build. Once per app version.
+            File(libs, "libdd_soundsrv.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "sound")) }
+            if (!File(filesDir, "sound/usr/bin/pulseaudio").exists()) { AppLog.i("[sound] not unpacked; no sound server"); return }
             NativeDesk.sound?.stop()
             NativeDesk.sound = AudioBridge(File(runtime, "pulse/android.pipe")).also { it.start() }
             val p = ProcessBuilder("/system/bin/sh", script.path, runtime.path).redirectErrorStream(true).also { pb ->
