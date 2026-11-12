@@ -5,6 +5,7 @@ Plasma wallpaper packages that go into the APK as `share/wallpapers/<name>`
 
 - `DeskDroid`: DeskDroid's own, the default (the Debian trixie desktop's,
   rendered by rootfs/wallpaper/make-wallpaper.py).
+- `DDParty`: DD Party's (the global theme's), made by theme/dd-party/gen/native.sh.
 - DeskDroid's own set, by Steven: `AboveTheWeather`, `Breach`, `Lightfall`,
   `PrismSkyline`, `RelicsAfloat`, `SevenVoices`, `ShardsOfDawn`,
   `VisitorAtDusk`, `WovenSignal`. One image each at its own size (most are

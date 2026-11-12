@@ -1,0 +1,41 @@
+[Icon Theme]
+Name=DD Party
+Comment=DeskDroid's party look: chamfered, rainbow-coded icons. Everything else comes from Breeze Dark.
+Inherits=breeze-dark,breeze,hicolor
+Example=folder
+DisplayDepth=32
+FollowsColorScheme=false
+DesktopDefault=48
+PanelDefault=32
+ToolbarDefault=22
+SmallDefault=16
+DialogDefault=32
+Directories=scalable/apps,scalable/places,scalable/mimetypes,scalable/devices
+
+[scalable/apps]
+Size=64
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=Applications
+
+[scalable/places]
+Size=64
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=Places
+
+[scalable/mimetypes]
+Size=64
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=MimeTypes
+
+[scalable/devices]
+Size=64
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=Devices

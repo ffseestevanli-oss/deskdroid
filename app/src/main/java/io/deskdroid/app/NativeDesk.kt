@@ -1030,14 +1030,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val old = Regex("\\[QtQuickRendererSettings]\nSceneGraphBackend=[a-z]*\n")
             g.writeText(if (old.containsMatchIn(t)) t.replace(old, Regex.escapeReplacement(section)) else t + "\n" + section)
         }
-        // Breeze Dark's icons (white symbolic ones) to match the dark colors, unless
-        // an icon theme is set (System Settings › Icons, or a Global Theme in
-        // kdedefaults). Earlier builds wrote the light theme here: that is changed
-        // once, so choosing Breeze later sticks.
+        // DD Party's icons (Breeze Dark's, white symbolic ones, where it has none)
+        // to match the dark colors, unless an icon theme is set (System Settings ›
+        // Icons, or a Global Theme in kdedefaults). Earlier builds wrote the light
+        // theme here: that is changed once, so choosing Breeze later sticks.
         File(config, "kdeglobals").let { g ->
             val t = g.readText()
             val migrated = File(config, "deskdroid-icons-migrated")
-            if (!t.contains("[Icons]") && !kdeDefaults(config, "kdeglobals").contains("[Icons]")) g.appendText("\n[Icons]\nTheme=breeze-dark\n")
+            val icons = if (File(data, "share/icons/$PARTY_ICONS/index.theme").exists()) PARTY_ICONS else "breeze-dark"
+            if (!t.contains("[Icons]") && !kdeDefaults(config, "kdeglobals").contains("[Icons]")) g.appendText("\n[Icons]\nTheme=$icons\n")
             else if (!migrated.exists() && t.contains("[Icons]\nTheme=breeze\n")) g.writeText(t.replace("[Icons]\nTheme=breeze\n", "[Icons]\nTheme=breeze-dark\n"))
             migrated.writeText("")
         }
@@ -1451,6 +1452,11 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 ?.writeText("[General]\nName=DeskDroid\nParent=FALLBACK/\nCommand=/system/bin/sh\n" +
                     "Environment=TERM=xterm-256color,COLORTERM=truecolor,SHELL=/system/bin/sh,ENV=${rc.path}\n" +
                     "\n[Appearance]\nFont=$font\n")
+            // DD Party's terminal colours, unless the profile has its own.
+            File(filesDir, ".local/share/konsole/DeskDroid.profile").takeIf { p ->
+                File(filesDir, "kwin/share/konsole/DDParty.colorscheme").exists() &&
+                    p.exists() && !p.readText().contains("ColorScheme=") && p.readText().contains("[Appearance]\n")
+            }?.let { p -> p.writeText(p.readText().replaceFirst("[Appearance]\n", "[Appearance]\nColorScheme=DDParty\n")) }
             File(config, "konsolerc").let { f ->
                 if (!f.exists() || !f.readText().contains("DefaultProfile=")) f.appendText("\n[Desktop Entry]\nDefaultProfile=DeskDroid.profile\n")
             }
@@ -1464,18 +1470,45 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     /**
-     * Breeze Dark by default, once: its colors in kdeglobals (as Plasma's
-     * colour settings write them, for KWin's borders and the apps) and the
-     * Breeze Dark Plasma theme. A colour scheme or theme set later is kept.
+     * DeskDroid's own look, DD Party (theme/dd-party), by default, once: its
+     * colors in kdeglobals (as Plasma's colour settings write them, for KWin's
+     * borders and the apps), its Plasma style and its global theme. Breeze
+     * Dark when the data has no DD Party. A colour scheme or theme set later
+     * is kept. Builds before DD Party set Breeze Dark this way: that default
+     * changes to DD Party once, so choosing Breeze Dark again sticks.
      */
     private fun applyDarkDefault(config: File, data: File) {
         val globals = File(config, "kdeglobals")
+        val party = File(data, "share/color-schemes/DDParty.colors")
         val dark = File(data, "share/color-schemes/BreezeDark.colors")
+        val scheme = if (party.exists()) party else dark
+        val schemeName = if (party.exists()) "DDParty" else "BreezeDark"
+        val partyTheme = "\n[KDE]\nLookAndFeelPackage=$PARTY_LNF\n"
         val defaults = kdeDefaults(config, "kdeglobals")
-        if (dark.exists() && !(globals.exists() && globals.readText().contains("ColorScheme=")) && !defaults.contains("ColorScheme=")) {
-            globals.appendText("\n" + dark.readText() + "\n[General]\nColorScheme=BreezeDark\n")
-            AppLog.i("Native desktop test: Breeze Dark colors set")
-        } else if (!dark.exists()) AppLog.i("Native desktop test: no BreezeDark.colors in the data")
+        if (scheme.exists() && !(globals.exists() && globals.readText().contains("ColorScheme=")) && !defaults.contains("ColorScheme=")) {
+            globals.appendText("\n" + scheme.readText() + "\n[General]\nColorScheme=$schemeName\n" + if (party.exists()) partyTheme else "")
+            AppLog.i("Native desktop test: $schemeName colors set")
+        } else if (!scheme.exists()) AppLog.i("Native desktop test: no $schemeName.colors in the data")
+        val switched = File(config, "deskdroid-ddparty-default")
+        if (party.exists() && !switched.exists()) {
+            // KConfig takes the last of repeated groups and keys, so the scheme
+            // appended after Breeze Dark's wins.
+            val text = if (globals.exists()) globals.readText() else ""
+            val current = Regex("(?m)^ColorScheme=(.*)$").findAll(text).map { it.groupValues[1] }.lastOrNull { it != "Breeze Dark" }
+            if (current == "BreezeDark" && !defaults.contains("ColorScheme=")) {
+                globals.appendText("\n" + party.readText() + "\n[General]\nColorScheme=DDParty\n" + partyTheme)
+                AppLog.i("Native desktop test: Breeze Dark default changed to DD Party")
+            }
+            File(config, "plasmarc").takeIf { it.exists() && !kdeDefaults(config, "plasmarc").contains("[Theme]") }?.let { f ->
+                val t = f.readText()
+                if (t.contains("[Theme]\nname=breeze-dark\n")) f.writeText(t.replace("[Theme]\nname=breeze-dark\n", "[Theme]\nname=$PARTY_STYLE\n"))
+            }
+            if (globals.exists() && !defaults.contains("[Icons]")) {
+                val t = globals.readText()
+                if (t.contains("[Icons]\nTheme=breeze-dark\n")) globals.writeText(t.replace("[Icons]\nTheme=breeze-dark\n", "[Icons]\nTheme=$PARTY_ICONS\n"))
+            }
+            switched.writeText("")
+        }
         // Earlier builds pinned every app to Breeze Dark here ([UiSettings] in
         // kdeglobals, which every app's settings fall through to), from before
         // Plasma's platform theme: apps then ignored System Settings' colours
@@ -1485,8 +1518,17 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val text = globals.readText()
             if (text.contains(pinned)) globals.writeText(text.replace(pinned, "\n"))
         }
+        val style = if (File(data, "share/plasma/desktoptheme/$PARTY_STYLE/metadata.json").exists()) PARTY_STYLE else "breeze-dark"
         File(config, "plasmarc").takeUnless { it.exists() && it.readText().contains("[Theme]") || kdeDefaults(config, "plasmarc").contains("[Theme]") }
-            ?.appendText("\n[Theme]\nname=breeze-dark\n")
+            ?.appendText("\n[Theme]\nname=$style\n")
+        // Kate and KWrite in DD Party's colours (their own pick follows the
+        // palette, which gives Breeze Dark): a system default in files/deskdroid-xdg,
+        // so a theme chosen in the editor's settings wins.
+        val xdg = File(config.parentFile, "deskdroid-xdg").apply { mkdirs() }
+        val katerc = File(xdg, "katerc")
+        if (File(data, "share/org.kde.syntax-highlighting/themes/dd-party.theme").exists())
+            Tuning.writeIfChanged(katerc, "[KTextEditor Renderer]\nAuto Color Theme Selection=false\nColor Theme=DD Party\n")
+        else katerc.delete()
         // GTK programs (Floorp): Breeze for GTK (breeze-gtk), light or dark as
         // Plasma's colour scheme is, at every start. A settings.ini without
         // DeskDroid's first line is the user's own and is kept.
@@ -1536,6 +1578,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private fun kdeDefaults(config: File, name: String) =
         File(config, "kdedefaults/$name").let { if (it.exists()) it.readText() else "" }
     private val GTK_MARK = "# Written by DeskDroid to match Plasma's colors; delete this line to keep your own."
+    // DD Party's parts (theme/dd-party), shipped in the desktop's data.
+    private val PARTY_LNF = "org.deskdroid.ddparty"
+    private val PARTY_STYLE = "dd-party"
+    private val PARTY_ICONS = "DD-Party"
 
     /**
      * The home folder stays in app storage (KDE's config, caches and sockets need a real

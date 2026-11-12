@@ -10,7 +10,7 @@ DeskDroid now runs Plasma as Android code. KWin, plasmashell and the KDE apps ar
 
 What works today:
 - **The desktop:** KWin with a DeskDroid backend, plasmashell with a panel, the Kickoff application menu (with KDE's app categories: Development, Games, Graphics, Internet, Office, System, Utilities...; Application Menu and Start 7 Plus are there as alternatives) and a Folder View desktop that shows the phone's Desktop folder, over the phone's wallpaper.
-- **Apps:** Dolphin, KWrite and Gwenview, in Breeze Dark with Breeze Dark icons.
+- **Apps:** Dolphin, KWrite and Gwenview, in DD Party, DeskDroid's own look (near-black, #990045 magenta and rainbow accents, with its own icons; [theme/dd-party](theme/dd-party/README.md)). Breeze Dark and the other Plasma themes are in System Settings.
 - **Plasma as you know it:** panel editing (edit mode, panel settings, widget explorer), rotation that follows the phone, scale that changes instantly (automatic by default), and End Session with KDE's logout screen.
 - **Input:** touchpad or direct touch, keyboard and mouse, and the phone's keyboard pops up when a text field has focus. In desktop text fields the phone's keyboard works like in any Android app: swipe typing, autocorrect and word suggestions (Gboard, SwiftKey...), and no suggestions in password fields. The DD menu can switch back to plain keys. Back opens DeskDroid's side menu.
 - **Android integration:** DeskDroid can be your home app (launcher mode). Kickoff has an Android Apps folder with your phone's apps, sorted by kind (Games, Social, Productivity...), files open in Android apps through Open With, and Restart or Power Off on the logout screen opens Android's power menu.

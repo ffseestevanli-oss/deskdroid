@@ -1,0 +1,16 @@
+{
+  "KPlugin": {
+    "Authors": [
+      {
+        "Name": "DeskDroid"
+      }
+    ],
+    "Category": "",
+    "Description": "Near-black, #990045 magenta and rainbow accents, chamfered corners",
+    "Id": "dd-party",
+    "License": "GPL-2.0-or-later",
+    "Name": "DD Party",
+    "Version": "1.0"
+  },
+  "X-Plasma-API": "5.0"
+}

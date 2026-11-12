@@ -408,6 +408,10 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" $(ls -d share/plasma share/kf6 share/desktop-directories share/deskdroid/menus 2>/dev/null))
       rm -rf "$WORK/shell" && mkdir -p "$WORK/shell/share/plasma"
       cp -r "$HERE/../plasma/shell/shells" "$HERE/../plasma/shell/plasmoids" "$HERE/../plasma/shell/wallpapers" "$WORK/shell/share/plasma/"
+      # DD Party, DeskDroid's default look: colour scheme, Plasma style, icons,
+      # global theme, editor and terminal colours (made by theme/dd-party/gen/native.sh).
+      cp -r "$HERE/../plasma/shell/ddparty/." "$WORK/shell/share/"
+      test -e "$WORK/shell/share/color-schemes/DDParty.colors"
       # Wallpapers: DeskDroid's own (the Debian desktop's), the default, and a
       # few of Plasma's (breeze's Next, plasma-workspace-wallpapers), shrunk to
       # 4K and phone sizes (native/plasma/shell/images/README.md).
