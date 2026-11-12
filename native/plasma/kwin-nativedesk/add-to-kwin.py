@@ -261,6 +261,28 @@ edit("src/wayland_server.cpp", "    if (backend->drmDevice()->supportsSyncObjTim
 edit("src/compositor.cpp", "    if (const auto pciInfo = backend->drmDevice()->pciDeviceInfo()) {",
      "    if (const auto pciInfo = backend->drmDevice() ? backend->drmDevice()->pciDeviceInfo() : std::optional<drmPciDeviceInfo>()) {")
 
+# Phone GPU drivers (Adreno's especially) are stricter about what they list
+# than Mesa: KWin turned the GPU down on them for things it doesn't need, and
+# the desktop fell back to the CPU without saying why.
+# - EGL_KHR_no_config_context: optional, the backend picks a config without it.
+edit("src/opengl/egldisplay.cpp",
+     "        QByteArrayLiteral(\"EGL_KHR_no_config_context\"),\n        QByteArrayLiteral(\"EGL_KHR_surfaceless_context\"),\n",
+     "        QByteArrayLiteral(\"EGL_KHR_surfaceless_context\"), // DeskDroid: EGL_KHR_no_config_context is optional\n")
+# - GL_EXT_unpack_subimage: part of OpenGL ES 3.0 (GL_UNPACK_ROW_LENGTH and
+#   friends), so drivers needn't list it. And say which check failed.
+cc = "src/opengl/eglcontext.cpp"
+edit(cc, "    const bool supportsUnpack = !m_isOpenglES || hasOpenglExtension(QByteArrayLiteral(\"GL_EXT_unpack_subimage\"));\n",
+     "    const bool supportsUnpack = !m_isOpenglES || hasVersion(Version(3, 0)) || hasOpenglExtension(QByteArrayLiteral(\"GL_EXT_unpack_subimage\"));\n")
+edit(cc, "    if (!supportsGLSL || !supportsNonPowerOfTwoTextures || !supports3DTextures || !supportsFBOs || !supportsUnpack) {\n        return false;\n    }\n",
+     "    if (!supportsGLSL || !supportsNonPowerOfTwoTextures || !supports3DTextures || !supportsFBOs || !supportsUnpack) {\n"
+     "        qWarning(\"nativedesk: the GL driver lacks:%s%s%s%s%s\", supportsGLSL ? \"\" : \" GLSL\", supportsNonPowerOfTwoTextures ? \"\" : \" NPOT textures\",\n"
+     "                 supports3DTextures ? \"\" : \" 3D textures\", supportsFBOs ? \"\" : \" framebuffers\", supportsUnpack ? \"\" : \" unpack_subimage\");\n"
+     "        return false;\n    }\n")
+edit(cc, "    return shader->isValid();\n}\n",
+     "    if (!shader->isValid()) {\n        qWarning(\"nativedesk: KWin's test shader doesn't compile on this GL driver\");\n        return false;\n    }\n    return true;\n}\n")
+edit(cc, "    auto handle = createContext(display, config, sharedContext);\n    if (!handle) {\n        return nullptr;\n    }\n    if (!eglMakeCurrent(display->handle(), EGL_NO_SURFACE, EGL_NO_SURFACE, handle)) {\n",
+     "    auto handle = createContext(display, config, sharedContext);\n    if (!handle) {\n        qWarning(\"nativedesk: eglCreateContext refused every GLES context (0x%x)\", eglGetError());\n        return nullptr;\n    }\n    if (!eglMakeCurrent(display->handle(), EGL_NO_SURFACE, EGL_NO_SURFACE, handle)) {\n        qWarning(\"nativedesk: eglMakeCurrent without a surface failed (0x%x)\", eglGetError());\n")
+
 # kwin_wayland as a library with a JNI entry point, since Qt for Android needs
 # a Java VM: QtHost loads it into an app_process and calls QtHost.run().
 edit("src/CMakeLists.txt", "add_executable(kwin_wayland main_wayland.cpp)",

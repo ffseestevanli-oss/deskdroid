@@ -27,6 +27,11 @@ import kotlin.math.abs
 private val SCALES = listOf(0f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
 /** A monitor's scales (its own, apart from the phone's): 1 (100%) whenever a monitor connects. */
 private val EXTERNAL_SCALES = listOf(1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
+/** KWin's log lines that say whether the desktop composites on the GPU, and why not (GPU report). */
+private val KWIN_GRAPHICS_LINES = listOf(
+    "nativedesk: EGL ", "nativedesk: compositing on the GPU", "nativedesk: no EGL_KHR", "nativedesk: the GL driver lacks",
+    "nativedesk: KWin's test shader", "nativedesk: egl", "Creating the OpenGL rendering failed", "extension is unsupported",
+    "Failed to compile", "Failed to link", "Driver does not recommend")
 private const val EDGE_DP = 56f // how far up from the bottom a corner swipe may start
 
 /**
@@ -186,6 +191,8 @@ object NativeDesk {
     @Volatile var qtStatus = "Qt demo: not in this build"
     // KWin said it takes apps' GPU buffers (deskdroid_ahb_v1): Qt apps draw on the GPU.
     @Volatile var kwinTakesGpuBuffers = false
+    /** What KWin said about the GPU this session (GPU report): its renderer, or why it fell back to the CPU. */
+    @Volatile var kwinGraphics = ""
 
     // The desktop is on a monitor. Android's apps then belong to the phone's
     // screen (its app drawer, PhoneTouchpadActivity): they leave Plasma's
@@ -877,12 +884,16 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             }.start()
             apps += p
             NativeDesk.kwinTakesGpuBuffers = false
+            NativeDesk.kwinGraphics = ""
             qtStatus = "KWin: running"
             Thread {
                 var demoStarted = false
                 p.inputStream.bufferedReader().outputLines {
                     AppLog.i("[kwin] $it")
                     if (it.contains("deskdroid_ahb: apps can hand KWin GPU buffers")) NativeDesk.kwinTakesGpuBuffers = true
+                    // The GPU or the CPU, and why: kept for the GPU report.
+                    if (KWIN_GRAPHICS_LINES.any { k -> it.contains(k) })
+                        NativeDesk.kwinGraphics = (NativeDesk.kwinGraphics + "\n" + it.trim()).trim().takeLast(2000)
                     // KWin is ready for clients: a first window inside it.
                     if (!demoStarted && it.contains("Accepting client connections")) {
                         demoStarted = true
