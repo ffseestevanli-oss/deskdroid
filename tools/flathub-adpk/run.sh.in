@@ -39,9 +39,17 @@ fi
 [ -e "$F/glibc/lib/libc.so.6" ] || die "glibc isn't unpacked yet (start the desktop once)"
 
 # The runtime and Mesa are packages of their own.
+missing=""
 for need in "$RTPKG" "$MESAPKG"; do
-  [ -e "$S/$need/app.txt" ] || die "needs $need.adpk installed first (Software, Install from a file)"
+  [ -e "$S/$need/app.txt" ] || missing="$missing $need.adpk"
 done
+if [ -n "$missing" ]; then
+  # Nothing else on the desktop would show why the app didn't open: open
+  # Software (NativeDesk.kt's deskdroid:store request) so the runtimes can go in.
+  mkdir -p "$F/open-requests" && echo "deskdroid:store" > "$F/open-requests/.$SID-$$" &&
+    mv "$F/open-requests/.$SID-$$" "$F/open-requests/$SID-$$.req"
+  die "needs$missing installed first (Software, Install from a file)"
+fi
 
 # Links, script execute bits and empty folders, once per package (ddapp.c).
 setup() {
