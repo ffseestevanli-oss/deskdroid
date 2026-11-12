@@ -148,6 +148,11 @@ deskdroid_catch_sigsys (void)
   act.sa_restorer = deskdroid_restore_rt;
 #endif
   INTERNAL_SYSCALL_CALL (rt_sigaction, SIGSYS, &act, NULL, __NSIG_BYTES);
+  /* A program started with SIGSYS blocked (exec keeps the mask: gpgme starts
+     gpgconf and gpg from a child with signals blocked) would be killed on
+     its first blocked call, before this handler can run. Let it through.  */
+  unsigned long int sys = 1UL << (SIGSYS - 1);
+  INTERNAL_SYSCALL_CALL (rt_sigprocmask, SIG_UNBLOCK, &sys, NULL, sizeof sys);
 }""".replace("@PREFIX@", prefix))
 edit("elf/rtld.c", """  struct dl_main_state state;
   dl_main_state_init (&state);

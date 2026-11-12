@@ -34,6 +34,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <sys/auxv.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -43,6 +44,7 @@
 #include <sys/statfs.h>
 #include <sys/statvfs.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 static const char *env_app, *env_rt, *env_tmp, *env_loader, *env_libpath;
@@ -317,13 +319,16 @@ static const char *resolve(const char *path, char *const argv[], char ***out, ch
     return NULL;
 }
 
-/* A program that couldn't start: into $DDMASK_LOG, if set (flatpak.sh
- * reports it; programs like gpgme send the child's stderr to /dev/null). */
-static void exec_failed(const char *p, const char *f, int e) {
+/* Into $DDMASK_LOG, if set: programs that couldn't start or ended badly
+ * (flatpak.sh reports them; gpgme sends its children's stderr nowhere). */
+static void note(const char *fmt, ...) {
     const char *log = getenv("DDMASK_LOG");
     if (!log || !*log) return;
     char line[2 * PATH_MAX + 64];
-    int n = snprintf(line, sizeof line, "ddflatpak: %s (%s): %s\n", p, f ? f : "-", strerror(e));
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(line, sizeof line, fmt, ap);
+    va_end(ap);
     if (n <= 0) return;
     if (n >= (int)sizeof line) n = sizeof line - 1;
     REAL(open);
@@ -333,11 +338,46 @@ static void exec_failed(const char *p, const char *f, int e) {
     close(fd);
 }
 
+static void exec_failed(const char *p, const char *f, int e) {
+    note("ddflatpak: %s (%s): %s\n", p, f ? f : "-", strerror(e));
+}
+
+/* With DDMASK_LOG set, a runtime program started through the loader runs in
+ * a child this process waits for, so how it ended (a signal: killed by
+ * Android?) is noted; this process then ends the same way. Its caller
+ * (gpgme) sees no difference: same pipes, same exit. */
+static void watch_exec(const char *p) {
+    const char *log = getenv("DDMASK_LOG");
+    if (!log || !*log) return;
+    sigset_t cur;
+    if (sigprocmask(SIG_BLOCK, NULL, &cur) == 0 && sigismember(&cur, SIGSYS))
+        note("ddflatpak: %s starts with SIGSYS blocked\n", p);
+    pid_t pid = fork();
+    if (pid <= 0) return; /* the child (or no child): exec as asked */
+    int st;
+    pid_t r;
+    do r = waitpid(pid, &st, 0); while (r < 0 && errno == EINTR);
+    if (r < 0) _exit(0); /* SIGCHLD ignored: reaped already, status unknown */
+    if (WIFSIGNALED(st)) {
+        int sig = WTERMSIG(st);
+        note("ddflatpak: %s killed by signal %d\n", p, sig);
+        signal(sig, SIG_DFL);
+        sigset_t one;
+        sigemptyset(&one);
+        sigaddset(&one, sig);
+        sigprocmask(SIG_UNBLOCK, &one, NULL);
+        raise(sig);
+        _exit(128 + sig);
+    }
+    _exit(WEXITSTATUS(st));
+}
+
 int execve(const char *p, char *const argv[], char *const envp[]) {
     char b[PATH_MAX]; char **a; REAL(execve);
     const char *f = resolve(p, argv, &a, b);
     /* (A program that isn't there is just a probe: gpgme tries gpgsm.) */
     if (!f) { if (errno != ENOENT) exec_failed(p, NULL, errno); return -1; }
+    if (env_loader && f == env_loader) watch_exec(p);
     real_execve(f, a, envp);
     int e = errno;
     exec_failed(p, f, e);
