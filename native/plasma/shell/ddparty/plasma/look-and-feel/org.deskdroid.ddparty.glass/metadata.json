@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "DeskDroid"
+            }
+        ],
+        "Category": "",
+        "Description": "DeskDroid's party look, see-through: blurred glass panels, popups, title bars and windows in near-black, #990045 magenta and rainbow",
+        "Id": "org.deskdroid.ddparty.glass",
+        "License": "GPL-2.0-or-later",
+        "Name": "DD Party Glass",
+        "Version": "1.0"
+    },
+    "X-Plasma-APIVersion": "2"
+}

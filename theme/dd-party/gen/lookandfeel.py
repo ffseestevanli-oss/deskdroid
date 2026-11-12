@@ -3,7 +3,7 @@ together, plus the splash screen and the default panel layout."""
 import os, sys, json, shutil
 from palette import *
 
-ID = "org.deskdroid.ddparty"
+ID = LNF_ID
 
 DEFAULTS = """[kdeglobals][KDE]
 widgetStyle=kvantum
@@ -15,7 +15,7 @@ ColorScheme=DDParty
 Theme=DD-Party
 
 [plasmarc][Theme]
-name=dd-party
+name=%s
 
 [Wallpaper]
 Image=%s
@@ -25,11 +25,11 @@ cursorTheme=breeze_cursors
 
 [kwinrc][org.kde.kdecoration2]
 library=org.kde.kwin.aurorae
-theme=__aurorae__svg__DDParty
+theme=__aurorae__svg__%s
 
 [KSplash]
 Theme=%s
-""" % (os.environ.get("DDP_WALLPAPER", "DDParty"), ID)
+""" % (SLUG, os.environ.get("DDP_WALLPAPER", CAMEL), CAMEL, ID)
 
 LAYOUT = r"""// DD Party default layout: one floating bottom panel, like DeskDroid's own.
 var panel = new Panel;
@@ -225,7 +225,7 @@ if __name__ == "__main__":
         open(out + "/contents/layouts/org.kde.plasma.desktop-layout.js", "w").write(LAYOUT)
         open(out + "/contents/splash/Splash.qml", "w").write(SPLASH)
         shutil.copy(logo, out + "/contents/splash/images/deskdroid.png")
-    prev = os.path.join(os.path.dirname(logo), "previews")
+    prev = os.path.join(os.path.dirname(logo), "previews-glass" if GLASS else "previews")
     for f in ("preview.png", "fullscreenpreview.jpg"):
         if os.path.exists(os.path.join(prev, f)):
             shutil.copy(os.path.join(prev, f), out + "/contents/previews/" + f)
@@ -233,8 +233,9 @@ if __name__ == "__main__":
         "KPackageStructure": "Plasma/LookAndFeel",
         "KPlugin": {
             "Authors": [{"Name": "DeskDroid"}], "Category": "",
-            "Description": "DeskDroid's party look: near-black, #990045 magenta, rainbow accents, chamfered corners",
-            "Id": ID, "License": "GPL-2.0-or-later", "Name": "DD Party", "Version": "1.0",
+            "Description": ("DeskDroid's party look, see-through: blurred glass panels, popups, title bars and windows in near-black, #990045 magenta and rainbow"
+                            if GLASS else "DeskDroid's party look: near-black, #990045 magenta, rainbow accents, chamfered corners"),
+            "Id": ID, "License": "GPL-2.0-or-later", "Name": NAME, "Version": "1.0",
         },
         "X-Plasma-APIVersion": "2",
     }, open(out + "/metadata.json", "w"), indent=4)

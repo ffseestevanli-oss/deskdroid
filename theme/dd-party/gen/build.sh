@@ -15,6 +15,12 @@ python3 kvantum.py "$OUT" "$KVARC"
 python3 editor.py "$OUT"
 python3 icons.py "$OUT" ../assets/deskdroid-logo-256.png
 python3 lookandfeel.py "$OUT" ../assets/deskdroid-logo.png
+# DD Party Glass: the see-through variant (palette.py's glass() values)
+for g in colors.py wallpaper.py plasma.py aurorae.py lookandfeel.py; do
+  case "$g" in lookandfeel.py) DDP_VARIANT=glass python3 "$g" "$OUT" ../assets/deskdroid-logo.png ;;
+                *) DDP_VARIANT=glass python3 "$g" "$OUT" ;; esac
+done
+DDP_VARIANT=glass python3 kvantum.py "$OUT" "$KVARC"
 mkdir -p "$OUT/fonts/DDParty"
 cp ../assets/fonts/* "$OUT/fonts/DDParty/"
 cp ../install.sh ../uninstall.sh ../README.md "$OUT/" 2>/dev/null || true

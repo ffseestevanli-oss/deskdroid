@@ -145,11 +145,13 @@ object SoftwareBridge {
             for (a in catalog) apps.put(JSONObject().put("id", a.id).put("name", a.name).put("summary", a.summary)
                 .put("version", a.version).put("size", a.size)
                 .put("installed", if (a.id in installed) Store.installedVersion(c, a.id) ?: "" else JSONObject.NULL)
-                .put("icon", File(dir, "${a.id}.png").takeIf { it.exists() }?.path ?: ""))
+                .put("icon", File(dir, "${a.id}.png").takeIf { it.exists() }?.path ?: "")
+                .put("open", Store.openCommand(c, a.id) ?: ""))
             // Installed from a file (.adpk) and not in the catalog: listed too, to remove.
             for (id in installed.sorted()) if (catalog.none { it.id == id }) apps.put(JSONObject().put("id", id).put("name", id)
                 .put("summary", "Installed from a file").put("version", Store.installedVersion(c, id) ?: "").put("size", 0)
-                .put("installed", Store.installedVersion(c, id) ?: "").put("icon", "").put("local", true))
+                .put("installed", Store.installedVersion(c, id) ?: "").put("icon", "").put("local", true)
+                .put("open", Store.openCommand(c, id) ?: ""))
             val b = JSONObject()
             busy.forEach { (k, v) -> b.put(k, v.toDouble()) }
             serial++

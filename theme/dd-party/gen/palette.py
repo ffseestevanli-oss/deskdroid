@@ -55,3 +55,20 @@ def rainbow_stops(opacity=1):
     for i, c in enumerate(RAINBOW):
         out.append(f'<stop offset="{i / (len(RAINBOW) - 1):.3f}" stop-color="{c}" stop-opacity="{opacity}"/>')
     return "".join(out)
+
+
+# ---- Variants: "flat" (DD Party) and "glass" (DD Party Glass: see-through,
+# blurred panels, popups, title bars and windows). DDP_VARIANT picks one;
+# the colour scheme, icons, wallpaper and fonts are shared.
+import os as _os
+VARIANT = _os.environ.get("DDP_VARIANT", "flat")
+GLASS = VARIANT == "glass"
+NAME = "DD Party Glass" if GLASS else "DD Party"
+CAMEL = "DDPartyGlass" if GLASS else "DDParty"        # Aurorae, Kvantum, Konsole profile
+SLUG = "dd-party-glass" if GLASS else "dd-party"      # Plasma style
+LNF_ID = "org.deskdroid.ddparty.glass" if GLASS else "org.deskdroid.ddparty"
+
+
+def glass(flat, see_through):
+    """An opacity: the flat value, or the see-through one in DD Party Glass."""
+    return see_through if GLASS else flat

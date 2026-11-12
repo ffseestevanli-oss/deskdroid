@@ -29,6 +29,9 @@ import java.util.zip.ZipInputStream
  *   program.txt   its main program, relative to program/.
  *   program.env   variables it needs, @PROGRAM@ standing for program/'s path.
  *
+ * Or, for a theme, share/ alone, with open.txt: the command Open runs
+ * (Global Theme, to pick it).
+ *
  * Every package also has app.txt (its id) and app.json (id, name, summary,
  * version). A package on its own, as a file, is an .adpk ("DeskDroid
  * package", like a .deb): the same zip. Software installs one from a file
@@ -170,7 +173,7 @@ object Store {
                 if (e.isDirectory || e.name.contains("..")) continue
                 val out = when {
                     e.name.startsWith("lib/") -> File(lib, e.name.removePrefix("lib/"))
-                    e.name.startsWith("program/") || e.name == "program.txt" || e.name == "program.env" -> File(dir, e.name)
+                    e.name.startsWith("program/") || e.name == "program.txt" || e.name == "program.env" || e.name == "open.txt" -> File(dir, e.name)
                     e.name.startsWith("share/") -> File(share, e.name.removePrefix("share/")).also { files += it.path }
                     e.name == "app.txt" || e.name == "app.json" -> null
                     else -> null
@@ -209,6 +212,7 @@ object Store {
     fun linkCommand(c: Context, id: String) {
         val bin = File(c.filesDir, "kwin/bin")
         if (!bin.isDirectory) return // linked when the desktop starts (NativeDesk.linkApps)
+        if (openCommand(c, id) != null) return // a theme or other data: Open runs its open.txt
         val cmd = File(bin, id)
         if (cmd.exists()) return
         try {
@@ -219,6 +223,10 @@ object Store {
             AppLog.i("Store: couldn't link $id: $e")
         }
     }
+
+    /** What Open runs for a package with no program of its own (a theme: open.txt), or null. */
+    fun openCommand(c: Context, id: String): String? =
+        File(root(c), "$id/open.txt").takeIf { it.exists() }?.readText()?.trim()?.takeIf { it.isNotEmpty() }
 
     private fun isElf(f: File): Boolean = try {
         f.inputStream().use { s -> val b = ByteArray(4); s.read(b) == 4 && b[0] == 0x7f.toByte() && b[1] == 'E'.code.toByte() && b[2] == 'L'.code.toByte() && b[3] == 'F'.code.toByte() }

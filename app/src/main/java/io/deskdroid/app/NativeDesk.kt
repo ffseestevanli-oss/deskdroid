@@ -1487,11 +1487,12 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 ?.writeText("[General]\nName=DeskDroid\nParent=FALLBACK/\nCommand=/system/bin/sh\n" +
                     "Environment=TERM=xterm-256color,COLORTERM=truecolor,SHELL=/system/bin/sh,ENV=${rc.path}\n" +
                     "\n[Appearance]\nFont=$font\n")
-            // DD Party's terminal colours, unless the profile has its own.
+            // DD Party Glass's terminal colours (see-through), unless the profile has its own.
+            val konsoleScheme = listOf("DDPartyGlass", "DDParty").firstOrNull { File(filesDir, "kwin/share/konsole/$it.colorscheme").exists() }
             File(filesDir, ".local/share/konsole/DeskDroid.profile").takeIf { p ->
-                File(filesDir, "kwin/share/konsole/DDParty.colorscheme").exists() &&
+                konsoleScheme != null &&
                     p.exists() && !p.readText().contains("ColorScheme=") && p.readText().contains("[Appearance]\n")
-            }?.let { p -> p.writeText(p.readText().replaceFirst("[Appearance]\n", "[Appearance]\nColorScheme=DDParty\n")) }
+            }?.let { p -> p.writeText(p.readText().replaceFirst("[Appearance]\n", "[Appearance]\nColorScheme=$konsoleScheme\n")) }
             File(config, "konsolerc").let { f ->
                 if (!f.exists() || !f.readText().contains("DefaultProfile=")) f.appendText("\n[Desktop Entry]\nDefaultProfile=DeskDroid.profile\n")
             }
@@ -1505,7 +1506,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     /**
-     * DeskDroid's own look, DD Party (theme/dd-party), by default, once: its
+     * DeskDroid's own look, DD Party Glass (theme/dd-party), by default, once: its
      * colors in kdeglobals (as Plasma's colour settings write them, for KWin's
      * borders and the apps), its Plasma style and its global theme. Breeze
      * Dark when the data has no DD Party. A colour scheme or theme set later
@@ -1544,6 +1545,28 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             }
             switched.writeText("")
         }
+        // DD Party Glass replaced the flat DD Party as the default (the flat one
+        // is a download in Software now): a desktop on the flat one moves to
+        // Glass once, as it isn't in the APK any more. Installing the flat one
+        // and picking it in Global Theme afterwards sticks.
+        val glassed = File(config, "deskdroid-ddparty-glass")
+        if (File(data, "share/plasma/desktoptheme/$PARTY_STYLE/metadata.json").exists() && !glassed.exists()) {
+            val moves = listOf(
+                Regex("(?m)^name=dd-party$") to "name=$PARTY_STYLE",
+                Regex("(?m)^LookAndFeelPackage=org\\.deskdroid\\.ddparty$") to "LookAndFeelPackage=$PARTY_LNF",
+                Regex("(?m)^theme=__aurorae__svg__DDParty$") to "theme=__aurorae__svg__$PARTY_DECO",
+                // The flat one's wallpaper, picked on the desktop: Glass's.
+                Regex("wallpapers/DDParty(?=/|$)", RegexOption.MULTILINE) to "wallpapers/DDPartyGlass",
+            )
+            for (name in listOf("plasmarc", "kdeglobals", "kwinrc", "kdedefaults/plasmarc", "kdedefaults/kdeglobals", "kdedefaults/kwinrc",
+                    "plasma-org.kde.plasma.desktop-appletsrc"))
+                File(config, name).takeIf { it.exists() }?.let { f ->
+                    val t = f.readText()
+                    val n = moves.fold(t) { acc, (re, to) -> re.replace(acc, to) }
+                    if (n != t) { f.writeText(n); AppLog.i("Native desktop test: $name moved to DD Party Glass") }
+                }
+            glassed.writeText("")
+        }
         // Earlier builds pinned every app to Breeze Dark here ([UiSettings] in
         // kdeglobals, which every app's settings fall through to), from before
         // Plasma's platform theme: apps then ignored System Settings' colours
@@ -1564,17 +1587,19 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (File(data, "share/org.kde.syntax-highlighting/themes/dd-party.theme").exists())
             Tuning.writeIfChanged(katerc, "[KTextEditor Renderer]\nAuto Color Theme Selection=false\nColor Theme=DD Party\n")
         else katerc.delete()
-        // DD Party's window borders (Aurorae, theme/dd-party) with its colours,
-        // when this build has Aurorae; else KWin's default, Breeze. A system
-        // default too, so a border picked in System Settings wins.
+        // DD Party Glass's window borders (Aurorae, theme/dd-party), see-through
+        // with KWin's blur behind them, when this build has Aurorae; else KWin's
+        // default, Breeze. A system default too, so a border picked in System
+        // Settings (or a Global Theme) wins.
         val kwinrc = File(xdg, "kwinrc")
         val currentScheme = Regex("(?m)^ColorScheme=(.*)$").findAll(if (globals.exists()) globals.readText() else "")
             .map { it.groupValues[1] }.lastOrNull { it != "Breeze Dark" }
             ?: Regex("(?m)^ColorScheme=(.*)$").find(defaults)?.groupValues?.get(1)
         val aurorae = File(applicationInfo.nativeLibraryDir, "libplugins_org.kde.kdecoration3_org.kde.kwin.aurorae.so").exists() &&
-            File(data, "share/aurorae/themes/DDParty/metadata.desktop").exists()
+            File(data, "share/aurorae/themes/$PARTY_DECO/metadata.desktop").exists()
         if (aurorae && currentScheme == "DDParty")
-            Tuning.writeIfChanged(kwinrc, "[org.kde.kdecoration2]\nlibrary=org.kde.kwin.aurorae\ntheme=__aurorae__svg__DDParty\n")
+            Tuning.writeIfChanged(kwinrc, "[org.kde.kdecoration2]\nlibrary=org.kde.kwin.aurorae\ntheme=__aurorae__svg__$PARTY_DECO\n" +
+                "\n[Plugins]\nblurEnabled=true\ncontrastEnabled=true\n")
         else kwinrc.delete()
         // GTK programs (Floorp): Breeze for GTK (breeze-gtk), light or dark as
         // Plasma's colour scheme is, at every start. A settings.ini without
@@ -1629,8 +1654,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         File(config, "kdedefaults/$name").let { if (it.exists()) it.readText() else "" }
     private val GTK_MARK = "# Written by DeskDroid to match Plasma's colors; delete this line to keep your own."
     // DD Party's parts (theme/dd-party), shipped in the desktop's data.
-    private val PARTY_LNF = "org.deskdroid.ddparty"
-    private val PARTY_STYLE = "dd-party"
+    private val PARTY_LNF = "org.deskdroid.ddparty.glass"
+    private val PARTY_STYLE = "dd-party-glass"
+    private val PARTY_DECO = "DDPartyGlass"
     private val PARTY_ICONS = "DD-Party"
 
     /**

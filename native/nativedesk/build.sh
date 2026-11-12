@@ -394,6 +394,23 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         "$app" "${title:-$app}" "$summary" "${version:-}" "$size" "$sha" "$app" "$app")")
       echo "   store: $app ($(du -h "$STORE_OUT/$app.zip" | cut -f1), program, ${#own[@]} programs and libraries)"
     done
+    # Store themes: data only (share/), like the flat DD Party (made by
+    # theme/dd-party/gen/native.sh), with app.json and icon.png ready made.
+    # open.txt is what Open runs: Global Theme, to pick it.
+    for t in "$HERE/../store/themes"/*/; do
+      [ -e "$t/app.json" ] || continue
+      app="$(jq -r .id "$t/app.json")"
+      pkg="$WORK/store/$app"; rm -rf "$pkg"; mkdir -p "$pkg"
+      cp -r "$t/share" "$t/app.json" "$pkg/"
+      echo "$app" > "$pkg/app.txt"
+      echo "systemsettings kcm_lookandfeel" > "$pkg/open.txt"
+      rm -f "$STORE_OUT/$app.zip"; storezip "$pkg" "$STORE_OUT/$app.zip"
+      size="$(stat -c %s "$STORE_OUT/$app.zip")"; sha="$(sha256sum "$STORE_OUT/$app.zip" | cut -d' ' -f1)"
+      cp "$t/icon.png" "$STORE_OUT/$app.png"
+      store_entries+=("$(jq -c --argjson size "$size" --arg sha "$sha" --arg file "$app.zip" --arg icon "$app.png" \
+        '{id, name, summary, version, size: $size, sha256: $sha, file: $file, icon: $icon}' "$t/app.json")")
+      echo "   store: $app ($(du -h "$STORE_OUT/$app.zip" | cut -f1), theme)"
+    done
     (IFS=,; echo "{\"version\":1,\"apps\":[${store_entries[*]}]}") > "$STORE_OUT/index.json"
     # Data KWin reads at run time (keyboard layouts, its own files), as a zip
     # named like a library so it ships the same way; the app unpacks it.
@@ -408,8 +425,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" $(ls -d share/plasma share/kf6 share/desktop-directories share/deskdroid/menus 2>/dev/null))
       rm -rf "$WORK/shell" && mkdir -p "$WORK/shell/share/plasma"
       cp -r "$HERE/../plasma/shell/shells" "$HERE/../plasma/shell/plasmoids" "$HERE/../plasma/shell/wallpapers" "$WORK/shell/share/plasma/"
-      # DD Party, DeskDroid's default look: colour scheme, Plasma style, icons,
-      # global theme, editor and terminal colours (made by theme/dd-party/gen/native.sh).
+      # DD Party Glass, DeskDroid's default look: colour scheme, Plasma style, icons,
+      # global theme, window borders, editor and terminal colours (made by
+      # theme/dd-party/gen/native.sh). The flat DD Party is in the store (above).
       cp -r "$HERE/../plasma/shell/ddparty/." "$WORK/shell/share/"
       test -e "$WORK/shell/share/color-schemes/DDParty.colors"
       # Wallpapers: DeskDroid's own (the Debian desktop's), the default, and a

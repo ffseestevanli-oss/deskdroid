@@ -43,6 +43,21 @@ To remove the theme, first switch back with
 (add `--system` if you installed it that way). Kvantum and the fonts revert
 when you choose another theme or font.
 
+## DD Party Glass
+
+A second variant of the same theme that leans on blur and transparency. The
+panel, menus, popups, title bars, app windows and Konsole are see-through
+over a brighter wallpaper, with KWin's blur behind them. It installs alongside
+DD Party and shows up as "DD Party Glass" in Global Theme.
+
+```sh
+./install.sh --apply --glass    # switch to Glass (also turns on KWin blur and contrast)
+./install.sh --apply            # switch back to the flat DD Party
+```
+
+Glass needs a compositor with blur, which every Plasma 6 Wayland or X11 session
+has by default. On a very slow GPU the flat variant will feel lighter.
+
 ## Known limits
 
 - In Dolphin, the status bar text gets shortened ("10 f…ders"). This is a Kvantum
