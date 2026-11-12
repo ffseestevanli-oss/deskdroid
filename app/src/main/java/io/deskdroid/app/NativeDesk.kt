@@ -2341,6 +2341,15 @@ class PhoneTouchpadActivity : Activity() {
     private var drawer: PhoneAppDrawer? = null
     private val drawerOpen get() = drawer?.view?.visibility == android.view.View.VISIBLE
     private lateinit var pad: NativeDeskActivity.KeyboardSurface
+    // Idle blackout: after Prefs.touchpadBlackout seconds without a touch the
+    // screen turns pure black (OLED pixels off, backlight at its lowest), like
+    // the phone sleeping. The tap that wakes it is swallowed, so it never clicks.
+    private lateinit var blackout: android.view.View
+    private val idle = Handler(Looper.getMainLooper())
+    private val goBlack = Runnable { blackOut() }
+    private val blackedOut get() = ::blackout.isInitialized && blackout.visibility == android.view.View.VISIBLE
+    private var swallowing = false
+    private var fingerDown = false
     private val displays by lazy { getSystemService(android.hardware.display.DisplayManager::class.java) }
     private val listener = object : android.hardware.display.DisplayManager.DisplayListener {
         override fun onDisplayAdded(id: Int) = Unit
@@ -2479,8 +2488,77 @@ class PhoneTouchpadActivity : Activity() {
             addView(content, FrameLayout.LayoutParams(-1, -1))
             addView(apps.view, FrameLayout.LayoutParams(-1, -1))
             addView(io.deskdroid.app.ui.RainbowStrip(context), FrameLayout.LayoutParams(-1, dp(4)))
+            blackout = android.view.View(context).apply {
+                setBackgroundColor(Color.BLACK)
+                visibility = android.view.View.GONE
+            }
+            addView(blackout, FrameLayout.LayoutParams(-1, -1))
         })
         displays.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
+    }
+
+    /** (Re)starts the idle countdown to the blackout. */
+    private fun scheduleBlackout() {
+        idle.removeCallbacks(goBlack)
+        val seconds = Prefs.touchpadBlackout(this)
+        if (seconds > 0) idle.postDelayed(goBlack, seconds * 1000L)
+    }
+
+    private fun blackOut() {
+        // Not while a finger rests on the pad, the app drawer is up, or the
+        // phone's keyboard is (it would stay lit over the black).
+        val keyboardUp = Build.VERSION.SDK_INT >= 30 && pad.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+        if (fingerDown || drawerOpen || keyboardUp) {
+            scheduleBlackout(); return
+        }
+        if (blackedOut) return
+        blackout.visibility = android.view.View.VISIBLE
+        if (Build.VERSION.SDK_INT >= 30) window.insetsController?.let {
+            it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            it.hide(WindowInsets.Type.navigationBars())
+        }
+        window.attributes = window.attributes.apply {
+            screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF
+        }
+    }
+
+    private fun wake() {
+        idle.removeCallbacks(goBlack)
+        if (blackedOut) {
+            blackout.visibility = android.view.View.GONE
+            if (Build.VERSION.SDK_INT >= 30) window.insetsController?.show(WindowInsets.Type.navigationBars())
+            window.attributes = window.attributes.apply {
+                screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            }
+        }
+        scheduleBlackout()
+    }
+
+    override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                fingerDown = true
+                if (blackedOut) { wake(); swallowing = true }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> fingerDown = false
+        }
+        // The waking gesture, down to the last finger up, goes nowhere.
+        if (swallowing) {
+            if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) swallowing = false
+            return true
+        }
+        scheduleBlackout()
+        return super.dispatchTouchEvent(e)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        wake() // back from a phone app or the screen coming on: lit, countdown fresh
+    }
+
+    override fun onPause() {
+        idle.removeCallbacks(goBlack)
+        super.onPause()
     }
 
     /** The app drawer over the touchpad, or the touchpad again. */
@@ -2565,6 +2643,7 @@ class PhoneTouchpadActivity : Activity() {
     }
 
     override fun onDestroy() {
+        idle.removeCallbacks(goBlack)
         displays.unregisterDisplayListener(listener)
         if (drawerOpen) drawer?.close()
         if (NativeDesk.touchpad?.get() === this) NativeDesk.touchpad = null
