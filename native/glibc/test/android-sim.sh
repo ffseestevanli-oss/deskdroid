@@ -33,6 +33,13 @@ install -m 755 "$HERE/../../flatpak/nobwrap.sh" "$L/libdd_nobwrap.so"
 python3 "$HERE/android-policy.py" "$BIONIC" /usr/include/x86_64-linux-gnu/asm/unistd_64.h \
   "${GLIBC_SRC:?set GLIBC_SRC to a glibc source tree}/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h" > "$W/android-policy.h"
 gcc -O2 -Wall -I"$W" "$HERE/android-sim.c" -o "$L/android-sim"
+# Starts a program with SIGSYS blocked, as gpgme starts gpgconf and gpg.
+cat > "$W/blocked.c" <<'EOC'
+#include <signal.h>
+#include <unistd.h>
+int main(int c, char **v) { sigset_t s; sigemptyset(&s); sigaddset(&s, SIGSYS); sigprocmask(SIG_BLOCK, &s, 0); (void)c; execv(v[1], v + 1); return 127; }
+EOC
+gcc -O2 -Wall "$W/blocked.c" -o "$W/blocked"
 
 # The app's files: zips unpacked like the app does (no modes), etc/ as
 # NativeDesk.kt writes it. Flatpak's own data is kept between runs unless
@@ -73,6 +80,8 @@ step() {
   [ -s "$F/glibc/sigsys.log" ] && echo "     blocked calls caught: $(sort -un "$F/glibc/sigsys.log" | tr '\n' ' ')"
   return 0
 }
+step "a program started with SIGSYS blocked survives Android's blocked calls" \
+  "$W/blocked" "$L/android-sim" "$L/libdd_ld-glibc.so" /bin/true
 step "add Flathub" fp remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 step "fetch Flathub's catalog" fp update --user --appstream flathub
 [ -e "$F/flatpak/appstream/flathub/x86_64/active/appstream.xml.gz" ] && echo "ok   catalog is where Discover reads it" || { echo "FAIL catalog missing"; fails=$((fails + 1)); }

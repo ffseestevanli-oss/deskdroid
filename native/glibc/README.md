@@ -22,7 +22,9 @@ changes upstream glibc so it fits:
 - **Blocked system calls fail instead of killing.** The loader catches
   `SIGSYS` before the program starts, and a system call seccomp blocks
   returns `ENOSYS`, which programs already handle. (A program that installs
-  its own `SIGSYS` handler replaces it.)
+  its own `SIGSYS` handler replaces it.) The loader also unblocks `SIGSYS`:
+  a program started with it blocked (exec keeps the signal mask) would
+  otherwise be killed on its first blocked call.
 - **No clone3.** glibc creates threads and child processes (`posix_spawn`)
   with clone3, with every signal blocked: a blocked clone3 there can't be
   caught and kills the process ("Bad system call", seen from flatpak). glibc
