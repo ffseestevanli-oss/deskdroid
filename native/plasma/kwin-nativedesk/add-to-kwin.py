@@ -60,7 +60,74 @@ edit("src/waylandwindow.cpp",
      "        }\n")
 edit("src/waylandwindow.cpp", "#include \"waylandwindow.h\"\n", "#include \"waylandwindow.h\"\n#include <QFile>\n")
 
-# Dodge display cutouts: the backend learns which edges the camera cutout and
+# Plasma's popups (Kickoff, the calendar...) reach KWin here as plain,
+# borderless plasmashell windows, without the applet-popup role or the slide
+# request Plasma makes on a desktop: they opened with no animation, and closed
+# like any window (Fall Apart, when it was on). Sliding Popups now slides them
+# from their panel's edge itself, as on a desktop; it takes their close
+# animation as soon as they open, so the window close effects leave them.
+sp = "src/plugins/slidingpopups/slidingpopups.cpp"
+edit(sp, "void SlidingPopupsEffect::setupSlideData(EffectWindow *w)\n{\n",
+     "// DeskDroid: a plasmoid's popup, whatever role Plasma managed to give it.\n"
+     "static bool deskdroidIsPlasmoidPopup(EffectWindow *w)\n"
+     "{\n"
+     "    return w->isAppletPopup()\n"
+     "        || (w->isNormalWindow() && !w->hasDecoration() && w->windowClass().endsWith(QLatin1String(\" org.kde.plasmashell\")));\n"
+     "}\n\n"
+     "// DeskDroid: the screen edge of the panel nearest the popup (its applet's\n"
+     "// panel), or else the screen edge nearest it.\n"
+     "static int deskdroidPopupEdge(EffectWindow *w)\n"
+     "{\n"
+     "    enum { Left, Top, Right, Bottom };\n"
+     "    const QRectF screen = effects->clientArea(FullScreenArea, w->screen(), effects->currentDesktop());\n"
+     "    const QRectF popup = w->frameGeometry();\n"
+     "    auto edgeOf = [&screen](const QRectF &r) {\n"
+     "        const qreal d[] = {r.left() - screen.left(), r.top() - screen.top(), screen.right() - r.right(), screen.bottom() - r.bottom()};\n"
+     "        return int(std::min_element(std::begin(d), std::end(d)) - std::begin(d));\n"
+     "    };\n"
+     "    EffectWindow *panel = nullptr;\n"
+     "    qreal best = 0;\n"
+     "    const auto windows = effects->stackingOrder();\n"
+     "    for (EffectWindow *dock : windows) {\n"
+     "        if (!dock->isDock() || dock->isDeleted() || !dock->isVisible() || dock->screen() != w->screen()) {\n"
+     "            continue;\n"
+     "        }\n"
+     "        const QRectF g = dock->frameGeometry();\n"
+     "        const qreal dx = std::max<qreal>({0, g.left() - popup.right(), popup.left() - g.right()});\n"
+     "        const qreal dy = std::max<qreal>({0, g.top() - popup.bottom(), popup.top() - g.bottom()});\n"
+     "        const qreal distance = std::hypot(dx, dy);\n"
+     "        if (!panel || distance < best) {\n"
+     "            panel = dock;\n"
+     "            best = distance;\n"
+     "        }\n"
+     "    }\n"
+     "    if (!panel) {\n"
+     "        return edgeOf(popup);\n"
+     "    }\n"
+     "    // A panel spans its edge: a wide one is at the top or bottom, a tall one at a side.\n"
+     "    const QRectF g = panel->frameGeometry();\n"
+     "    if (g.width() >= g.height()) {\n"
+     "        return g.center().y() < screen.center().y() ? Top : Bottom;\n"
+     "    }\n"
+     "    return g.center().x() < screen.center().x() ? Left : Right;\n"
+     "}\n\n"
+     "void SlidingPopupsEffect::setupSlideData(EffectWindow *w)\n{\n")
+edit(sp, "    if (auto internal = w->internalWindow()) {\n        internal->installEventFilter(this);\n        setupInternalWindowSlide(w);\n    }\n}\n",
+     "    if (auto internal = w->internalWindow()) {\n        internal->installEventFilter(this);\n        setupInternalWindowSlide(w);\n    }\n\n"
+     "    if (!m_animationsData.contains(w) && deskdroidIsPlasmoidPopup(w)) { // DeskDroid\n"
+     "        static const Location locations[] = {Location::Left, Location::Top, Location::Right, Location::Bottom};\n"
+     "        AnimationData &animData = m_animationsData[w];\n"
+     "        animData.location = locations[deskdroidPopupEdge(w)];\n"
+     "        animData.offset = -1; // from the screen edge to the popup, as Plasma asks\n"
+     "        animData.slideLength = 0;\n"
+     "        animData.slideInDuration = m_slideInDuration;\n"
+     "        animData.slideOutDuration = m_slideOutDuration;\n"
+     "        setupAnimData(w);\n"
+     "    }\n"
+     "}\n")
+edit(sp, '#include "slidingpopups.h"\n', '#include "slidingpopups.h"\n#include <algorithm>\n#include <cmath>\n')
+
+# Dodge display cutouts:the backend learns which edges the camera cutout and
 # rounded corners hide (deskdroidSafeMargins); panels are laid out inside
 # what's left, left and right only. Maximized windows and the wallpaper
 # (exclusive zone -1) still reach every edge.

@@ -248,6 +248,39 @@ static void closeAppletPopups(const QPointF &pos)
     }
 }
 
+// Closes every open plasmoid popup, for something other than a press (which
+// closeAppletPopups handles).
+static void closeOpenAppletPopups(const char *why)
+{
+    if (!workspace()) {
+        return;
+    }
+    QList<Window *> popups;
+    const auto windows = workspace()->windows();
+    for (Window *w : windows) {
+        if (isPlasmoidPopup(w) && !w->isDeleted() && !w->isHidden()) {
+            popups << w;
+        }
+    }
+    if (popups.isEmpty()) {
+        return;
+    }
+    qInfo("nativedesk: %s; closing %lld plasmoid popup(s)", why, qlonglong(popups.size()));
+    for (Window *w : std::as_const(popups)) {
+        w->closeWindow();
+    }
+}
+
+// The task bar and window list minimize and restore windows from a panel,
+// which a press there leaves alone (its applet buttons open and close popups
+// themselves): a window minimized or restored closes the popups too.
+static void closeAppletPopupsOnMinimize(Window *w)
+{
+    QObject::connect(w, &Window::minimizedChanged, workspace(), [w] {
+        closeOpenAppletPopups(w->isMinimized() ? "a window was minimized" : "a window was restored");
+    });
+}
+
 // Plasma hides a plasmoid's popup (Kickoff, the calendar...) when the popup
 // loses focus, which is the cue a press elsewhere gives. That needs the popup
 // to have had focus: give it focus when it opens, and log it.
@@ -263,10 +296,23 @@ static void focusAppletPopupsWhenShown()
               isPlasmoidPopup(w) ? " plasmoid popup, focusing it" : "");
         if (isPlasmoidPopup(w)) {
             workspace()->activateWindow(w, true);
+        } else {
+            closeAppletPopupsOnMinimize(w);
         }
     });
+    const auto windows = workspace()->windows();
+    for (Window *w : windows) {
+        if (!isPlasmoidPopup(w)) {
+            closeAppletPopupsOnMinimize(w);
+        }
+    }
     QObject::connect(workspace(), &Workspace::windowActivated, workspace(), [](Window *w) {
         qInfo("nativedesk: focus on %s", w ? qPrintable(w->resourceClass() + QStringLiteral(" [type %1]").arg(int(w->windowType()))) : "nothing");
+        // Another window taking focus (a task bar or window list click, a
+        // new app) closes the popups, as their losing focus does on a desktop.
+        if (w && !isPlasmoidPopup(w) && !w->isDock() && !w->isPopupWindow()) {
+            closeOpenAppletPopups("another window took focus");
+        }
     });
 }
 
