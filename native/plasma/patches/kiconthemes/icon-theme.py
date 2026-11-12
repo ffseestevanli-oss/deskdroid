@@ -6,6 +6,9 @@ the theme from kdeglobals ([Icons] Theme, Breeze by default) and look for
 it in $XDG_DATA_DIRS/icons, as Plasma does. Under Plasma's platform theme
 it only adds the search paths: the platform theme picks the theme.
 
+It also has KIconLoader look for an icon's exact name in every theme
+before its shortened names (kiconloader.cpp, below).
+
 icon-theme.py <kiconthemes source dir>"""
 import pathlib
 import sys
@@ -70,3 +73,35 @@ for inc in ("#include <QIcon>", "#include <QGuiApplication>", "#include <QStanda
     if inc not in t:
         t = t.replace('#include "config.h"', inc + '\n#include "config.h"', 1)
 p.write_text(t)
+
+# Exact names before shortened ones: KIconLoader tries an icon's shortened
+# names (preferences-desktop-color, then preferences-desktop, then
+# preferences) in each theme before it looks in the next. Breeze Dark here
+# holds only the icons it recolors and inherits the rest from Breeze (no
+# copies of them all, build-deps.sh's build_breeze_icons), so its own
+# "preferences" icon (System Settings' cog) stood in for every colour icon
+# only Breeze has: System Settings' pages all showed it. Upstream ships those
+# copies in Breeze Dark, so it never meets this.
+p = pathlib.Path(sys.argv[1]) / "src" / "kiconloader.cpp"
+t = p.read_text()
+old = """    bool genericFallback = name.endsWith(QLatin1String("-x-generic"));
+    bool isSymbolic = name.endsWith(QLatin1String("-symbolic"));
+    QString path;
+    for (KIconThemeNode *themeNode : std::as_const(links)) {
+"""
+new = """    bool genericFallback = name.endsWith(QLatin1String("-x-generic"));
+    bool isSymbolic = name.endsWith(QLatin1String("-symbolic"));
+    QString path;
+    // DeskDroid: the exact name in every theme (Breeze Dark, then Breeze,
+    // then hicolor) before any shortened one.
+    for (KIconThemeNode *themeNode : std::as_const(links)) {
+        path = themeNode->theme->iconPathByName(name, size, KIconLoader::MatchBest, scale);
+        if (!path.isEmpty()) {
+            return path;
+        }
+    }
+    for (KIconThemeNode *themeNode : std::as_const(links)) {
+"""
+if old not in t:
+    sys.exit("icon-theme.py: kiconloader.cpp's findMatchingIcon changed")
+p.write_text(t.replace(old, new, 1))
