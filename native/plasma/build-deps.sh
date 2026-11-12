@@ -392,11 +392,11 @@ build_qtmultimedia() {
   perl -0pi -e 's/(private static void setAudioOutput\(AudioDeviceInfo deviceInfo,[^)]*\)\s*\{).*?(\n\s*m_currentOutputId = deviceInfo\.getId\(\);)/$1\n        \/\/ DeskDroid: the desktop leaves the phone audio mode and routing alone.$2/s' "$j"
   grep -q "DeskDroid: the desktop leaves" "$j"
   ! grep -q "m_audioManager.setMode(mode)" "$j"
-  rm -f "$PREFIX"/plugins/multimedia/*androidmediaplugin*
+  rm -f "$PREFIX"/plugins/multimedia/*androidmediaplugin* "$PREFIX"/lib/cmake/Qt6Multimedia/Qt6QAndroidMediaPlugin*
   qt_module_in "$s" -DFEATURE_ffmpeg=ON -DFFMPEG_DIR="$PREFIX/ffmpeg" -DFEATURE_native_android_backend=OFF \
     -DFEATURE_spatialaudio=OFF -DFEATURE_spatialaudio_quick3d=OFF
   test -n "$(find "$PREFIX/plugins" -name '*ffmpegmediaplugin*.so' | head -1)"
-  test -z "$(find "$PREFIX/plugins" -name '*androidmediaplugin*' | head -1)"
+  test -z "$(find "$PREFIX/plugins" "$PREFIX/lib/cmake/Qt6Multimedia" -iname '*androidmediaplugin*' | head -1)"
 }
 inputs_qtmultimedia() { declare -f build_ffmpeg; }
 # Text to speech, which KTextEditor needs (its "Say" actions); Qt Speech
