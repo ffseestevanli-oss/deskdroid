@@ -127,8 +127,12 @@ object NativeDesk {
         keysDown.clear()
     }
 
-    /** A desktop action (protocol.h's NDESK_ACTION_*): 1 shows the desktop. */
+    /** A desktop action (protocol.h's NDESK_ACTION_*). */
     @JvmStatic external fun nativeAction(action: Int)
+    /** NDESK_ACTION_SHOW_DESKTOP: every window minimized, or back again (Home). */
+    const val ACTION_SHOW_DESKTOP = 1
+    /** NDESK_ACTION_BACK: leaves Plasma's edit mode, else Escape (Back). */
+    const val ACTION_BACK = 4
     /** The phone asleep (SleepMode): the compositor hands out a frame a second, not twenty. */
     @JvmStatic external fun nativeSetSleeping(sleeping: Boolean)
 
@@ -1876,13 +1880,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
-        // Back closes the DD menu, or else shows the desktop (every window
-        // minimized; Back again brings them back). The menu opens with a swipe
-        // up from the bottom right corner.
+        // Back closes the DD menu, or else is the desktop's Escape: it leaves
+        // Plasma's edit mode, closes a popup or the start menu, cancels a
+        // dialog. Home (while DeskDroid is the home app) shows the desktop
+        // instead, see onNewIntent. The menu opens with a swipe up from the
+        // bottom right corner.
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (e.repeatCount == 0) {
                 if (menu.visibility == android.view.View.VISIBLE) showMenu(false)
-                else if (started) NativeDesk.nativeAction(1)
+                else if (started) NativeDesk.nativeAction(NativeDesk.ACTION_BACK)
             }
             return true
         }
@@ -2227,9 +2233,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         if (intent.hasCategory(android.content.Intent.CATEGORY_HOME) && monitorHasDesktop()) { backToTouchpad(); return }
+        // Home: every window minimized, and back again on the next press.
         if (inFront && started && intent.hasCategory(android.content.Intent.CATEGORY_HOME)) {
             showMenu(false)
-            NativeDesk.nativeAction(1)
+            NativeDesk.nativeAction(NativeDesk.ACTION_SHOW_DESKTOP)
         }
     }
 
@@ -2847,8 +2854,15 @@ class PhoneTouchpadActivity : Activity() {
     }
 
     override fun onKeyDown(keyCode: Int, e: KeyEvent): Boolean {
-        // Back closes the app drawer (and otherwise does nothing here).
-        if (keyCode == KeyEvent.KEYCODE_BACK) { if (drawerOpen) drawer?.close(); return true }
+        // Back closes the app drawer, or else is the desktop's Escape (as on
+        // the phone's own desktop: edit mode, popups, dialogs).
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (e.repeatCount == 0) {
+                if (drawerOpen) drawer?.close()
+                else if (NativeDesk.running) NativeDesk.nativeAction(NativeDesk.ACTION_BACK)
+            }
+            return true
+        }
         // Typing in the drawer's search box stays there.
         if (drawerOpen) return super.onKeyDown(keyCode, e)
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
