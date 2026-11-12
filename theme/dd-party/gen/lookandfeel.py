@@ -204,13 +204,13 @@ Rectangle {
 
 NATIVE = os.environ.get("DDP_NATIVE") == "1"
 if NATIVE:
-    # DeskDroid's native Plasma (Android): Breeze widgets and window borders in
-    # DD Party's colours; no Kvantum, Aurorae or splash there, and its shell
-    # is org.deskdroid.desktop, so no panel layout either.
+    # DeskDroid's native Plasma (Android): Breeze widgets in DD Party's
+    # colours; no Kvantum or splash there, and its shell is
+    # org.deskdroid.desktop, so no panel layout either. The window borders
+    # are DD Party's Aurorae theme (KWin keeps Breeze in a build without Aurorae).
     DEFAULTS = (DEFAULTS.replace("widgetStyle=kvantum", "widgetStyle=Breeze")
-                .replace("library=org.kde.kwin.aurorae\ntheme=__aurorae__svg__DDParty", "library=org.kde.breeze\ntheme=Breeze")
                 .split("\n[KSplash]")[0] + "\n")
-    assert "kvantum" not in DEFAULTS and "aurorae" not in DEFAULTS
+    assert "kvantum" not in DEFAULTS and "KSplash" not in DEFAULTS
 
 if __name__ == "__main__":
     out = sys.argv[1] + f"/plasma/look-and-feel/{ID}"

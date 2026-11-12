@@ -273,6 +273,15 @@ if __name__ == "__main__":
     os.makedirs(f"{out}/scalable/places", exist_ok=True)
     os.symlink("../apps/start-here-kde.svg", f"{out}/scalable/places/start-here-kde.svg")
     os.symlink("../apps/start-here-kde.svg", f"{out}/scalable/places/distributor-logo.svg")
+    # The -symbolic names menus and panels ask for (Kickoff's categories...):
+    # newer KDE Frameworks look for those exactly through the whole theme
+    # chain (so Breeze Dark's won) before trying the plain name.
+    for sub in ("apps", "places", "mimetypes", "devices"):
+        d = f"{out}/scalable/{sub}"
+        for f in sorted(os.listdir(d)):
+            name = f[:-4]
+            if f.endswith(".svg") and not name.endswith("-symbolic") and not os.path.lexists(f"{d}/{name}-symbolic.svg"):
+                os.symlink(f, f"{d}/{name}-symbolic.svg")
     dirs = ["scalable/apps", "scalable/places", "scalable/mimetypes", "scalable/devices"]
     ctx = {"apps": "Applications", "places": "Places", "mimetypes": "MimeTypes", "devices": "Devices"}
     idx = ["[Icon Theme]", "Name=DD Party", "Comment=DeskDroid's party look: chamfered, rainbow-coded icons. Everything else comes from Breeze Dark.",
