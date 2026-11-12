@@ -54,8 +54,10 @@ Steam menu entry opens it while Steam isn't set up, instead of Konsole.
       "Installing from …", then "Unzipping FEX-Emu".
 - [ ] After "FEX-Emu is ready" the bar goes to 83% "Checking that FEX-Emu
       runs x86 programs", then 85% "FEX-Emu works" and on to Steam (no stall
-      at 82%). If it fails, the verbose log shows why, with the end of
-      `files/x86/run/fexserver.log`.
+      at 82%). If it fails, the verbose log says which step stopped (FEX
+      itself, or the first x86 program) and, for a hang, what each FEX
+      thread waits on; `files/x86/run/fex-check.log` and `fexserver.log`
+      have the rest.
 - [ ] Nothing new for 4 minutes: a yellow panel offers Keep waiting, Stop and
       try again, and View verbose. Cancel and Stop leave no FEX processes
       (`deskdroid-steam --stop`); `deskdroid-steam --check` tests FEX alone.
