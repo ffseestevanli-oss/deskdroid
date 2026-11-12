@@ -76,6 +76,11 @@ static void deskdroidCollect(const KServiceGroup::Ptr &group, QVariantList &apps
 // folder last, in "Other": the shape Start 7 Plus's apps.py prints.
 QVariantList ProcessRunner::appMenu()
 {
+    // Each folder's apps A to Z (Android Apps included; its kind subfolders
+    // are flattened into it by deskdroidCollect).
+    const auto byName = [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value(QStringLiteral("name")).toString().localeAwareCompare(b.toMap().value(QStringLiteral("name")).toString()) < 0;
+    };
     QVariantList folders;
     QVariantList loose;
     QStringList seenLoose;
@@ -93,6 +98,7 @@ QVariantList ProcessRunner::appMenu()
             QVariantList apps;
             QStringList seen;
             deskdroidCollect(group, apps, seen);
+            std::sort(apps.begin(), apps.end(), byName);
             if (!apps.isEmpty()) {
                 folders << QVariantMap{{QStringLiteral("name"), group->caption()},
                                        {QStringLiteral("icon"), group->icon().isEmpty() ? QStringLiteral("folder") : group->icon()},
@@ -106,9 +112,8 @@ QVariantList ProcessRunner::appMenu()
             }
         }
     }
-    std::sort(folders.begin(), folders.end(), [](const QVariant &a, const QVariant &b) {
-        return a.toMap().value(QStringLiteral("name")).toString().localeAwareCompare(b.toMap().value(QStringLiteral("name")).toString()) < 0;
-    });
+    std::sort(folders.begin(), folders.end(), byName);
+    std::sort(loose.begin(), loose.end(), byName);
     if (!loose.isEmpty()) {
         folders << QVariantMap{{QStringLiteral("name"), QStringLiteral("Other")},
                                {QStringLiteral("icon"), QStringLiteral("applications-other")},
