@@ -1,0 +1,93 @@
+// Software's window: the catalog (BrowsePage), or an .adpk to install
+// (PackagePage) when Software was opened with one.
+import QtQuick
+import QtQuick.Controls as QQC2
+import QtQuick.Dialogs
+import org.kde.kirigami as Kirigami
+import "."
+
+Kirigami.ApplicationWindow {
+    id: root
+    title: "Software"
+    width: 1000
+    height: 720
+    minimumWidth: 420
+    minimumHeight: 480
+    color: Party.bg
+    pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
+    pageStack.defaultColumnWidth: width
+    font.family: Party.body
+    // The party colors, whatever the desktop's color scheme is (as the Steam
+    // Installation Assistant does).
+    Kirigami.Theme.inherit: false
+    Kirigami.Theme.colorSet: Kirigami.Theme.Window
+    Kirigami.Theme.backgroundColor: Party.surface
+    Kirigami.Theme.alternateBackgroundColor: Party.card
+    Kirigami.Theme.textColor: Party.text
+    Kirigami.Theme.disabledTextColor: Party.dim
+    Kirigami.Theme.highlightColor: Party.pink
+    Kirigami.Theme.highlightedTextColor: Party.bg
+    Kirigami.Theme.hoverColor: Party.cyan
+    Kirigami.Theme.focusColor: Party.cyan
+    Kirigami.Theme.linkColor: Party.cyan
+    Kirigami.Theme.positiveTextColor: Party.green
+    Kirigami.Theme.neutralTextColor: Party.yellow
+    Kirigami.Theme.negativeTextColor: Party.red
+    palette.window: Party.surface
+    palette.windowText: Party.text
+    palette.base: Party.panel
+    palette.alternateBase: Party.card
+    palette.text: Party.text
+    palette.button: Party.surface
+    palette.buttonText: Party.text
+    palette.highlight: Party.pink
+    palette.highlightedText: Party.bg
+    palette.placeholderText: Party.dim
+    palette.mid: Party.border
+    palette.dark: Party.panel
+    palette.light: Party.borderSoft
+
+    // The 4 px rainbow line at the top of every screen.
+    Rectangle {
+        parent: root.overlay
+        z: 1000
+        anchors.top: parent ? parent.top : undefined
+        width: root.width
+        height: 4
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0.0; color: Party.red }
+            GradientStop { position: 0.17; color: Party.orange }
+            GradientStop { position: 0.33; color: Party.yellow }
+            GradientStop { position: 0.5; color: Party.green }
+            GradientStop { position: 0.67; color: Party.cyan }
+            GradientStop { position: 0.83; color: Party.purple }
+            GradientStop { position: 1.0; color: Party.pink }
+        }
+    }
+
+    Component { id: browsePage; BrowsePage {} }
+    Component { id: packagePage; PackagePage {} }
+
+    function showPackage(path) {
+        backend.inspect(path)
+        pageStack.clear()
+        pageStack.push(packagePage, { path: path })
+    }
+    function showBrowse() {
+        if (backend.package.path) backend.dismiss()
+        pageStack.clear()
+        pageStack.push(browsePage)
+    }
+    function chooseFile() { fileDialog.open() }
+
+    FileDialog {
+        id: fileDialog
+        title: "Choose a DeskDroid package"
+        nameFilters: ["DeskDroid packages (*.adpk)", "All files (*)"]
+        currentFolder: "file:///storage/emulated/0/Download"
+        onAccepted: root.showPackage(backend.localPath(selectedFile.toString()))
+    }
+
+    Component.onCompleted: startPackage ? showPackage(startPackage) : showBrowse()
+}

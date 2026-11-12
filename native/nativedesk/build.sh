@@ -65,6 +65,12 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     storezip() {
       (cd "$1" && find . -type f -exec touch -h -d @315532800 {} + && find . -type f | LC_ALL=C sort | zip -q -X "$2" -@)
     }
+    # app.json: what the package is, so the package on its own (an .adpk,
+    # DeskDroid's package file) can be installed without the catalog (Store.kt).
+    storemanifest() {
+      python3 -c 'import json, sys; print(json.dumps(dict(format=1, id=sys.argv[1], name=sys.argv[2], summary=sys.argv[3], version=sys.argv[4])))' \
+        "$2" "$3" "$4" "$5" > "$1/app.json"
+    }
     bundlename() {
       local n; n="$(unversioned "$1")"
       case "$n" in libQt6*|libKF6*|libkwin*|libkdecorations*|libKWayland*|libplasmashell*) echo "$n" ;; *) echo "libdd_${n#lib}" ;; esac
@@ -91,7 +97,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Etherium (Firefox, native/firefox, published by firefox.yml) is in the
     # store too, run through ddmask like GIMP.
     [ -n "${DESKDROID_FIREFOX:-}" ] && [ -e "$DESKDROID_FIREFOX" ] && store_programs+=(firefox)
-    for app in dolphin kioworker konsole ksmserver-logout-greeter kwrite systemsettings kcolorschemeeditor plasma-discover steam-assistant; do
+    for app in dolphin kioworker konsole ksmserver-logout-greeter kwrite systemsettings kcolorschemeeditor plasma-discover steam-assistant software; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
       bundled+=("$OUT/libdd_$app.so"); apps+=("$app")
@@ -254,6 +260,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       title="$(sed -n 's/^Name=//p' "$desktop" | head -1)"; summary="$(sed -n 's/^GenericName=//p' "$desktop" | head -1)"
       version="$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' "$pkg"/share/metainfo/*"$app"* 2>/dev/null | head -1)"
       echo "$app" > "$pkg/app.txt"
+      storemanifest "$pkg" "$app" "${title:-$app}" "$summary" "${version:-}"
       rm -f "$STORE_OUT/$app.zip"; storezip "$pkg" "$STORE_OUT/$app.zip"
       size="$(stat -c %s "$STORE_OUT/$app.zip")"; sha="$(sha256sum "$STORE_OUT/$app.zip" | cut -d' ' -f1)"
       cp "$(ls "$pkg"/share/icons/hicolor/128x128/apps/"$app".png "$pkg"/share/icons/hicolor/*/apps/"$app".png 2>/dev/null | head -1)" "$STORE_OUT/$app.png" 2>/dev/null || true
@@ -379,6 +386,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       title="$(sed -n 's/^Name=//p' "$desktop" | head -1)"; summary="$(sed -n 's/^GenericName=//p' "$desktop" | head -1)"
       version="$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' "$pkg"/share/metainfo/*"$app"* 2>/dev/null | head -1)"
       echo "$app" > "$pkg/app.txt"
+      storemanifest "$pkg" "$app" "${title:-$app}" "$summary" "${version:-}"
       rm -f "$STORE_OUT/$app.zip"; storezip "$pkg" "$STORE_OUT/$app.zip"
       size="$(stat -c %s "$STORE_OUT/$app.zip")"; sha="$(sha256sum "$STORE_OUT/$app.zip" | cut -d' ' -f1)"
       cp "$(ls "$pkg"/share/icons/hicolor/128x128/apps/*"$app"*.png "$pkg"/share/icons/hicolor/*/apps/*"$app"*.png 2>/dev/null | head -1)" "$STORE_OUT/$app.png" 2>/dev/null || true

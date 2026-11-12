@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="rb" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF3B5C"/><stop offset="0.17" stop-color="#FF9F1C"/>
+      <stop offset="0.33" stop-color="#FFE14D"/><stop offset="0.5" stop-color="#3DFF8B"/>
+      <stop offset="0.67" stop-color="#2EC5FF"/><stop offset="0.83" stop-color="#8B5CFF"/>
+      <stop offset="1" stop-color="#FF4FD8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.25" r="0.9">
+      <stop offset="0" stop-color="#103a40"/><stop offset="1" stop-color="#07070D"/>
+    </radialGradient>
+  </defs>
+  <path d="M6 26 L26 6 H122 V102 L102 122 H6 Z" fill="url(#glow)" stroke="url(#rb)" stroke-width="6" stroke-linejoin="round"/>
+  <!-- a shopping bag of apps -->
+  <path d="M30 48 H98 L92 104 H36 Z" fill="url(#rb)"/>
+  <path d="M48 48 V40 C48 30 55 24 64 24 C73 24 80 30 80 40 V48" fill="none" stroke="#F2F2F7" stroke-width="6" stroke-linecap="round"/>
+  <!-- the download arrow -->
+  <path d="M64 60 V88 M53 78 L64 89 L75 78" fill="none" stroke="#07070D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -9,7 +9,7 @@ import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
 /**
- * DeskDroid's app store: KDE apps built for Android like the ones in the APK
+ * Software, DeskDroid's app store: KDE apps built for Android like the ones in the APK
  * (libraries started by QtHost), downloaded instead of shipped. CI publishes
  * each app as <id>.zip with index.json, the catalog (native/nativedesk/build.sh):
  *
@@ -28,6 +28,12 @@ import java.util.zip.ZipInputStream
  *                 runs them through its linker (store-program.sh).
  *   program.txt   its main program, relative to program/.
  *   program.env   variables it needs, @PROGRAM@ standing for program/'s path.
+ *
+ * Every package also has app.txt (its id) and app.json (id, name, summary,
+ * version). A package on its own, as a file, is an .adpk ("DeskDroid
+ * package", like a .deb): the same zip. Software installs one from a file
+ * (installFile), on the phone (StoreActivity) and on the desktop (the
+ * desktop's Software app, through SoftwareBridge).
  */
 object Store {
     data class App(
@@ -35,7 +41,16 @@ object Store {
         val size: Long, val sha256: String, val file: String, val icon: String,
     )
 
-    val baseUrl: String get() = BuildConfig.STORE_BASE_URL
+    /**
+     * Where the catalog is, in order: the build's own (store-latest, or a pull
+     * request's store-pr-N), then the copy published with pull request 31,
+     * which is where the store has been since main stopped being built on
+     * GitHub. The first that answers is used until the next catalog read.
+     */
+    val baseUrls: List<String> get() = listOf(BuildConfig.STORE_BASE_URL, FALLBACK_URL).distinct()
+    private const val FALLBACK_URL = "https://github.com/ffseestevanli-oss/deskdroid/releases/download/store-pr-31/"
+    @Volatile private var activeUrl: String? = null
+    val baseUrl: String get() = activeUrl ?: BuildConfig.STORE_BASE_URL
 
     private fun root(c: Context) = File(c.filesDir, "store/apps")
     private fun dataHome(c: Context) = File(c.filesDir, ".local/share")
@@ -43,15 +58,79 @@ object Store {
     fun installed(c: Context): Set<String> =
         root(c).listFiles { f -> File(f, "app.txt").exists() }?.map { it.name }?.toSet().orEmpty()
 
-    /** The catalog (blocking: call off the main thread). */
+    /** The catalog (blocking: call off the main thread), from the first of [baseUrls] that has one. */
     fun catalog(): List<App> {
-        val json = JSONObject(fetch(baseUrl + "index.json").toString(Charsets.UTF_8))
-        val apps = json.getJSONArray("apps")
-        return (0 until apps.length()).map { i ->
-            val a = apps.getJSONObject(i)
-            App(a.getString("id"), a.optString("name", a.getString("id")), a.optString("summary"),
-                a.optString("version"), a.optLong("size"), a.getString("sha256"), a.getString("file"), a.optString("icon"))
+        var failure: Exception? = null
+        for (url in baseUrls) {
+            val json = try {
+                JSONObject(fetch(url + "index.json").toString(Charsets.UTF_8))
+            } catch (e: Exception) {
+                AppLog.i("Software: no catalog at $url: ${e.message}")
+                if (failure == null) failure = e
+                continue
+            }
+            if (activeUrl != url) AppLog.i("Software: catalog from $url")
+            activeUrl = url
+            val apps = json.getJSONArray("apps")
+            return (0 until apps.length()).map { i ->
+                val a = apps.getJSONObject(i)
+                App(a.getString("id"), a.optString("name", a.getString("id")), a.optString("summary"),
+                    a.optString("version"), a.optLong("size"), a.getString("sha256"), a.getString("file"), a.optString("icon"))
+            }.sortedBy { it.name.lowercase() }
         }
+        throw failure ?: Exception("no catalog")
+    }
+
+    fun installedVersion(c: Context, id: String): String? =
+        File(root(c), "$id/version.txt").takeIf { File(root(c), "$id/app.txt").exists() && it.exists() }?.readText()?.trim()
+
+    /** What an .adpk file is, from its app.json (or app.txt and its menu entry, for older packages). */
+    data class Package(val id: String, val name: String, val summary: String, val version: String, val icon: ByteArray?)
+
+    private val ID = Regex("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")
+
+    fun inspect(file: File): Package {
+        var manifest: JSONObject? = null
+        var id: String? = null
+        var desktop: String? = null
+        var metainfo: String? = null
+        val icons = sortedMapOf<Int, ByteArray>()
+        var hasCode = false
+        ZipInputStream(file.inputStream().buffered()).use { z ->
+            while (true) {
+                val e = z.nextEntry ?: break
+                if (e.isDirectory) continue
+                val n = e.name
+                when {
+                    n == "app.json" -> manifest = JSONObject(z.readBytes().toString(Charsets.UTF_8))
+                    n == "app.txt" -> id = z.readBytes().toString(Charsets.UTF_8).trim()
+                    n.startsWith("share/applications/") && n.endsWith(".desktop") && desktop == null -> desktop = z.readBytes().toString(Charsets.UTF_8)
+                    n.startsWith("share/metainfo/") && metainfo == null -> metainfo = z.readBytes().toString(Charsets.UTF_8)
+                    n.startsWith("share/icons/hicolor/") && n.endsWith(".png") && "/apps/" in n ->
+                        n.split('/').getOrNull(3)?.substringBefore('x')?.toIntOrNull()?.let { icons[it] = z.readBytes() }
+                    n.startsWith("lib/") || n.startsWith("program/") -> hasCode = true
+                }
+            }
+        }
+        val m = manifest
+        val pkgId = m?.optString("id")?.ifEmpty { null } ?: id
+        if (pkgId == null || !ID.matches(pkgId) || !hasCode) throw Exception("this isn't a DeskDroid package (.adpk)")
+        fun entry(key: String) = desktop?.lineSequence()?.firstOrNull { it.startsWith("$key=") }?.substringAfter('=')
+        val version = m?.optString("version")?.ifEmpty { null }
+            ?: metainfo?.let { Regex("<release[^>]*version=\"([^\"]+)\"").find(it)?.groupValues?.get(1) } ?: ""
+        // The icon nearest 128 px, as the catalog's.
+        val icon = icons.entries.minByOrNull { kotlin.math.abs(it.key - 128) }?.value
+        return Package(pkgId, m?.optString("name")?.ifEmpty { null } ?: entry("Name") ?: pkgId,
+            m?.optString("summary")?.ifEmpty { null } ?: entry("GenericName") ?: entry("Comment") ?: "", version, icon)
+    }
+
+    /** Installs an .adpk file (blocking). The file itself is left where it is. */
+    fun installFile(c: Context, file: File): Package {
+        val pkg = inspect(file)
+        val copy = File(c.cacheDir, "adpk-${pkg.id}.zip")
+        file.inputStream().use { i -> copy.outputStream().use { i.copyTo(it) } }
+        installZip(c, App(pkg.id, pkg.name, pkg.summary, pkg.version, copy.length(), "", copy.name, ""), copy)
+        return pkg
     }
 
     fun icon(app: App): ByteArray? = if (app.icon.isEmpty()) null else try { fetch(baseUrl + app.icon) } catch (e: Exception) { null }
@@ -59,6 +138,7 @@ object Store {
     /** Downloads, checks and installs an app (blocking). [progress] gets 0..1. */
     fun install(c: Context, app: App, progress: (Float) -> Unit = {}) {
         val zip = File(c.cacheDir, "store-${app.id}.zip")
+        if (!ID.matches(app.id)) throw Exception("bad app id")
         download(baseUrl + app.file, zip, app.size, progress)
         if (sha256(zip) != app.sha256) {
             // The store may have been republished since the catalog was read
@@ -92,7 +172,7 @@ object Store {
                     e.name.startsWith("lib/") -> File(lib, e.name.removePrefix("lib/"))
                     e.name.startsWith("program/") || e.name == "program.txt" || e.name == "program.env" -> File(dir, e.name)
                     e.name.startsWith("share/") -> File(share, e.name.removePrefix("share/")).also { files += it.path }
-                    e.name == "app.txt" -> null
+                    e.name == "app.txt" || e.name == "app.json" -> null
                     else -> null
                 } ?: continue
                 out.parentFile?.mkdirs()
@@ -110,7 +190,7 @@ object Store {
         if (app.id == "firefox") Etherium.applySettings(c) // its current settings, over the ones it was built with
         File(dir, "app.txt").writeText(app.id) // last: the app counts as installed from here on
         linkCommand(c, app.id)
-        AppLog.i("Store: installed ${app.id} ${app.version}")
+        AppLog.i("Software: installed ${app.id} ${app.version}")
     }
 
     fun uninstall(c: Context, id: String) {
