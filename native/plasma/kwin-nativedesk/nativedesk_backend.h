@@ -250,6 +250,8 @@ private:
     void send(const ndesk_msg &m, int passFd = -1);
     void readMessages();
     void freeBuffers();
+    // The phone's Back: Plasma's edit mode closes if it's on, else Escape.
+    void back();
     qreal outputScale() const { return m_output ? m_output->scale() : m_scale; }
 
     QSize m_size;

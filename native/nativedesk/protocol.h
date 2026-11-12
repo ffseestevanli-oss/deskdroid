@@ -119,6 +119,7 @@ enum ndesk_action {
     /* 2 and 3 were the phone's screen going off and on (the browser's
      * windows minimized meanwhile); the compositor slows down instead now
      * (nativeSetSleeping) and KWin isn't told. Not to be reused. */
+    NDESK_ACTION_BACK = 4, /* the phone's Back: leave Plasma's edit mode, else Escape */
 };
 
 enum ndesk_text {

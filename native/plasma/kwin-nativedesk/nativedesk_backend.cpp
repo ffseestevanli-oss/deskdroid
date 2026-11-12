@@ -26,6 +26,11 @@
 #include "wayland_server.h"
 #include "workspace.h"
 
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QDBusVariant>
 #include <QSocketNotifier>
 #include <QTimer>
 
@@ -1079,10 +1084,42 @@ void NativeDeskBackend::readMessages()
             // and back again on a second press, like Plasma's own button.
             if (m.action.action == NDESK_ACTION_SHOW_DESKTOP && Workspace::self()) {
                 Workspace::self()->setShowingDesktop(!Workspace::self()->showingDesktop());
+            } else if (m.action.action == NDESK_ACTION_BACK) {
+                back();
             }
             break;
         }
     }
+}
+
+void NativeDeskBackend::back()
+{
+    // Escape doesn't leave the desktop's edit mode (only a panel's), so ask
+    // plasmashell first; anything else Back closes (a popup, the start menu,
+    // a dialog, a window's menu) takes Escape. Asked without blocking: KWin
+    // mustn't wait on plasmashell.
+    static const QString service = QStringLiteral("org.kde.plasmashell");
+    static const QString path = QStringLiteral("/PlasmaShell");
+    static const QString properties = QStringLiteral("org.freedesktop.DBus.Properties");
+    static const QString shell = QStringLiteral("org.kde.PlasmaShell");
+    static const QString editMode = QStringLiteral("editMode");
+    QDBusMessage get = QDBusMessage::createMethodCall(service, path, properties, QStringLiteral("Get"));
+    get << shell << editMode;
+    auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(get, 500), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        QDBusPendingReply<QDBusVariant> reply = *w;
+        if (!reply.isError() && reply.value().variant().toBool()) {
+            QDBusMessage set = QDBusMessage::createMethodCall(service, path, properties, QStringLiteral("Set"));
+            set << shell << editMode << QVariant::fromValue(QDBusVariant(false));
+            QDBusConnection::sessionBus().asyncCall(set);
+            return;
+        }
+        if (m_keyboard) {
+            m_keyboard->key(111, 0, true); // Android's KEYCODE_ESCAPE
+            m_keyboard->key(111, 0, false);
+        }
+    });
 }
 
 int NativeDeskBackend::acquire()
