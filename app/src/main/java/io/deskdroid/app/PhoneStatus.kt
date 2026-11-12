@@ -17,6 +17,8 @@ import java.io.File
 object PhoneStatus {
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
+    private var tick: Runnable? = null
+    @Volatile private var slow = false // SleepMode: written every 30 s instead of 2
     private var lastTicks = -1L
     private var lastAt = 0L
     private val ticksPerSecond by lazy {
@@ -31,17 +33,29 @@ object PhoneStatus {
         thread = t; handler = h
         lastTicks = -1L
         val app = c.applicationContext
-        h.post(object : Runnable {
+        val r = object : Runnable {
             override fun run() {
                 try { write(app) } catch (e: Exception) { AppLog.i("Native desktop: status: $e") }
-                h.postDelayed(this, 2000)
+                h.postDelayed(this, if (slow) 30_000 else 2000)
             }
-        })
+        }
+        tick = r
+        h.post(r)
+    }
+
+    /** Every 30 s while the phone sleeps (SleepMode), every 2 s again on wake, starting now. */
+    @Synchronized fun setSlow(on: Boolean) {
+        if (slow == on) return
+        slow = on
+        val h = handler ?: return
+        val r = tick ?: return
+        // Awake: fresh numbers now, not when the 30 s wait ends.
+        if (!on) { h.removeCallbacks(r); h.post(r) }
     }
 
     @Synchronized fun stop() {
         thread?.quitSafely()
-        thread = null; handler = null
+        thread = null; handler = null; tick = null
     }
 
     private fun write(c: Context) {

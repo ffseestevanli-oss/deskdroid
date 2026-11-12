@@ -59,9 +59,9 @@ object Prefs {
     fun smartTyping(c: Context) = prefs(c).getBoolean("smart_typing", true)
     fun setSmartTyping(c: Context, on: Boolean) = prefs(c).edit().putBoolean("smart_typing", on).apply()
 
-    /** Etherium's windows minimized while the phone's screen is off (a playing video stops drawing; its sound goes on). */
-    fun browserScreenOff(c: Context) = prefs(c).getBoolean("browser_screen_off", true)
-    fun setBrowserScreenOff(c: Context, on: Boolean) = prefs(c).edit().putBoolean("browser_screen_off", on).apply()
+    /** The desktop winds down while the phone's screen is off (SleepMode), back to full power when it's on. */
+    fun sleepSaver(c: Context) = prefs(c).getBoolean("sleep_saver", true)
+    fun setSleepSaver(c: Context, on: Boolean) = prefs(c).edit().putBoolean("sleep_saver", on).apply()
 
     /** The screen stays on while the desktop is showing. */
     fun keepAwake(c: Context) = prefs(c).getBoolean("keep_awake", false)

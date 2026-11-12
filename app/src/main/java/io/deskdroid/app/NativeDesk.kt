@@ -127,6 +127,8 @@ object NativeDesk {
 
     /** A desktop action (protocol.h's NDESK_ACTION_*): 1 shows the desktop. */
     @JvmStatic external fun nativeAction(action: Int)
+    /** The phone asleep (SleepMode): the compositor hands out a frame a second, not twenty. */
+    @JvmStatic external fun nativeSetSleeping(sleeping: Boolean)
 
     /** Plasma's usual size on a phone (about twice the panel's pixels), or the menu's choice. */
     fun desktopScale(c: android.content.Context): Float =
@@ -440,6 +442,7 @@ object NativeDesk {
         openWatcher?.stopWatching()
         openWatcher = null
         MonitorOverlay.stopping()
+        SleepMode.stop()
         if (running) nativeStop()
         running = false
         PhoneStatus.stop()
@@ -534,13 +537,6 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         applyKeepAwake()
         // Samsung DeX: the Meta key opens the desktop's menu, not DeX's.
         if (external) MonitorGuard.dexMetaKeys(this, true)
-        // Screen off: Etherium's windows minimized (Prefs.browserScreenOff), so a
-        // video stops drawing and decoding while its sound plays on; screen on:
-        // back as they were (KWin remembers which, NDESK_ACTION_SCREEN_OFF/ON).
-        registerReceiver(screenReceiver, android.content.IntentFilter().apply {
-            addAction(android.content.Intent.ACTION_SCREEN_OFF)
-            addAction(android.content.Intent.ACTION_SCREEN_ON)
-        })
         // Dodge display cutouts: tell KWin which screen edges the camera cutout
         // and rounded corners hide, again whenever they move (rotation).
         window.decorView.setOnApplyWindowInsetsListener { v, insets ->
@@ -610,6 +606,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         tookSurface()
         NativeDesk.running = true
         PhoneStatus.start(applicationContext)
+        SleepMode.start(applicationContext)
         startForegroundService(android.content.Intent(this, NativeDeskService::class.java))
         AppLog.i("Native desktop test started" + if (attempt > 0) " (try ${attempt + 1})" else "")
         if (File(applicationInfo.nativeLibraryDir, "libkwin_wayland.so").exists()) {
@@ -1796,9 +1793,11 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     Prefs.setKeepAwake(this, i == 1)
                     applyKeepAwake()
                 }.view,
-                io.deskdroid.app.ui.Segmented(ui, listOf("Browser plays on", "Hide browser when off"),
-                    if (Prefs.browserScreenOff(this)) 1 else 0) { i ->
-                    Prefs.setBrowserScreenOff(this, i == 1)
+                // Screen off: the desktop winds down (SleepMode), music and downloads go on.
+                io.deskdroid.app.ui.Segmented(ui, listOf("Full power when off", "Save power when off"),
+                    if (Prefs.sleepSaver(this)) 1 else 0) { i ->
+                    Prefs.setSleepSaver(this, i == 1)
+                    SleepMode.prefChanged()
                 }.view,
                 scaleTile),
         )
@@ -2249,25 +2248,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
-    private var hidBrowser = false
-    private val screenReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(c: android.content.Context, intent: android.content.Intent) {
-            if (!started) return
-            when (intent.action) {
-                android.content.Intent.ACTION_SCREEN_OFF -> if (Prefs.browserScreenOff(c)) {
-                    NativeDesk.nativeAction(2)
-                    hidBrowser = true
-                }
-                android.content.Intent.ACTION_SCREEN_ON -> if (hidBrowser) {
-                    NativeDesk.nativeAction(3)
-                    hidBrowser = false
-                }
-            }
-        }
-    }
-
     override fun onDestroy() {
-        try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
         if (external) MonitorGuard.dexMetaKeys(this, false)
         if (external && NativeDesk.owner?.get().let { it == null || it === this }) MonitorOverlay.hide()
         main.removeCallbacks(tick)

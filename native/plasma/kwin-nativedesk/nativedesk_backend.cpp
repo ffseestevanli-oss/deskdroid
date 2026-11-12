@@ -1033,35 +1033,9 @@ void NativeDeskBackend::readMessages()
             if (m.action.action == NDESK_ACTION_SHOW_DESKTOP && Workspace::self()) {
                 Workspace::self()->setShowingDesktop(!Workspace::self()->showingDesktop());
             }
-            // Screen off: the browser's windows minimized, so a playing video
-            // stops being decoded and drawn (its sound goes on); screen on:
-            // back as they were. Only the phone's setting sends these.
-            if (m.action.action == NDESK_ACTION_SCREEN_OFF && Workspace::self()) {
-                for (Window *w : Workspace::self()->windows()) {
-                    if (w && isBrowser(w) && !w->isMinimized() && w->isMinimizable()) {
-                        w->setMinimized(true);
-                        m_minimizedForScreenOff.append(QPointer<Window>(w));
-                    }
-                }
-            }
-            if (m.action.action == NDESK_ACTION_SCREEN_ON) {
-                for (const QPointer<Window> &w : std::as_const(m_minimizedForScreenOff)) {
-                    if (w && w->isMinimized()) {
-                        w->setMinimized(false);
-                    }
-                }
-                m_minimizedForScreenOff.clear();
-            }
             break;
         }
     }
-}
-
-// Etherium (Firefox): its desktop file, or its window class.
-bool NativeDeskBackend::isBrowser(Window *w)
-{
-    return w->desktopFileName() == QLatin1String("org.deskdroid.firefox")
-        || w->resourceClass().contains(QLatin1String("firefox"), Qt::CaseInsensitive);
 }
 
 int NativeDeskBackend::acquire()
