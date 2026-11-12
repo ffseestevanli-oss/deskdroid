@@ -47,6 +47,12 @@ object Prefs {
     fun externalScale(c: Context) = prefs(c).getFloat("external_scale", 1f)
     fun setExternalScale(c: Context, s: Float) = prefs(c).edit().putFloat("external_scale", s).apply()
 
+    /** The phone's touchpad screen (desktop on a monitor) goes pure black after this many seconds without a touch; 0 = never. A tap wakes it. */
+    fun touchpadBlackout(c: Context) = prefs(c).getInt("touchpad_blackout", 60)
+    fun setTouchpadBlackout(c: Context, s: Int) = prefs(c).edit().putInt("touchpad_blackout", s).apply()
+    val BLACKOUT_SECONDS = listOf(30, 60, 300, 0)
+    val BLACKOUT_LABELS = listOf("30 s", "1 min", "5 min", "Never")
+
     /** Keep panels and maximized windows clear of the camera cutout and rounded corners. */
     fun dodgeCutouts(c: Context) = prefs(c).getBoolean("dodge_cutouts", true)
     fun setDodgeCutouts(c: Context, on: Boolean) = prefs(c).edit().putBoolean("dodge_cutouts", on).apply()

@@ -650,6 +650,13 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             Prefs.setTouchMode(c, Prefs.TOUCH_MODES[i])
         }.view, LinearLayout.LayoutParams(-1, -2))
 
+        addView(ui.text("TOUCHPAD SCREEN GOES BLACK", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+        addView(Segmented(ui, Prefs.BLACKOUT_LABELS, maxOf(0, Prefs.BLACKOUT_SECONDS.indexOf(Prefs.touchpadBlackout(c)))) { i ->
+            Prefs.setTouchpadBlackout(c, Prefs.BLACKOUT_SECONDS[i])
+        }.view, LinearLayout.LayoutParams(-1, -2))
+        addView(ui.text("While the desktop is on a monitor, the phone's touchpad turns pure black (pixels off on " +
+            "OLED) after this long untouched. A tap wakes it and doesn't click.", 13f, Party.MUTED))
+
         addView(ui.outlineButton("Battery + background", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
         addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
