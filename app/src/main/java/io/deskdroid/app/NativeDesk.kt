@@ -837,6 +837,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "[Desktop Entry]\nType=Application\nName=Keyboard\nGenericName=Show or hide the phone's keyboard\n" +
                 "Icon=input-keyboard-virtual\nExec=android-open deskdroid:keyboard\nNoDisplay=true\n")
             PhoneInfo.write(applicationContext) // System Settings › About This Phone
+            writeAndroidSettingsEntry(applicationContext)
             NativeDesk.watchOpenRequests(applicationContext)
             NativeDesk.refreshAndroidApps { writeAndroidApps(applicationContext) } // before plasmashell reads the menu (KWin starts first)
             watchAndroidApps()
@@ -1197,6 +1198,40 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             else -> if (game) "Games" else null
         }
         return NativeDesk.androidKinds.firstOrNull { it.id == id }
+    }
+
+    /**
+     * System Settings › System › Android Settings, last in the list: an external
+     * module (System Settings starts its Exec when the entry is picked), with the
+     * phone's own Settings icon. android-open deskdroid:settings:all opens
+     * Android's Settings (openPhoneSettings).
+     */
+    private fun writeAndroidSettingsEntry(c: android.content.Context) {
+        try {
+            val dir = File(c.filesDir, ".local/share/plasma/systemsettings/externalmodules").apply { mkdirs() }
+            var icon = "configure"
+            try {
+                val info = c.packageManager.resolveActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS), 0)
+                if (info != null) {
+                    val file = File(c.filesDir, ".local/share/deskdroid-android-icons").apply { mkdirs() }.resolve("android-settings.png")
+                    val px = 128
+                    val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+                    info.loadIcon(c.packageManager).apply { setBounds(0, 0, px, px) }.draw(android.graphics.Canvas(bmp))
+                    file.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                    bmp.recycle()
+                    icon = file.path
+                }
+            } catch (e: Exception) {
+                AppLog.i("Native desktop: no icon for Android Settings: $e")
+            }
+            File(dir, "org.deskdroid.android-settings.desktop").writeText(
+                "[Desktop Entry]\nType=Application\nName=Android Settings\nComment=The phone's own settings\n" +
+                "Icon=$icon\nExec=android-open deskdroid:settings:all\n" +
+                "X-KDE-System-Settings-Parent-Category=system-administration\nX-KDE-Weight=1000\n" +
+                "X-KDE-Keywords=android,phone,settings,wifi,bluetooth,battery,apps,display\n")
+        } catch (e: Exception) {
+            AppLog.i("Native desktop: couldn't add Android Settings to System Settings: $e")
+        }
     }
 
     private fun writeAndroidApps(c: android.content.Context) {
