@@ -352,6 +352,43 @@ static void surrounding(const struct ndesk_msg *m)
     len = 0;
 }
 
+/* Calls a static NativeDesk method from the loop thread (attaching it once). */
+static JNIEnv *java_env(void)
+{
+    JNIEnv *env;
+    if (!C.vm || !C.cls) return NULL;
+    if ((*C.vm)->GetEnv(C.vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK
+        && (*C.vm)->AttachCurrentThread(C.vm, &env, NULL) != JNI_OK) return NULL;
+    return env;
+}
+
+/*
+ * The shared clipboard (CLIP): a pipe from the desktop for NativeDesk.onClipboard,
+ * which takes the fd over (and closes it). DESKTOP: read the copied text from
+ * it; PASTE: write the phone's text into it.
+ */
+static void clipboard(uint32_t kind, int fd)
+{
+    JNIEnv *env = java_env();
+    jmethodID id = env ? (*env)->GetStaticMethodID(env, C.cls, "onClipboard", "(II)V") : NULL;
+    if (!id) {
+        if (env && (*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        close(fd);
+        return;
+    }
+    (*env)->CallStaticVoidMethod(env, C.cls, id, (jint)kind, (jint)fd);
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+}
+
+/* Desktop media players playing or not (PLAYING), for NativeDesk.onDesktopMedia. */
+static void playing(uint32_t state)
+{
+    JNIEnv *env = java_env();
+    jmethodID id = env ? (*env)->GetStaticMethodID(env, C.cls, "onDesktopMedia", "(I)V") : NULL;
+    if (id) (*env)->CallStaticVoidMethod(env, C.cls, id, (jint)state);
+    if (env && (*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+}
+
 /* Reads one packet; returns false when the client is gone. */
 static bool read_client(int i)
 {
@@ -466,6 +503,15 @@ static bool read_client(int i)
     case NDESK_TEXT:
         if (m.text.kind == NDESK_TEXT_SURROUNDING) surrounding(&m);
         break;
+    case NDESK_CLIP:
+        if (fence >= 0 && cl->desktop && (m.clip.kind == NDESK_CLIP_DESKTOP || m.clip.kind == NDESK_CLIP_PASTE))
+            clipboard(m.clip.kind, fence); /* Java owns the fd now */
+        else if (fence >= 0)
+            close(fence);
+        break;
+    case NDESK_PLAYING:
+        if (cl->desktop) playing(m.playing.state);
+        break;
     default:
         if (fence >= 0) close(fence);
         return false;
@@ -521,6 +567,11 @@ static void handle_input(const struct input *in)
         if (i < 0) return;
         struct ndesk_msg m = { .op = NDESK_KEY, .key = { in->keycode, in->unicode, (uint32_t)in->down } };
         send_msg(C.clients[i], &m);
+        return;
+    }
+    if (in->type == IN_TEXT && in->text.op == NDESK_CLIPBOARD) { /* the phone's clipboard: every desktop */
+        for (int i = 0; i < MAX_CLIENTS; i++)
+            if (C.clients[i] && C.clients[i]->desktop) send_msg(C.clients[i], &in->text);
         return;
     }
     if (in->type == IN_TEXT) { /* text goes where keys go */
@@ -1010,6 +1061,17 @@ Java_io_deskdroid_app_NativeDesk_nativeText(JNIEnv *env, jclass cls, jint kind, 
         off += piece;
     } while (off < len);
     free(u);
+}
+
+/* The phone's clipboard has new text (protocol.h's CLIPBOARD): desktops ask for it on paste. */
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeClipboardChanged(JNIEnv *env, jclass cls)
+{
+    (void)env; (void)cls;
+    struct input in = { .type = IN_TEXT };
+    in.text.op = NDESK_CLIPBOARD;
+    in.text.clip.kind = NDESK_CLIP_PHONE;
+    queue(in);
 }
 
 JNIEXPORT void JNICALL

@@ -73,6 +73,10 @@ object Prefs {
     fun keepAwake(c: Context) = prefs(c).getBoolean("keep_awake", false)
     fun setKeepAwake(c: Context, on: Boolean) = prefs(c).edit().putBoolean("keep_awake", on).apply()
 
+    /** Android's status and navigation bars stay on screen over the phone's desktop (else full screen). */
+    fun systemBars(c: Context) = prefs(c).getBoolean("system_bars", false)
+    fun setSystemBars(c: Context, on: Boolean) = prefs(c).edit().putBoolean("system_bars", on).apply()
+
     /** Two-finger scrolling as a mouse wheel (vertical, by lines; default) or a touchpad's (any direction, smooth). */
     /** A real mouse is captured: the desktop gets its movement, Android's cursor hides. */
     fun mouseCapture(c: Context) = prefs(c).getBoolean("mouse_capture", true)

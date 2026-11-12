@@ -37,6 +37,8 @@ namespace KWin
 {
 
 class NativeDeskBackend;
+class NativeDeskClipboard;
+class NativeDeskMedia;
 class Window;
 class RenderLoop;
 class OutputFrame;
@@ -271,6 +273,8 @@ private:
     int m_surroundingAnchor = 0;
     bool m_surroundingPending = false;
     uint32_t m_pointerButtons = 0;
+    std::unique_ptr<NativeDeskClipboard> m_clipboard; // shared with the phone's
+    std::unique_ptr<NativeDeskMedia> m_media; // the phone's media keys, for MPRIS players
 };
 
 } // namespace KWin

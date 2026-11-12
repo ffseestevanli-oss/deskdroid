@@ -63,6 +63,8 @@ object NativeDesk {
     @JvmStatic external fun nativeDetach()
     @JvmStatic external fun nativeSetScale(scale: Float)
     @JvmStatic external fun nativeSetSafeArea(left: Float, top: Float, right: Float, bottom: Float)
+    /** Android's clipboard has new text: desktop apps can paste it (SharedClipboard). */
+    @JvmStatic external fun nativeClipboardChanged()
     /** The phone's apps in Plasma's menu are watched once per process (watchAndroidApps). */
     @Volatile var appsWatched = false
     private val appsLock = Any()
@@ -153,6 +155,14 @@ object NativeDesk {
         val text = String(utf8, Charsets.UTF_8)
         Handler(Looper.getMainLooper()).post { DeskInput.onSurrounding(text, cursor, anchor) }
     }
+
+    /** From the compositor: a pipe for the shared clipboard (protocol.h's CLIP), which Java now owns. */
+    @JvmStatic @androidx.annotation.Keep
+    fun onClipboard(kind: Int, fd: Int) = SharedClipboard.fromDesktop(kind, fd)
+
+    /** From the compositor: desktop media players playing (2), paused (1) or gone (0), for the phone's media buttons. */
+    @JvmStatic @androidx.annotation.Keep
+    fun onDesktopMedia(state: Int) = DesktopMedia.desktopState(state)
 
     /** From the compositor: a text field in the desktop took (or lost) the keyboard focus. */
     @JvmStatic @androidx.annotation.Keep
@@ -535,6 +545,8 @@ object NativeDesk {
         if (running) nativeStop()
         running = false
         PhoneStatus.stop()
+        SharedClipboard.stop()
+        DesktopMedia.stop()
         c.stopService(android.content.Intent(c, NativeDeskService::class.java))
         activity?.get()?.finish()
         AppLog.i("Native desktop stopped ($why)")
@@ -632,14 +644,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             lastInsets = insets
             sendSafeArea()
             padMenu()
+            fitSurface()
             v.onApplyWindowInsets(insets)
         }
-        if (Build.VERSION.SDK_INT >= 30) {
-            window.insetsController?.apply {
-                hide(WindowInsets.Type.systemBars())
-                systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
-        }
+        systemBars(false) // full screen, unless the menu's Android bars are on
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
@@ -696,6 +704,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         NativeDesk.running = true
         PhoneStatus.start(applicationContext)
         SleepMode.start(applicationContext)
+        SharedClipboard.start(applicationContext)
+        DesktopMedia.start(applicationContext)
         startForegroundService(android.content.Intent(this, NativeDeskService::class.java))
         AppLog.i("Native desktop test started" + if (attempt > 0) " (try ${attempt + 1})" else "")
         if (File(applicationInfo.nativeLibraryDir, "libkwin_wayland.so").exists()) {
@@ -1718,6 +1728,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (!started) return false
+        toSurface(e)
         val mode = Prefs.touchMode(this)
         when {
             e.isFromSource(InputDevice.SOURCE_MOUSE) -> mouse(e)
@@ -1742,6 +1753,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 120f, true)
             return true
         }
+        toSurface(e)
         mouse(e)
         return true
     }
@@ -1766,6 +1778,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         super.onWindowFocusChanged(hasFocus)
         // Keys held when the keyboard moves elsewhere would otherwise stay down in the desktop.
         if (!hasFocus) NativeDesk.releaseKeys()
+        // Android shows its clipboard to focused windows only: a copy made in another app meanwhile.
+        if (hasFocus && NativeDesk.running) SharedClipboard.focused()
         // The monitor's window took the focus: the mouse is the desktop's
         // straight away, before Android's cursor can wander to an edge.
         if (hasFocus && external && started) { captureMouse(); MonitorGuard.fullscreen(this) }
@@ -1929,6 +1943,13 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     if (Prefs.dodgeCutouts(this)) 1 else 0) { i ->
                     Prefs.setDodgeCutouts(this, i == 1)
                     sendSafeArea()
+                }.view,
+                // Android's status and navigation bars: hidden (swipe from an
+                // edge to see them), or always there with the desktop between them.
+                io.deskdroid.app.ui.Segmented(ui, listOf("Hide Android bars", "Show Android bars"),
+                    if (Prefs.systemBars(this)) 1 else 0) { i ->
+                    Prefs.setSystemBars(this, i == 1)
+                    fitSurface()
                 }.view),
             section("Keyboard spawning",
                 io.deskdroid.app.ui.Segmented(ui, listOf("Manual", "Automatic"),
@@ -2087,8 +2108,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (e.actionMasked == MotionEvent.ACTION_DOWN) {
             edge = 0
             val v = window.decorView
+            // The desktop's bottom corners: above the navigation bar while Android's bars stay shown.
+            val bottom = v.height - ((surfaceView.layoutParams as? FrameLayout.LayoutParams)?.bottomMargin ?: 0)
             if (started && menu.visibility != android.view.View.VISIBLE &&
-                    !e.isFromSource(InputDevice.SOURCE_MOUSE) && e.rawY > v.height - dp(EDGE_DP)) {
+                    !e.isFromSource(InputDevice.SOURCE_MOUSE) && e.rawY > bottom - dp(EDGE_DP) && e.rawY <= bottom) {
                 edge = when {
                     e.rawX < v.width * 0.3f -> 1
                     e.rawX > v.width * 0.7f -> 2
@@ -2178,7 +2201,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private fun systemBars(show: Boolean) {
         if (Build.VERSION.SDK_INT < 30) return
         window.insetsController?.apply {
-            if (show) {
+            if (show || keepBars()) {
                 systemBarsBehavior = WindowInsetsController.BEHAVIOR_DEFAULT
                 show(WindowInsets.Type.systemBars())
             } else {
@@ -2186,6 +2209,30 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
+    }
+
+    /**
+     * The menu's "Show Android bars": the status and navigation bars stay on
+     * the phone's screen, and the desktop fits between them (KWin sees a
+     * smaller screen, as after a rotation) instead of going under them.
+     * A monitor has no bars to keep.
+     */
+    private fun keepBars() = !external && Prefs.systemBars(this)
+
+    private fun fitSurface() {
+        if (!::surfaceView.isInitialized) return
+        val i = if (Build.VERSION.SDK_INT >= 30 && keepBars())
+            lastInsets?.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()) else null
+        val lp = surfaceView.layoutParams as? FrameLayout.LayoutParams ?: return
+        val l = i?.left ?: 0; val t = i?.top ?: 0; val r = i?.right ?: 0; val b = i?.bottom ?: 0
+        if (lp.leftMargin == l && lp.topMargin == t && lp.rightMargin == r && lp.bottomMargin == b) return
+        lp.setMargins(l, t, r, b)
+        surfaceView.layoutParams = lp
+    }
+
+    /** Touches and the mouse come in window coordinates; the desktop starts where its view does. */
+    private fun toSurface(e: MotionEvent) {
+        if (surfaceView.left != 0 || surfaceView.top != 0) e.offsetLocation(-surfaceView.left.toFloat(), -surfaceView.top.toFloat())
     }
 
     private fun padMenu() {
@@ -2733,6 +2780,7 @@ class PhoneTouchpadActivity : Activity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) captureMouse() else NativeDesk.releaseKeys()
+        if (hasFocus && NativeDesk.running) SharedClipboard.focused()
     }
 
     override fun onGenericMotionEvent(e: MotionEvent): Boolean {

@@ -2,5 +2,6 @@
 target_sources(kwin PRIVATE
     nativedesk_backend.cpp
     deskdroid_ahb_server.cpp
+    nativedesk_bridge.cpp
 )
 target_link_libraries(kwin PRIVATE android)

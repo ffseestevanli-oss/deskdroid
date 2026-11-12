@@ -13,6 +13,7 @@
 #include "inputmethod.h"
 #include "main.h"
 #include "deskdroid_ahb_server.h"
+#include "nativedesk_bridge.h"
 #include "opengl/eglcontext.h"
 #include "opengl/egldisplay.h"
 #include "opengl/eglimagetexture.h"
@@ -368,6 +369,16 @@ static uint32_t evdevFromAndroid(int code)
     case 123: return KEY_END;
     case 124: return KEY_INSERT;
     case 160: return KEY_KPENTER;
+    // Media keys, for the focused window when no MPRIS player takes them.
+    case 79: return KEY_PLAYPAUSE; // KEYCODE_HEADSETHOOK
+    case 85: return KEY_PLAYPAUSE;
+    case 86: return KEY_STOPCD;
+    case 87: return KEY_NEXTSONG;
+    case 88: return KEY_PREVIOUSSONG;
+    case 89: return KEY_REWIND;
+    case 90: return KEY_FASTFORWARD;
+    case 126: return KEY_PLAYCD;
+    case 127: return KEY_PAUSECD;
     }
     return 0;
 }
@@ -771,6 +782,27 @@ bool NativeDeskBackend::initialize()
     deskdroidTextInputHook = [](bool active, int purpose, int hints) { self->setTextInputActive(active, purpose, hints); };
     deskdroidSurroundingHook = [](const QString &text, int cursor, int anchor) { self->setSurrounding(text, cursor, anchor); };
 
+    // The clipboard and media keys shared with the phone (nativedesk_bridge.h).
+    m_clipboard = std::make_unique<NativeDeskClipboard>(
+        [this](int fd) {
+            ndesk_msg c = {};
+            c.op = NDESK_CLIP;
+            c.clip.kind = NDESK_CLIP_DESKTOP;
+            send(c, fd);
+        },
+        [this](int fd) {
+            ndesk_msg c = {};
+            c.op = NDESK_CLIP;
+            c.clip.kind = NDESK_CLIP_PASTE;
+            send(c, fd);
+        });
+    m_media = std::make_unique<NativeDeskMedia>([this](uint32_t state) {
+        ndesk_msg p = {};
+        p.op = NDESK_PLAYING;
+        p.playing.state = state;
+        send(p);
+    });
+
     m_output = new NativeDeskOutput(this, m_size, m_scale);
     Q_EMIT outputAdded(m_output);
     Q_EMIT outputsQueried();
@@ -782,6 +814,8 @@ bool NativeDeskBackend::initialize()
             if (m_output) {
                 m_output->setUserScale(m_scale);
             }
+            m_clipboard->start();
+            m_media->start();
         });
     });
     return true;
@@ -1022,7 +1056,20 @@ void NativeDeskBackend::readMessages()
             }
             break;
         case NDESK_KEY:
+            // Media keys (an earpiece, a remote, a keyboard's) go to the
+            // desktop's media players; with none, to the focused window.
+            if (m_media && NativeDeskMedia::isMediaKey(m.key.keycode) && m_media->hasPlayers()) {
+                if (m.key.down) {
+                    m_media->key(m.key.keycode);
+                }
+                break;
+            }
             m_keyboard->key(m.key.keycode, m.key.unicode, m.key.down);
+            break;
+        case NDESK_CLIPBOARD:
+            if (m.clip.kind == NDESK_CLIP_PHONE && m_clipboard) {
+                m_clipboard->phoneChanged();
+            }
             break;
         case NDESK_TEXT:
             text(m);

@@ -27,6 +27,14 @@
  *             (NDESK_HINT_*), Wayland text-input's, so the phone's keyboard
  *             can offer swipe typing, corrections and suggestions where they
  *             fit (and not in a password field)
+ *     CLIP    desktops: the shared clipboard (NDESK_CLIP_*). DESKTOP: a desktop
+ *             app copied text; the packet carries one fd, a pipe the text
+ *             comes out of (UTF-8), for the phone's clipboard. PASTE: a
+ *             desktop app pastes the phone's clipboard; the packet carries
+ *             one fd that the phone writes the text into and then closes
+ *     PLAYING desktops: whether desktop media players (MPRIS) are playing
+ *             (NDESK_PLAYING_*), so the phone's media buttons (Bluetooth
+ *             earpieces, remotes) can reach them
  *   compositor -> app
  *     CONFIGURE  the window's id, and the screen size for a 0x0 HELLO
  *     RELEASE    the compositor no longer reads buffer <id>
@@ -52,6 +60,13 @@
  *                in the field, with the cursor <a> characters into it, and an
  *                empty one takes it away. Text longer than one packet comes in
  *                pieces: <more> is set on every piece but the last
+ *     CLIPBOARD  desktops: the phone's clipboard has new text (NDESK_CLIP_PHONE).
+ *                Nothing is sent with it: the desktop asks for the text with
+ *                CLIP PASTE when an app actually pastes, so Android reads its
+ *                clipboard (and says so) only then
+ *
+ * Media keys (play/pause, next, previous, stop...) arrive as KEY with their
+ * Android key codes; a desktop sends them to its MPRIS players.
  *
  * Buffers are GPU memory owned by the app (AHardwareBuffer), drawn by the app
  * with the phone's own GLES/Vulkan driver and sampled by the compositor with
@@ -72,6 +87,8 @@ enum ndesk_op {
     NDESK_BUFFER,
     NDESK_COMMIT,
     NDESK_IME,
+    NDESK_CLIP,
+    NDESK_PLAYING,
     NDESK_CONFIGURE = 100,
     NDESK_RELEASE,
     NDESK_FRAME,
@@ -82,6 +99,19 @@ enum ndesk_op {
     NDESK_SAFE,
     NDESK_ACTION,
     NDESK_TEXT,
+    NDESK_CLIPBOARD,
+};
+
+enum ndesk_clip {
+    NDESK_CLIP_DESKTOP = 1, /* app -> compositor, with a pipe to read the text from */
+    NDESK_CLIP_PASTE = 2,   /* app -> compositor, with a pipe to write the phone's text into */
+    NDESK_CLIP_PHONE = 3,   /* compositor -> app: the phone's clipboard changed */
+};
+
+enum ndesk_playing {
+    NDESK_PLAYING_NONE = 0,   /* no desktop media player */
+    NDESK_PLAYING_PAUSED = 1, /* players, none playing */
+    NDESK_PLAYING_PLAYING = 2,
 };
 
 enum ndesk_action {
@@ -120,6 +150,8 @@ struct ndesk_msg {
         struct { uint32_t id; } buffer;
         struct { uint32_t id, has_fence, y_invert; } commit;
         struct { uint32_t show, purpose, hints; } ime;
+        struct { uint32_t kind; } clip;
+        struct { uint32_t state; } playing;
         struct { uint32_t window, width, height; } configure;
         struct { uint32_t id; } release;
         struct { uint64_t time_ns; } frame;

@@ -11,7 +11,8 @@ kwin = pathlib.Path(sys.argv[1])
 
 dest = kwin / "src/backends/nativedesk"
 dest.mkdir(parents=True, exist_ok=True)
-for f in ("CMakeLists.txt", "nativedesk_backend.h", "nativedesk_backend.cpp", "deskdroid_ahb_server.h", "deskdroid_ahb_server.cpp"):
+for f in ("CMakeLists.txt", "nativedesk_backend.h", "nativedesk_backend.cpp", "deskdroid_ahb_server.h", "deskdroid_ahb_server.cpp",
+          "nativedesk_bridge.h", "nativedesk_bridge.cpp"):
     shutil.copy(here / f, dest / f)
 shutil.copy(here.parent.parent / "nativedesk/protocol.h", dest / "protocol.h")
 shutil.copy(here.parent / "ahb/deskdroid_ahb.h", dest / "deskdroid_ahb.h")
