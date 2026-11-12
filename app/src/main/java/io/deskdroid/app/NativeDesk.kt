@@ -329,6 +329,11 @@ object NativeDesk {
                     Handler(Looper.getMainLooper()).post { openPhoneSettings(c, path.removePrefix("deskdroid:settings:")) }
                     return
                 }
+                // An Android widget on the desktop (AndroidWidgets.kt).
+                if (path.startsWith("deskdroid:widget:")) {
+                    AndroidWidgets.handle(c, path)
+                    return
+                }
                 // An Android app from Plasma's menu (writeAndroidApps).
                 if (path.startsWith("android-app:")) {
                     Handler(Looper.getMainLooper()).post { launchAndroidApp(c, path.removePrefix("android-app:")) }
@@ -439,6 +444,7 @@ object NativeDesk {
         }
         openWatcher?.stopWatching()
         openWatcher = null
+        AndroidWidgets.stop()
         MonitorOverlay.stopping()
         if (running) nativeStop()
         running = false
@@ -838,7 +844,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "Icon=input-keyboard-virtual\nExec=android-open deskdroid:keyboard\nNoDisplay=true\n")
             PhoneInfo.write(applicationContext) // System Settings › About This Phone
             NativeDesk.watchOpenRequests(applicationContext)
-            NativeDesk.refreshAndroidApps { writeAndroidApps(applicationContext) } // before plasmashell reads the menu (KWin starts first)
+            NativeDesk.refreshAndroidApps { writeAndroidApps(applicationContext); AndroidWidgets.writeCatalog(applicationContext) } // before plasmashell reads the menu (KWin starts first)
             watchAndroidApps()
             val bus = startSessionBus(libs, data, runtime)
             val scale = NativeDesk.desktopScale(this).toDouble()
@@ -1155,7 +1161,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (NativeDesk.appsWatched) return
         NativeDesk.appsWatched = true
         val app = applicationContext
-        val again = Runnable { NativeDesk.refreshAndroidApps { writeAndroidApps(app) } }
+        val again = Runnable { NativeDesk.refreshAndroidApps { writeAndroidApps(app); AndroidWidgets.writeCatalog(app) } }
         NativeDesk.appsRefresher = again
         val ui = android.os.Handler(Looper.getMainLooper())
         val later: () -> Unit = { ui.removeCallbacks(again); ui.postDelayed(again, 1500) }

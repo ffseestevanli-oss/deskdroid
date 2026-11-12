@@ -1451,6 +1451,8 @@ build_plasma_desktop_packages() {
   # Plasma's desktop shell views and settings (edit mode, panel settings,
   # Add Widgets) under DeskDroid's shell; its own files go over these.
   python3 "$HERE/patches/desktoppackage/shell-from-desktop.py" "$s" "$PREFIX/share/plasma/shells/org.deskdroid.desktop"
+  # Add Widgets: the phone's widgets in a section of their own, below Plasma's.
+  python3 "$HERE/patches/desktoppackage/explorer-android.py" "$PREFIX/share/plasma/shells/org.deskdroid.desktop"
   test -e "$PREFIX/share/plasma/shells/org.deskdroid.desktop/contents/configuration/PanelConfiguration.qml"
   # The application menu.
   rm -rf "$PREFIX/share/plasma/plasmoids/org.kde.plasma.kickoff"

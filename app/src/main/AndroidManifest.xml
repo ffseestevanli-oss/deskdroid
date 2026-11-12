@@ -17,6 +17,10 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- The phone's widgets on the native desktop (AndroidWidgets.kt). -->
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent>
     </queries>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -130,6 +134,15 @@
             android:name=".StoreActivity"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+        <!-- Android asks to allow (and the widget's own setup) for a widget on the desktop. -->
+        <activity
+            android:name=".WidgetBindActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="false"
+            android:taskAffinity=".WidgetBindActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- Restart or Power Off on the desktop's logout screen: Android's power menu. -->
         <service
