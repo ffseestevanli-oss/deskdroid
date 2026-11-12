@@ -76,6 +76,11 @@ step() {
 step "add Flathub" fp remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 step "fetch Flathub's catalog" fp update --user --appstream flathub
 [ -e "$F/flatpak/appstream/flathub/x86_64/active/appstream.xml.gz" ] && echo "ok   catalog is where Discover reads it" || { echo "FAIL catalog missing"; fails=$((fails + 1)); }
+# A remote left without its signing key (remote-add stopped partway on an
+# earlier build): adding it again must repair it, as Discover does each start.
+rm -f "$F/flatpak/repo/flathub.trustedkeys.gpg"
+step "repair Flathub left without its key" fp remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+step "fetch the catalog again" fp update --user --appstream flathub
 step "install $APP" fp install --user -y flathub "$APP"
 step "list installed apps" fp list --user --app --columns=application,version
 step "list updates" fp remote-ls --user --updates --app --columns=application

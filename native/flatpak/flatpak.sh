@@ -137,7 +137,26 @@ ENVS
   exec $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
 }
 
+# A remote whose signing key never got imported (remote-add stopped partway,
+# as on builds where gpg couldn't start) can't verify Flathub's summary:
+# every fetch then fails with "No such ref 'appstream2/<arch>'", and
+# "remote-add --if-not-exists" skips it, so it would never heal. Drop such
+# remotes before adding remotes, so remote-add sets them up again.
+drop_keyless_remotes() {
+  repo="$FLATPAK_USER_DIR/repo"
+  [ -f "$repo/config" ] || return 0
+  sed -n 's/^\[remote "\(.*\)"\]$/\1/p' "$repo/config" | while read -r name; do
+    [ -n "$name" ] || continue
+    [ -s "$repo/$name.trustedkeys.gpg" ] && continue
+    # Only remotes that verify signatures need the key.
+    sed -n "/^\[remote \"$name\"\]/,/^\[/p" "$repo/config" | grep -q '^gpg-verify=false' && continue
+    echo "flatpak: $name has no signing key (an earlier setup stopped partway); setting it up again" >&2
+    cli remote-delete --user --force "$name" >/dev/null 2>&1
+  done
+}
+
 case "$1" in
   run) shift; run "$@" ;;
+  remote-add) drop_keyless_remotes; cli "$@" ;;
   *) cli "$@" ;;
 esac
