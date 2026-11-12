@@ -105,6 +105,7 @@ static struct {
     float safe[4];               /* nativeSetSafeArea: left, top, right, bottom, screen pixels */
     bool safe_changed;           /* send safe to the desktops */
     uint32_t action;             /* nativeAction: for the desktops, then 0 */
+    bool sleeping;               /* nativeSetSleeping: the phone's screen is off, frames at 1 a second */
     /* Swapping the window (the activity went to the background and came
      * back): nativeStart/nativeDetach ask, the loop does it under C.lock. */
     ANativeWindow *pending_window;
@@ -446,8 +447,10 @@ static bool read_client(int i)
         cl->queue[cl->n_queue].y_invert = m.commit.y_invert;
         cl->n_queue++;
         /* With room for one more, the app renders its next frame while this
-         * one waits for the compositor: a frame of slack, like triple buffering. */
-        if (cl->n_queue < 2) {
+         * one waits for the compositor: a frame of slack, like triple buffering.
+         * In the background the loop's pace hands out FRAMEs instead, or the
+         * apps would draw as fast as they can with nobody looking. */
+        if (cl->n_queue < 2 && C.surf != EGL_NO_SURFACE) {
             struct ndesk_msg f = { .op = NDESK_FRAME, .frame = { now_ns() } };
             send_msg(cl, &f);
         } else {
@@ -720,6 +723,20 @@ static void swap_window(void)
     pthread_mutex_unlock(&C.lock);
 }
 
+/* Time between frames with no window: 20 a second, or 1 with the phone asleep. */
+static uint64_t hidden_gap(void)
+{
+    return __atomic_load_n(&C.sleeping, __ATOMIC_ACQUIRE) ? 1000000000u : 50000000u;
+}
+
+/* Some app waits for a FRAME to draw its next frame. */
+static bool frames_owed(void)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++)
+        if (C.clients[i] && C.clients[i]->wants_frame && C.clients[i]->n_queue < 2) return true;
+    return false;
+}
+
 static void *loop(void *unused)
 {
     (void)unused;
@@ -730,6 +747,7 @@ static void *loop(void *unused)
     }
     C.dirty = true;
     uint64_t stat_start = now_ns();
+    uint64_t last_hidden_frame = 0;
     unsigned frames = 0;
     double draw_total = 0;
 
@@ -743,10 +761,19 @@ static void *loop(void *unused)
                 idx[n] = i;
                 p[n++] = (struct pollfd){ C.clients[i]->fd, POLLIN, 0 };
             }
-        /* Idle until something happens; once dirty, the swap paces the loop
-         * (in the background, with no swap, at most 20 frames a second). */
+        /* Idle until something happens; once dirty, the swap paces the loop.
+         * In the background, with no swap, frames come at most 20 a second,
+         * and with the phone asleep (nativeSetSleeping) one a second: KWin,
+         * Plasma and the apps follow the FRAMEs, so they draw that little too. */
         bool shown = C.surf != EGL_NO_SURFACE;
-        if (poll(p, n, C.dirty ? (shown ? 0 : 50) : 1000) < 0 && errno != EINTR) break;
+        int timeout = 1000;
+        if (shown) {
+            if (C.dirty) timeout = 0;
+        } else if (C.dirty || frames_owed()) {
+            uint64_t gap = hidden_gap(), since = now_ns() - last_hidden_frame;
+            timeout = since >= gap ? 0 : (int)((gap - since + 999999) / 1000000);
+        }
+        if (poll(p, n, timeout) < 0 && errno != EINTR) break;
         if (p[0].revents) {
             uint64_t v;
             read(C.wake, &v, sizeof v);
@@ -792,7 +819,17 @@ static void *loop(void *unused)
         }
         swap_window();
 
-        if (C.dirty) {
+        /* In the background, a frame only once its turn comes (see above). */
+        bool turn = true;
+        if (C.surf == EGL_NO_SURFACE) {
+            turn = (C.dirty || frames_owed()) && now_ns() - last_hidden_frame >= hidden_gap();
+            if (turn) {
+                last_hidden_frame = now_ns();
+                C.dirty = true;
+            }
+        }
+
+        if (C.dirty && turn) {
             /* Thread CPU time, so waiting for a free screen buffer or vsync doesn't count. */
             uint64_t t0 = clock_ns(CLOCK_THREAD_CPUTIME_ID);
             latch_commits();
@@ -909,6 +946,7 @@ Java_io_deskdroid_app_NativeDesk_nativeStop(JNIEnv *env, jclass cls)
     C.n_input = 0;
     C.stats[0] = 0;
     C.screen_w = C.screen_h = 0;
+    __atomic_store_n(&C.sleeping, false, __ATOMIC_RELEASE);
 }
 
 static void queue(struct input in)
@@ -1035,6 +1073,20 @@ Java_io_deskdroid_app_NativeDesk_nativeSetSafeArea(JNIEnv *env, jclass cls, jflo
         C.safe_changed = true;
     }
     pthread_mutex_unlock(&C.lock);
+    wake();
+}
+
+/*
+ * The phone's screen went off with nothing else showing the desktop (true),
+ * or came back (false): see hidden_gap. The window is gone by then anyway;
+ * on wake the loop goes back to its usual pace at once.
+ */
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeSetSleeping(JNIEnv *env, jclass cls, jboolean sleeping)
+{
+    (void)env; (void)cls;
+    if (!C.running) return;
+    __atomic_store_n(&C.sleeping, (bool)sleeping, __ATOMIC_RELEASE);
     wake();
 }
 

@@ -248,7 +248,6 @@ private:
     void send(const ndesk_msg &m, int passFd = -1);
     void readMessages();
     void freeBuffers();
-    static bool isBrowser(Window *w);
     qreal outputScale() const { return m_output ? m_output->scale() : m_scale; }
 
     QSize m_size;
@@ -272,7 +271,6 @@ private:
     int m_surroundingAnchor = 0;
     bool m_surroundingPending = false;
     uint32_t m_pointerButtons = 0;
-    QList<QPointer<Window>> m_minimizedForScreenOff; // NDESK_ACTION_SCREEN_OFF
 };
 
 } // namespace KWin
