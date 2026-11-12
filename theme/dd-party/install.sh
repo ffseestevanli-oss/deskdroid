@@ -75,6 +75,8 @@ if [ $APPLY = 1 ]; then
   command -v plasma-apply-wallpaperimage >/dev/null && plasma-apply-wallpaperimage "$DATA/wallpapers/$V" >/dev/null 2>&1 || true
   # KWin's blur and background contrast, which the glass variant leans on
   "$KW" --file kwinrc --group Plugins --key blurEnabled true
+  # Glass: a strong blur, as the theme's see-through parts are made for.
+  [ "$V" = DDPartyGlass ] && "$KW" --file kwinrc --group Effect-blur --key BlurStrength 12
   "$KW" --file kwinrc --group Plugins --key contrastEnabled true
   [ $have_kvantum = 1 ] || "$KW" --file kdeglobals --group KDE --key widgetStyle Breeze
   if [ $FONTS = 1 ]; then
