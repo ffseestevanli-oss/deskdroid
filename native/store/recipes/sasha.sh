@@ -56,6 +56,53 @@ static int sashaMain(int argc, char **argv)
     return tn_host_main(argc, argv, reinterpret_cast<const char *>(sashaQml), sizeof sashaQml);
 }''')
 PY
+# Sasha's C++ host, with DeskDroid's playback diagnostics: what the player
+# does (media status, playback state, errors, the first positions) goes to
+# DeskDroid's log, and SASHA_NO_SPECTRUM=1 plays without the spectrum's
+# QAudioBufferOutput (new in Qt 6.8), to tell whether it stalls playback.
+rm -rf "$w/cpp" && cp -r "$src/cpp" "$w/cpp"
+python3 - "$w/cpp/player.cpp" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+anchor = "    m_player->setAudioOutput(m_audio);\n"
+assert s.count(anchor) == 1, "player.cpp: setAudioOutput line changed"
+s = s.replace(anchor, anchor + r"""
+    // DeskDroid: playback diagnostics.
+    connect(m_player, &QMediaPlayer::mediaStatusChanged, this, [](QMediaPlayer::MediaStatus st) {
+        qInfo("sasha player: media status %d", int(st));
+    });
+    connect(m_player, &QMediaPlayer::playbackStateChanged, this, [](QMediaPlayer::PlaybackState st) {
+        qInfo("sasha player: playback state %d", int(st));
+    });
+    connect(m_player, &QMediaPlayer::errorOccurred, this, [](QMediaPlayer::Error e, const QString &text) {
+        qInfo("sasha player: error %d: %s", int(e), qPrintable(text));
+    });
+    connect(m_player, &QMediaPlayer::sourceChanged, this, [](const QUrl &url) {
+        qInfo("sasha player: source %s", qPrintable(url.toString()));
+    });
+    connect(m_player, &QMediaPlayer::positionChanged, this, [](qint64 ms) {
+        static int shown = 0;
+        if (shown++ < 10)
+            qInfo("sasha player: position %lld ms", ms);
+    });
+    connect(m_player, &QMediaPlayer::bufferProgressChanged, this, [](float progress) {
+        qInfo("sasha player: buffer %.2f", progress);
+    });
+    qInfo("sasha player: audio output device \"%s\", volume %.2f, muted %d",
+          qPrintable(m_audio->device().description()), m_audio->volume(), int(m_audio->isMuted()));
+""", 1)
+spectrum = "    m_bufferOutput = new QAudioBufferOutput(this);\n    m_player->setAudioBufferOutput(m_bufferOutput);\n"
+assert s.count(spectrum) == 1, "player.cpp: QAudioBufferOutput lines changed"
+s = s.replace(spectrum, "    m_bufferOutput = new QAudioBufferOutput(this);\n"
+              "    if (qEnvironmentVariableIsSet(\"SASHA_NO_SPECTRUM\"))\n"
+              "        qInfo(\"sasha player: no spectrum (SASHA_NO_SPECTRUM)\");\n"
+              "    else\n"
+              "        m_player->setAudioBufferOutput(m_bufferOutput);\n", 1)
+s = '#include <QAudioDevice>\n' + s
+open(p, "w").write(s)
+PY
+
 # Audio diagnostics in DeskDroid's log: the audio outputs Qt sees, a short
 # test of Qt's audio output on its own (silence), and Qt Multimedia's debug
 # messages (QtHost turns them on; DeskDroid's handler drops debug ones).
@@ -65,6 +112,7 @@ cat >> "$w/entry.cpp" <<'CPP'
 #include <QAudioSink>
 #include <QCoreApplication>
 #include <QIODevice>
+#include <QLoggingCategory>
 #include <QMediaDevices>
 #include <QTimer>
 #include <cstdio>
@@ -87,6 +135,10 @@ static void sashaAudioDiagnostics()
 {
     QTimer::singleShot(0, qApp, [] {
         sashaPreviousHandler = qInstallMessageHandler(sashaMessages);
+        // Programs started from the menu inherit plasmashell's QT_LOGGING_RULES,
+        // so QtHost's never applies; these rules come below the environment's,
+        // which don't name Qt Multimedia.
+        QLoggingCategory::setFilterRules(QStringLiteral("qt.multimedia.*.debug=true"));
         const QList<QAudioDevice> outputs = QMediaDevices::audioOutputs();
         const QAudioDevice device = QMediaDevices::defaultAudioOutput();
         qInfo("sasha audio: %d outputs, default \"%s\" (id %s)", int(outputs.size()),
@@ -130,11 +182,11 @@ project(sasha LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick Multimedia DBus)
-add_library(sasha SHARED "$src/cpp/host.cpp" "$src/cpp/player.cpp" "$src/cpp/player.h" entry.cpp)
+add_library(sasha SHARED "$w/cpp/host.cpp" "$w/cpp/player.cpp" "$w/cpp/player.h" entry.cpp)
 set_target_properties(sasha PROPERTIES CXX_VISIBILITY_PRESET default SUFFIX ".so")
 # 16 KB pages (newer phones) need 16 KB-aligned segments, like the APK's libraries.
 target_link_options(sasha PRIVATE "-Wl,-z,max-page-size=16384")
-target_include_directories(sasha PRIVATE "$src/cpp")
+target_include_directories(sasha PRIVATE "$w/cpp")
 target_compile_definitions(sasha PRIVATE TN_VERSION="$version" TN_ASSET_DIR="/nonexistent")
 target_link_libraries(sasha PRIVATE "$w/libsasha_core.a" Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Multimedia Qt6::DBus log dl)
 install(TARGETS sasha LIBRARY DESTINATION lib)
