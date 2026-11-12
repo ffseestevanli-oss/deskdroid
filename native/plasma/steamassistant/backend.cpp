@@ -47,7 +47,9 @@ const Stage kStages[] = {
     {"Unpacking the x86 system", 0.45, 0.80, "Assembling the x86 system"},
     {"The x86 system", 0.80, 0.80, "The x86 system is up to date"},
     {"Ready", 0.82, 0.82, "FEX-Emu is ready"},
-    {"steam-x86: downloading Valve", 0.84, 0.96, "Fetching Steam"},
+    {"deskdroid-steam: checking FEX-Emu", 0.83, 0.83, "Checking that FEX-Emu runs x86 programs"},
+    {"deskdroid-steam: FEX-Emu runs x86", 0.85, 0.85, "FEX-Emu works"},
+    {"steam-x86: downloading Valve", 0.86, 0.96, "Fetching Steam"},
     {"steam-x86: Steam bootstrap installed", 0.98, 0.98, "Assembling Steam"},
     {"deskdroid-steam: Steam is installed", 1.0, 1.0, "Steam is installed!"},
 };
@@ -56,6 +58,17 @@ const Stage kStages[] = {
 Backend::Backend(QObject *parent)
     : QObject(parent)
 {
+    // No output for this long while busy: the pages offer to stop and retry
+    // instead of leaving a bar that never moves.
+    m_watchdog.setSingleShot(true);
+    const int seconds = qEnvironmentVariableIntValue("DESKDROID_ASSISTANT_STALL_SECONDS");
+    m_watchdog.setInterval((seconds > 0 ? seconds : 4 * 60) * 1000);
+    connect(&m_watchdog, &QTimer::timeout, this, [this] {
+        if (busy() && !m_stalled) {
+            m_stalled = true;
+            Q_EMIT stalledChanged();
+        }
+    });
     refresh();
 }
 
@@ -178,6 +191,8 @@ void Backend::start(const QStringList &args, bool install)
         return;
     }
     delete m_proc;
+    setStalled(false);
+    m_watchdog.start();
     m_proc = new QProcess(this);
     m_proc->setProcessChannelMode(QProcess::MergedChannels);
     m_pending.clear();
@@ -207,6 +222,8 @@ void Backend::start(const QStringList &args, bool install)
         if (!m_pending.trimmed().isEmpty())
             onLine(QString::fromUtf8(m_pending));
         m_pending.clear();
+        m_watchdog.stop();
+        setStalled(false);
         const bool ok = status == QProcess::NormalExit && code == 0;
         refresh();
         Q_EMIT busyChanged();
@@ -227,6 +244,10 @@ void Backend::start(const QStringList &args, bool install)
 
 void Backend::onLine(const QString &text)
 {
+    if (busy()) {
+        m_watchdog.start();
+        setStalled(false);
+    }
     // curl's meter redraws a line many times a second: the log keeps every tenth percent.
     static const QRegularExpression curl(QStringLiteral("^\\s*(\\d{1,3})\\s+[\\d.]+[kMG]?\\s+(\\d{1,3})\\s"));
     const auto meter = curl.match(text);
@@ -279,10 +300,29 @@ void Backend::runTool(const QString &name)
     start({QStringLiteral("--tool"), name}, false);
 }
 
+void Backend::setStalled(bool on)
+{
+    if (m_stalled == on)
+        return;
+    m_stalled = on;
+    Q_EMIT stalledChanged();
+}
+
+void Backend::keepWaiting()
+{
+    setStalled(false);
+    if (busy())
+        m_watchdog.start();
+}
+
 void Backend::cancel()
 {
+    m_watchdog.stop();
+    setStalled(false);
     if (busy())
         m_proc->kill();
+    // The shell's children (FEX, its server, curl) outlive it otherwise.
+    QProcess::execute(shell(), {script(), QStringLiteral("--stop")});
 }
 
 void Backend::detached(const QStringList &args)

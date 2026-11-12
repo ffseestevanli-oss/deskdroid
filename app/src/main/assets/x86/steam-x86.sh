@@ -46,7 +46,7 @@ setup() {
   local tmp
   tmp=$(mktemp -d) || die "no temporary folder"
   say "downloading Valve's Steam bootstrap"
-  curl -fL --retry 3 -o "$tmp/steam.deb" "$DEB_URL" || { rm -rf "$tmp"; die "couldn't download Steam (offline?)"; }
+  curl -fL --retry 3 --connect-timeout 30 --speed-limit 1024 --speed-time 120 -o "$tmp/steam.deb" "$DEB_URL" || { rm -rf "$tmp"; die "couldn't download Steam (offline?)"; }
   dpkg-deb -x "$tmp/steam.deb" "$tmp/deb" || { rm -rf "$tmp"; die "the Steam download is damaged, try again"; }
   local boot
   boot=$(ls "$tmp"/deb/usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz 2>/dev/null | head -n 1)

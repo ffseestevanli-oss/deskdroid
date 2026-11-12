@@ -17,6 +17,8 @@ PartyPage {
     property string step: "Getting started"
     property string error: ""
     property bool verbose: false
+    // Stopped on purpose: what the end of the stopped run means.
+    property string afterStop: ""   // "", "retry" or "cancel"
 
     function begin() {
         phase = "running"; fraction = 0; error = ""; step = "Getting started"
@@ -34,6 +36,17 @@ PartyPage {
             page.step = label
         }
         function onFinished(ok, message) {
+            if (page.afterStop === "retry") {
+                page.afterStop = ""
+                page.begin()
+                return
+            }
+            if (page.afterStop === "cancel") {
+                page.afterStop = ""
+                page.phase = "failed"
+                page.error = "Cancelled."
+                return
+            }
             if (ok) {
                 page.fraction = 1
                 page.phase = "done"
@@ -41,6 +54,8 @@ PartyPage {
             } else {
                 page.phase = "failed"
                 page.error = message
+                // FEX's own words are in the log: show them.
+                page.verbose = true
             }
         }
     }
@@ -104,6 +119,50 @@ PartyPage {
                 fraction: page.fraction
                 // Before the first estimate (asking the app, checking free space).
                 indeterminate: page.phase === "running" && page.fraction === 0
+            }
+        }
+
+        // Nothing new for minutes: say so, and offer the ways out.
+        Item {
+            visible: page.phase === "running" && backend.stalled
+            Layout.fillWidth: true
+            implicitHeight: stallCol.implicitHeight + 28
+            Chamfer { anchors.fill: parent; cut: 12; cutTopLeft: false; fillColor: Party.surface }
+            Rectangle { width: 3; height: parent.height; color: Party.yellow }
+            ColumnLayout {
+                id: stallCol
+                anchors.fill: parent
+                anchors.margins: 14
+                anchors.leftMargin: 20
+                spacing: 10
+                Text {
+                    text: "Nothing new from \"" + page.step + "\" for 4 minutes. It may still be working (unpacking can be slow on some phones), or it may be stuck."
+                    font.family: Party.body; font.weight: Font.Bold; font.pixelSize: 15
+                    color: Party.text
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    PartyButton {
+                        compact: true
+                        text: "Keep waiting"
+                        accent: Party.cyan
+                        onClicked: backend.keepWaiting()
+                    }
+                    PartyButton {
+                        compact: true
+                        text: "Stop and try again"
+                        accent: Party.yellow
+                        onClicked: { page.afterStop = "retry"; backend.cancel() }
+                    }
+                    PartyButton {
+                        compact: true
+                        text: page.verbose ? "Hide verbose" : "View verbose"
+                        onClicked: page.verbose = !page.verbose
+                    }
+                }
             }
         }
 
@@ -184,7 +243,7 @@ PartyPage {
                 visible: page.phase === "running"
                 text: "Cancel"
                 accent: Party.border
-                onClicked: { backend.cancel(); page.phase = "failed"; page.error = "Cancelled." }
+                onClicked: { page.afterStop = "cancel"; backend.cancel() }
             }
         }
 

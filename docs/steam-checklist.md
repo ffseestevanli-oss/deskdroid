@@ -52,6 +52,13 @@ Steam menu entry opens it while Steam isn't set up, instead of Konsole.
       .zip and Download from….
 - [ ] Install from a .zip… with deskdroid-fex-FEX-2610.zip in Download:
       "Installing from …", then "Unzipping FEX-Emu".
+- [ ] After "FEX-Emu is ready" the bar goes to 83% "Checking that FEX-Emu
+      runs x86 programs", then 85% "FEX-Emu works" and on to Steam (no stall
+      at 82%). If it fails, the verbose log shows why, with the end of
+      `files/x86/run/fexserver.log`.
+- [ ] Nothing new for 4 minutes: a yellow panel offers Keep waiting, Stop and
+      try again, and View verbose. Cancel and Stop leave no FEX processes
+      (`deskdroid-steam --stop`); `deskdroid-steam --check` tests FEX alone.
 - [ ] Tools: Launch Steam; each Steam tool asks first, then reports.
 - [ ] Purge returns to Welcome; Continue without Steam goes to the tools.
 

@@ -6,6 +6,7 @@
 #include <QProcess>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QVariantList>
 
 class Backend : public QObject
@@ -19,6 +20,8 @@ class Backend : public QObject
     // The tools page has been seen since Steam was installed ("Welcome back!").
     Q_PROPERTY(bool welcomedBack READ welcomedBack WRITE setWelcomedBack NOTIFY statusChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    // Busy, but nothing new for minutes (Keep waiting, or Stop and retry).
+    Q_PROPERTY(bool stalled READ stalled NOTIFY stalledChanged)
     // Where FEX downloads from (~/.config/deskdroid-fex-url), empty = the default.
     Q_PROPERTY(QString fexSource READ fexSource WRITE setFexSource NOTIFY fexSourceChanged)
     Q_PROPERTY(QString defaultFexSource READ defaultFexSource CONSTANT)
@@ -47,6 +50,8 @@ public:
     // update | soft-reset | hard-reset | uninstall | purge
     Q_INVOKABLE void runTool(const QString &name);
     Q_INVOKABLE void cancel();
+    Q_INVOKABLE void keepWaiting();
+    bool stalled() const { return m_stalled; }
 
     Q_INVOKABLE void launchSteam(const QString &url = QString());
     Q_INVOKABLE void runX86(const QString &file);
@@ -67,6 +72,7 @@ public:
 Q_SIGNALS:
     void statusChanged();
     void busyChanged();
+    void stalledChanged();
     void fexSourceChanged();
     void line(const QString &text);
     // fraction 0..1 (or -1: no estimate), label: the step being done
@@ -79,6 +85,7 @@ private:
     void start(const QStringList &args, bool install);
     void onLine(const QString &text);
     void detached(const QStringList &args);
+    void setStalled(bool on);
 
     QProcess *m_proc = nullptr;
     QByteArray m_pending;
@@ -88,4 +95,6 @@ private:
     int m_stage = 0;
     int m_lastMeter = -10;
     QString m_lastLine;
+    QTimer m_watchdog;
+    bool m_stalled = false;
 };

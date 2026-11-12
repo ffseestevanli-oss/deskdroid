@@ -13,6 +13,8 @@
 #   --status              fex=0|1, steam=0|1 (one per line)
 #   --install             sets up FEX, the x86 system and Steam's bootstrap
 #   --tool NAME           update | soft-reset | hard-reset | uninstall | purge
+#   --check               runs one x86 program through FEX, at most 2 minutes
+#   --stop                stops FEX and everything it started
 #   --run-x86 FILE [ARGS] an x86-64 (or x86) Linux program through FEX
 #   --run-windows FILE    a Windows program through Steam's Proton (or Wine)
 #   --wine-tool NAME [PREFIX]  winecfg | uninstaller | explorer in a prefix
@@ -27,10 +29,65 @@ LOG=$X86/steam.log
 STEAMDIR=$HOME/.local/share/Steam
 export DESKDROID_X86="$X86" FEX_ROOTFS="$X86/rootfs" DDMASK_X86_64="$FEX" DDMASK_I386="$FEX"
 
+# FEX-Emu's server (FEXServer): one socket at a known place, and a temporary
+# folder that exists (Android has no /tmp; FEX falls back to it otherwise).
+RUN=$X86/run
+export FEX_SERVERSOCKETPATH="$RUN/FEXServer.Socket"
+[ -n "${TMPDIR:-}" ] && [ -d "$TMPDIR" ] || export TMPDIR="$RUN/tmp"
+
 say() { echo "deskdroid-steam: $*"; }
 ready() { [ -f "$X86/ready" ] && [ -e "$FEX" ]; }
 steam_ready() { [ -f "$STEAMDIR/steam.sh" ]; }
-x86() { "$FEX" /bin/bash "$X86/bin/steam-x86.sh" "$@"; }
+x86() { fex_up && "$FEX" /bin/bash "$X86/bin/steam-x86.sh" "$@"; }
+
+# Starts FEXServer here, before FEX runs anything. Left to FEX, the first x86
+# program starts it and waits for it with no time limit, which is where the
+# assistant stalled at 82% ("FEX-Emu is ready") when the server didn't come up.
+fex_up() {
+  mkdir -p "$RUN" "$TMPDIR"
+  if pgrep -f "$X86/fex/bin/FEXServer" >/dev/null 2>&1 && [ -S "$FEX_SERVERSOCKETPATH" ]; then
+    return 0
+  fi
+  pkill -f "$X86/fex/bin/FEXServer" 2>/dev/null
+  rm -f "$FEX_SERVERSOCKETPATH"
+  # -p: stays 10 minutes after the last x86 program, so Steam's restarts reuse it.
+  # It goes to the background itself; its messages go to the setup log.
+  "$X86/fex/bin/FEXServer" -p 600 </dev/null >>"$RUN/fexserver.log" 2>&1
+  i=0
+  while [ $i -lt 30 ]; do
+    [ -S "$FEX_SERVERSOCKETPATH" ] && return 0
+    sleep 1
+    i=$((i + 1))
+  done
+  say "FEX-Emu's server didn't start in 30 seconds."
+  [ -s "$RUN/fexserver.log" ] && tail -n 20 "$RUN/fexserver.log" | sed 's/^/  FEXServer: /'
+  return 1
+}
+
+# Runs one x86 program before anything bigger, with a time limit, so a FEX
+# that can't start says so instead of waiting forever.
+fex_check() {
+  say "checking FEX-Emu (an x86 program, at most 2 minutes)"
+  fex_up || return 1
+  out=$(timeout 120 "$FEX" /bin/uname -m 2>&1)
+  status=$?
+  if [ $status -eq 0 ] && [ "$(echo "$out" | tail -n 1)" = x86_64 ]; then
+    say "FEX-Emu runs x86 programs ($out)"
+    return 0
+  fi
+  [ $status -eq 124 ] && say "FEX-Emu didn't finish its first x86 program in 2 minutes." \
+    || say "FEX-Emu couldn't run its first x86 program (exit $status)."
+  [ -n "$out" ] && echo "$out" | tail -n 20 | sed 's/^/  FEX: /'
+  [ -s "$RUN/fexserver.log" ] && tail -n 10 "$RUN/fexserver.log" | sed 's/^/  FEXServer: /'
+  return 1
+}
+
+# Everything FEX started (the assistant's Cancel, or after a stall).
+fex_stop() {
+  pkill -f "$X86/bin/steam-x86.sh" 2>/dev/null
+  pkill -f "$X86/fex/bin/" 2>/dev/null
+  rm -f "$FEX_SERVERSOCKETPATH"
+}
 
 # Asks the app for FEX and the x86 system, and shows its progress.
 install_x86() {
@@ -65,7 +122,10 @@ setup() {
     install_x86 || return 1
     echo
   fi
-  steam_ready || x86 setup || return 1
+  if ! steam_ready; then
+    fex_check || return 1
+    x86 setup || return 1
+  fi
 }
 
 # Steam's own data outside STEAMDIR: ~/.steam links and the login registry.
@@ -93,7 +153,8 @@ steam_tool() {
       rm -rf "$STEAMDIR" "$HOME/.steam"
       say "Steam removed (FEX-Emu and the x86 system stay)" ;;
     purge)
-      rm -rf "$STEAMDIR" "$HOME/.steam" "$X86/fex" "$X86/rootfs" "$X86/fex.new" "$X86/rootfs.new" \
+      fex_stop
+      rm -rf "$STEAMDIR" "$HOME/.steam" "$X86/fex" "$X86/rootfs" "$RUN" "$X86/fex.new" "$X86/rootfs.new" \
         "$X86/ready" "$X86/install.state" "$X86/install.log" "$HOME/.local/share/deskdroid-wine" \
         "$HOME/.config/deskdroid-steam-assistant.conf"
       say "Steam, FEX-Emu and the x86 system removed" ;;
@@ -116,6 +177,13 @@ case "${1:-}" in
     exit 0 ;;
   --tool)
     steam_tool "${2:-}"
+    exit ;;
+  --stop)
+    fex_stop
+    exit 0 ;;
+  --check)
+    ready || { say "FEX-Emu isn't installed"; exit 1; }
+    fex_check
     exit ;;
   --run-x86)
     shift
