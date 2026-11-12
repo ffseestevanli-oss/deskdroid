@@ -30,6 +30,7 @@ Item {
     property int defaultWidth: Kirigami.Units.gridUnit * 16
     property int defaultHeight: Kirigami.Units.gridUnit * 8
 
+    // A file:// URL already (from Qt.resolvedUrl), for both the state and the frames.
     readonly property string widgetsDir: {
         var here = Qt.resolvedUrl(".").toString();
         var i = here.indexOf("/kwin/share/");
@@ -112,7 +113,7 @@ Item {
             visible: root.widgetState === "ok"
             property int front: 0
             property string wanted: root.widgetState === "ok" && root.info.serial
-                ? "file://" + root.widgetsDir + "/" + root.token + ".png?" + root.info.serial : ""
+                ? root.widgetsDir + "/" + root.token + ".png?" + root.info.serial : ""
             readonly property Image shown: front === 0 ? a : b
             onWantedChanged: if (wanted) (front === 0 ? b : a).source = wanted
 
