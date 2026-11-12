@@ -19,8 +19,8 @@ def deco_frame(active):
         f.add(poly, "#000000", 0.035 if active else 0.025)
     if active:
         f.add([(x, y) for x, y in f.outline(-6)], MAGENTA, 0.10)  # faint magenta glow
-    f.add(f.outline(), "#5A1A48" if active else BORDER)
-    f.add(f.outline(1), HEADER)
+    f.add(f.outline(), "#5A1A48" if active else BORDER, glass(1.0, 0.85))
+    f.add(f.outline(1), HEADER, glass(1.0, 0.40 if active else 0.32))
     if active:
         f.band("top", 3, "rainbow-h")
     else:
@@ -33,7 +33,7 @@ def maximized(active, y):
     band = (f'<rect x="0" y="{y}" width="40" height="3" fill="url(#rbh)"/>' if active
             else f'<rect x="0" y="{y}" width="40" height="2" fill="#3A1D40"/>')
     pid = "decoration-maximized" + ("" if active else "-inactive")
-    return (f'<g id="{pid}-center"><rect x="0" y="{y}" width="40" height="{h}" fill="{HEADER}"/>{band}</g>', h)
+    return (f'<g id="{pid}-center"><rect x="0" y="{y}" width="40" height="{h}" fill="{HEADER}" fill-opacity="{glass(1.0, 0.40)}"/>{band}</g>', h)
 
 
 def decoration_svg():
@@ -44,6 +44,12 @@ def decoration_svg():
         parts.append(f.render(prefix, 0, y))
         parts.append(hint(prefix + "-hint-stretch-borders", f.W + 4, y, 2, 2))
         y += f.H + 8
+    if GLASS:
+        # The window border's shape, which KWin blurs behind (Aurorae's "mask").
+        m = Frame((P + CUT, PT + 16, P + CUT, PB + 12), cuts=(CUT, 0, 0, 0), inset=(P, PT, P, PB))
+        m.add(m.outline(), "#000000")
+        parts.append(m.render("mask", 0, y))
+        y += m.H + 8
     for active in (True, False):
         s, h = maximized(active, y)
         parts.append(s)
@@ -90,9 +96,10 @@ def button_svg(kind):
     for st, (fill, stroke, glyph, op) in states.items():
         outer = chamfer_poly(0.5, 0.5, 27.5, 23.5, tl=6, br=6)
         d = "M" + " L".join(f"{fmt(x)},{fmt(yy)}" for x, yy in outer) + " Z"
+        fop = glass(1.0, 0.45) if fill in (BUTTON, "#2A0F18", "#1A0D14") else 1.0
         parts.append(f'<g id="{st}-center" opacity="{op}" transform="translate(0,{y})">'
                      f'<rect width="28" height="24" fill="#000" fill-opacity="0.004"/>'
-                     f'<path d="{d}" fill="{fill}" stroke="{stroke}" stroke-width="1"/>'
+                     f'<path d="{d}" fill="{fill}" fill-opacity="{fop}" stroke="{stroke}" stroke-width="1"/>'
                      f'<g transform="translate(0,0)">{GLYPH[kind](glyph)}</g></g>')
         y += 30
     return svg("\n".join(parts), 28, y)
@@ -136,18 +143,18 @@ PaddingRight=%d
 
 
 if __name__ == "__main__":
-    out = sys.argv[1] + "/aurorae/themes/DDParty"
+    out = sys.argv[1] + f"/aurorae/themes/{CAMEL}"
     if os.path.exists(out):
         shutil.rmtree(out)
     os.makedirs(out)
     open(out + "/decoration.svg", "w").write(decoration_svg())
     for k in GLYPH:
         open(f"{out}/{k}.svg", "w").write(button_svg(k))
-    open(out + "/DDPartyrc", "w").write(RC)
+    open(out + f"/{CAMEL}rc", "w").write(RC)
     open(out + "/metadata.desktop", "w").write(
-        "[Desktop Entry]\nName=DD Party\nComment=Chamfered, rainbow-lit title bars from DeskDroid\n"
-        "X-KDE-PluginInfo-Author=DeskDroid\nX-KDE-PluginInfo-Name=DDParty\nX-KDE-PluginInfo-Version=1.0\n"
+        f"[Desktop Entry]\nName={NAME}\nComment=Chamfered, rainbow-lit title bars from DeskDroid\n"
+        f"X-KDE-PluginInfo-Author=DeskDroid\nX-KDE-PluginInfo-Name={CAMEL}\nX-KDE-PluginInfo-Version=1.0\n"
         "X-KDE-PluginInfo-License=GPL-2.0-or-later\nX-Plasma-API=declarativeappletscript\n")
     json.dump({"KPlugin": {"Authors": [{"Name": "DeskDroid"}], "Description": "Chamfered, rainbow-lit title bars from DeskDroid",
-                           "Id": "DDParty", "License": "GPL-2.0-or-later", "Name": "DD Party", "Version": "1.0"},
+                           "Id": CAMEL, "License": "GPL-2.0-or-later", "Name": NAME, "Version": "1.0"},
                "X-Plasma-API": "declarativeappletscript"}, open(out + "/metadata.json", "w"), indent=2)

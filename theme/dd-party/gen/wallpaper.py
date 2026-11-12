@@ -17,14 +17,36 @@ def render(w, h):
         k = np.clip(1 - d, 0, 1) ** 2.2 * a
         return k[..., None] * (np.array(rgb(color), np.float32) - img)
 
-    for cx, cy, r, c, a in [
+    glows = [
         (0.86, 0.12, 0.95, MAGENTA, 0.95),
         (0.97, 0.05, 0.45, "#FF2E8A", 0.35),
         (0.10, 0.92, 0.85, "#4B2A9E", 0.75),
         (0.62, 0.95, 0.55, "#0E5A7A", 0.55),
         (0.40, 0.40, 0.60, "#1A0F22", 0.5),
-    ]:
+    ]
+    if GLASS:
+        # Brighter, bigger colour fields, so blurred glass over them glows.
+        glows = [
+            (0.84, 0.10, 1.05, MAGENTA, 1.0),
+            (0.98, 0.02, 0.55, "#FF2E8A", 0.6),
+            (0.08, 0.95, 0.95, "#5B2FC0", 0.9),
+            (0.55, 1.00, 0.70, "#0E7FA8", 0.75),
+            (0.30, 0.15, 0.55, "#2EC5FF", 0.35),
+            (0.55, 0.55, 0.45, "#8B5CFF", 0.30),
+        ]
+    for cx, cy, r, c, a in glows:
         img += glow(cx, cy, r, c, a)
+    if GLASS:
+        # A broad, soft rainbow ribbon across the screen
+        t = (x / w) * 0.9 + (y / h) * 0.1
+        band = np.exp(-(((y / h) - (0.62 - 0.35 * (x / w) + 0.08 * np.sin(x / w * 6.0))) / 0.06) ** 2)
+        cols = np.array([rgb(c) for c in RAINBOW], np.float32)
+        pos = np.clip(t, 0, 1) * (len(RAINBOW) - 1)
+        i0 = np.clip(pos.astype(int), 0, len(RAINBOW) - 2)
+        f = (pos - i0)[..., None]
+        ribbon = cols[i0] * (1 - f) + cols[i0 + 1] * f
+        k = (band * 0.55)[..., None]
+        img += k * (ribbon - img)
 
     # dither against banding
     img += np.random.default_rng(7).normal(0, 1.1, img.shape)
@@ -56,11 +78,14 @@ def render(w, h):
 
 
 if __name__ == "__main__":
-    out = sys.argv[1] + "/wallpapers/DDParty"
+    out = sys.argv[1] + f"/wallpapers/{CAMEL}"
     os.makedirs(out + "/contents/images", exist_ok=True)
     sizes = [(1920, 1080), (2560, 1440), (3840, 2160), (2560, 1600), (3440, 1440), (2400, 1080), (1080, 2400)]
     for w, h in sizes:
-        render(w, h).save(f"{out}/contents/images/{w}x{h}.png", optimize=True)
+        if GLASS:
+            render(w, h).save(f"{out}/contents/images/{w}x{h}.jpg", quality=92)
+        else:
+            render(w, h).save(f"{out}/contents/images/{w}x{h}.png", optimize=True)
     render(1920, 1080).resize((480, 270), Image.LANCZOS).save(out + "/contents/screenshot.png")
-    json.dump({"KPlugin": {"Authors": [{"Name": "DeskDroid"}], "Id": "DDParty", "License": "CC-BY-SA-4.0",
-                           "Name": "DD Party"}}, open(out + "/metadata.json", "w"), indent=2)
+    json.dump({"KPlugin": {"Authors": [{"Name": "DeskDroid"}], "Id": CAMEL, "License": "CC-BY-SA-4.0",
+                           "Name": NAME}}, open(out + "/metadata.json", "w"), indent=2)

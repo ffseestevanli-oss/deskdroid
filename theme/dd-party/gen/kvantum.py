@@ -190,7 +190,7 @@ def build_config(base_cfg, out_cfg):
     g = cp["%General"]
     g.update({
         "author": "DeskDroid (based on KvArcDark by Tsu Jan)",
-        "comment": "DD Party: near-black, #990045 magenta, rainbow accents, chamfered corners",
+        "comment": f"{NAME}: near-black, #990045 magenta, rainbow accents, chamfered corners",
         "composite": "true", "menu_shadow_depth": "6", "tooltip_shadow_depth": "6",
         "scroll_width": "10", "scroll_min_extent": "48", "transient_scrollbar": "true",
         "slider_width": "4", "slider_handle_width": "18", "slider_handle_length": "18",
@@ -201,6 +201,13 @@ def build_config(base_cfg, out_cfg):
         "button_icon_size": "16", "toolbar_icon_size": "22", "small_icon_size": "16", "large_icon_size": "32",
         "tree_branch_line": "false", "fill_rubberband": "true",
     })
+    if GLASS:
+        # See-through windows and menus, blurred behind (KWin's blur effect).
+        g.update({
+            "translucent_windows": "true", "blurring": "true", "popup_blurring": "true",
+            "reduce_window_opacity": "58", "reduce_menu_opacity": "40",
+            "menu_blur_radius": "6", "tooltip_blur_radius": "6", "contrast": "1.00",
+        })
     c = cp["GeneralColors"]
     c.update({
         "window.color": BG, "base.color": VIEW, "alt.base.color": "#11111C", "button.color": BUTTON,
@@ -240,7 +247,8 @@ def build_config(base_cfg, out_cfg):
         cp["PanelButtonCommand"]["text.toggle.color"] = "#FFFFFF"
         cp["PanelButtonCommand"]["text.focus.color"] = "#FFFFFF"
     cp["Hacks"]["normal_default_pushbutton"] = "true"
-    cp["Hacks"]["transparent_dolphin_view"] = "false"
+    cp["Hacks"]["transparent_dolphin_view"] = "true" if GLASS else "false"
+    cp["Hacks"]["blur_translucent"] = "true" if GLASS else "false"
     cp["Hacks"]["iconless_pushbutton"] = "false"
     cp["Hacks"]["tint_on_mouseover"] = "0"
     with open(out_cfg, "w") as f:
@@ -249,9 +257,9 @@ def build_config(base_cfg, out_cfg):
 
 if __name__ == "__main__":
     base = sys.argv[2]  # path to KvArcDark dir
-    out = sys.argv[1] + "/Kvantum/DDParty"
+    out = sys.argv[1] + f"/Kvantum/{CAMEL}"
     if os.path.exists(out):
         shutil.rmtree(out)
     os.makedirs(out)
-    build_svg(f"{base}/KvArcDark.svg", f"{out}/DDParty.svg")
-    build_config(f"{base}/KvArcDark.kvconfig", f"{out}/DDParty.kvconfig")
+    build_svg(f"{base}/KvArcDark.svg", f"{out}/{CAMEL}.svg")
+    build_config(f"{base}/KvArcDark.kvconfig", f"{out}/{CAMEL}.kvconfig")

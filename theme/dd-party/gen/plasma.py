@@ -53,7 +53,7 @@ def panel():
     s = Sheet()
     for loc, accent in [("", "top"), ("south", "top"), ("north", "bottom"), ("west", "right"), ("east", "left")]:
         f = Frame((12, 12, 12, 12), cuts=(10, 0, 10, 0))
-        f.bordered(HEADER, BORDER, 1, fill_opacity=0.93)
+        f.bordered(HEADER, BORDER, 1, fill_opacity=glass(0.93, 0.30))
         f.band(accent, 2, "rainbow-h" if accent in ("top", "bottom") else "rainbow-v")
         prefix = loc
         s.frame(prefix, f)
@@ -65,7 +65,7 @@ def panel():
     return s.svg()
 
 
-def dialog(rainbow=True, cut=14, fill=HEADER, op=0.97, border=BORDER, shadow=24, margin=10, accent_w=3):
+def dialog(rainbow=True, cut=14, fill=HEADER, op=glass(0.97, 0.40), border=BORDER, shadow=24, margin=10, accent_w=3):
     s = Sheet()
     f = Frame((16, 16, 16, 16), cuts=(cut, 0, cut, 0))
     f.bordered(fill, border, 1, fill_opacity=op)
@@ -79,7 +79,7 @@ def dialog(rainbow=True, cut=14, fill=HEADER, op=0.97, border=BORDER, shadow=24,
 def tooltip():
     s = Sheet()
     f = Frame((10, 10, 10, 10), cuts=(8, 0, 8, 0))
-    f.bordered(BUTTON, MAGENTA_TEXT, 1, fill_opacity=0.98, border_opacity=0.9)
+    f.bordered(BUTTON, MAGENTA_TEXT, 1, fill_opacity=glass(0.98, 0.60), border_opacity=0.9)
     s.frame("", f, hints=margins(7, 9, 7, 9))
     s.shadow("shadow", 14, 0.5)
     return s.svg()
@@ -224,15 +224,15 @@ def gz(path, text):
 
 
 if __name__ == "__main__":
-    out = sys.argv[1] + "/plasma/desktoptheme/dd-party"
+    out = sys.argv[1] + f"/plasma/desktoptheme/{SLUG}"
     if os.path.exists(out):
         shutil.rmtree(out)
     os.makedirs(out + "/widgets"); os.makedirs(out + "/dialogs")
     w = {
         "widgets/panel-background": panel(),
         "dialogs/background": dialog(),
-        "widgets/background": dialog(cut=12, fill=CARD, op=0.94, shadow=16, accent_w=2),
-        "widgets/translucentbackground": dialog(cut=12, fill=CARD, op=0.72, shadow=16, accent_w=2),
+        "widgets/background": dialog(cut=12, fill=CARD, op=glass(0.94, 0.38), shadow=16, accent_w=2),
+        "widgets/translucentbackground": dialog(cut=12, fill=CARD, op=glass(0.72, 0.28), shadow=16, accent_w=2),
         "widgets/tooltip": tooltip(),
         "widgets/tasks": tasks(),
         "widgets/button": button(),
@@ -251,9 +251,10 @@ if __name__ == "__main__":
     json.dump({
         "KPlugin": {"Authors": [{"Name": "DeskDroid"}], "Category": "",
                     "Description": "Near-black, #990045 magenta and rainbow accents, chamfered corners",
-                    "Id": "dd-party", "License": "GPL-2.0-or-later", "Name": "DD Party", "Version": "1.0"},
+                    "Id": SLUG, "License": "GPL-2.0-or-later", "Name": NAME, "Version": "1.0"},
         "X-Plasma-API": "5.0",
     }, open(out + "/metadata.json", "w"), indent=2)
     open(out + "/plasmarc", "w").write(
-        "[ContrastEffect]\nenabled=true\ncontrast=0.3\nintensity=1.0\nsaturation=1.6\n\n"
+        ("[ContrastEffect]\nenabled=true\ncontrast=0.3\nintensity=1.0\nsaturation=1.6\n\n" if not GLASS else
+         "[ContrastEffect]\nenabled=true\ncontrast=0.3\nintensity=0.45\nsaturation=2.4\n\n") +
         "[AdaptiveTransparency]\nenabled=false\n\n[BlurBehindEffect]\nenabled=true\n")
