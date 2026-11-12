@@ -92,18 +92,10 @@ fex_check() {
     echo "page size $(getconf PAGESIZE 2>/dev/null), stack $(grep '\[stack\]' /proc/self/maps 2>/dev/null | cut -d' ' -f1)"
   } >"$CL"
   fex_up || { tail -n 20 "$RUN/fexserver.log" >>"$CL" 2>/dev/null; return 1; }
-  # 1. FEX itself (ARM64, DeskDroid's glibc) and its server connection.
-  out=$(timeout 30 "$FEX" --version 2>&1)
-  status=$?
-  echo "FEX --version: exit $status: $out" >>"$CL"
-  if [ $status -ne 0 ]; then
-    [ $status -eq 124 ] && say "FEX-Emu itself didn't start in 30 seconds (before any x86 program)." \
-      || say "FEX-Emu itself couldn't start (exit $status)."
-    echo "$out" | tail -n 20 | sed 's/^/  FEX: /'
-    tail -n 10 "$RUN/fexserver.log" 2>/dev/null | sed 's/^/  FEXServer: /'
-    return 1
-  fi
-  # 2. An x86 program, with FEX's own messages on.
+  # FEX's version, for the log only: FEXInterpreter (the name DeskDroid runs
+  # it by) takes every argument as an x86 program, so ask bin/FEX.
+  echo "FEX --version: $(timeout 20 "$X86/fex/bin/FEX" --version 2>&1 | head -n 5)" >>"$CL"
+  # An x86 program, with FEX's own messages on.
   FEX_SILENTLOG=0 FEX_OUTPUTLOG=stderr "$FEX" /bin/uname -m >"$RUN/fex-uname.out" 2>&1 </dev/null &
   pid=$!
   i=0
