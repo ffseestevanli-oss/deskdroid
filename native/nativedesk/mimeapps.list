@@ -76,4 +76,6 @@ application/vnd.oasis.opendocument.text=org.deskdroid.android-open.desktop;
 application/vnd.oasis.opendocument.spreadsheet=org.deskdroid.android-open.desktop;
 application/vnd.oasis.opendocument.presentation=org.deskdroid.android-open.desktop;
 application/zip=org.deskdroid.android-open.desktop;
+# DeskDroid packages (.adpk): Software installs them (native/plasma/software).
+application/x-deskdroid-adpk=org.deskdroid.software.desktop;
 application/vnd.android.package-archive=org.deskdroid.android-open.desktop;

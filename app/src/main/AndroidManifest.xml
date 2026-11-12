@@ -125,11 +125,44 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|smallestScreenSize|density"
             android:windowSoftInputMode="stateHidden|adjustNothing" />
 
-        <!-- The app store (Store.kt), over the desktop. -->
+        <!-- Software, the app store (Store.kt), over the desktop. It also
+             opens .adpk files (DeskDroid packages) from the phone's file
+             managers: by extension, since they send those with any MIME type. -->
         <activity
             android:name=".StoreActivity"
-            android:exported="false"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+            android:exported="true"
+            android:label="Software"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+            <intent-filter android:label="Install with Software">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="application/vnd.deskdroid.adpk" />
+            </intent-filter>
+            <intent-filter android:label="Install with Software">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.adpk" />
+                <data android:pathPattern=".*\\..*\\.adpk" />
+                <data android:pathPattern=".*\\..*\\..*\\.adpk" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.adpk" />
+            </intent-filter>
+            <intent-filter android:label="Install with Software">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.adpk" />
+                <data android:pathPattern=".*\\..*\\.adpk" />
+                <data android:pathPattern=".*\\..*\\..*\\.adpk" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.adpk" />
+            </intent-filter>
+        </activity>
 
         <!-- Restart or Power Off on the desktop's logout screen: Android's power menu. -->
         <service

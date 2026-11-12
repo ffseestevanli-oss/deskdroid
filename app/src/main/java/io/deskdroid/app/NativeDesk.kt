@@ -305,7 +305,10 @@ object NativeDesk {
                     Handler(Looper.getMainLooper()).post { PowerMenuService.open(activity?.get() ?: c) }
                     return
                 }
-                // App Store in Plasma's menu.
+                // The desktop's Software app asking the app store (SoftwareBridge.kt).
+                if (SoftwareBridge.handle(c, path)) return
+                // Software (the app store) in Plasma's menu, when the desktop's
+                // own Software app isn't in this build: the phone's.
                 if (path == "deskdroid:store") {
                     Handler(Looper.getMainLooper()).post {
                         val a = activity?.get() ?: c
@@ -800,9 +803,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "Icon=smartphone\nExec=android-open %u\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\nNoDisplay=true\n")
             // Termux's Firefox patches put /tmp under files/usr.
             File(filesDir, "usr/tmp").mkdirs()
-            File(filesDir, ".local/share/applications/org.deskdroid.store.desktop").writeText(
-                "[Desktop Entry]\nType=Application\nName=App Store\nGenericName=Install KDE apps\n" +
-                "Icon=plasmadiscover\nExec=android-open deskdroid:store\nCategories=System;\n")
+            // Software, the app store: the desktop's own app (native/plasma/software,
+            // its menu entry from the APK) when the build has it, else the phone's.
+            File(filesDir, ".local/share/applications/org.deskdroid.store.desktop").apply {
+                if (File(applicationInfo.nativeLibraryDir, "libdd_software.so").exists()) delete()
+                else writeText(
+                    "[Desktop Entry]\nType=Application\nName=Software\nGenericName=Install apps\n" +
+                    "Icon=plasmadiscover\nExec=android-open deskdroid:store\nCategories=System;\n")
+            }
             // Set as Desktop Wallpaper in right-click menus (KDE's own entry needs
             // more than DeskDroid has: it's switched off). KDE only reads service
             // menus that are executable.
@@ -1860,7 +1868,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         val actions = listOf(
             ui.tile("Keyboard", P.CYAN) { showMenu(false); toggleKeyboard() },
-            ui.tile("App Store", P.GREEN) {
+            ui.tile("Software", P.GREEN) {
                 showMenu(false)
                 startActivity(android.content.Intent(this@NativeDeskActivity, StoreActivity::class.java))
             },

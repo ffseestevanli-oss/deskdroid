@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DeskDroid's package file (.adpk): a zip with app.json, made by
+     native/nativedesk/build.sh and installed by Software (Store.kt). -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-deskdroid-adpk">
+    <comment>DeskDroid package</comment>
+    <sub-class-of type="application/zip"/>
+    <generic-icon name="package-x-generic"/>
+    <glob pattern="*.adpk" weight="80"/>
+  </mime-type>
+</mime-info>
