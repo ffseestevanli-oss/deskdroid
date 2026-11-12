@@ -963,6 +963,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("XDG_CONFIG_DIRS", kdeDefaultsDirs(config))
                     put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
                     put("QT_PLUGIN_PATH", pluginPath(libs, data)) // Qt's plugins flat, KDE's by namespace
+                    put("QML_IMPORT_PATH", File(data, "qml").path) // Aurorae's window borders are QML
                     put("XCURSOR_PATH", File(data, "share/icons").path)
                     if (bus != null) put("DBUS_SESSION_BUS_ADDRESS", bus)
                     put("FONTCONFIG_FILE", fonts.path)
@@ -1529,6 +1530,18 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (File(data, "share/org.kde.syntax-highlighting/themes/dd-party.theme").exists())
             Tuning.writeIfChanged(katerc, "[KTextEditor Renderer]\nAuto Color Theme Selection=false\nColor Theme=DD Party\n")
         else katerc.delete()
+        // DD Party's window borders (Aurorae, theme/dd-party) with its colours,
+        // when this build has Aurorae; else KWin's default, Breeze. A system
+        // default too, so a border picked in System Settings wins.
+        val kwinrc = File(xdg, "kwinrc")
+        val currentScheme = Regex("(?m)^ColorScheme=(.*)$").findAll(if (globals.exists()) globals.readText() else "")
+            .map { it.groupValues[1] }.lastOrNull { it != "Breeze Dark" }
+            ?: Regex("(?m)^ColorScheme=(.*)$").find(defaults)?.groupValues?.get(1)
+        val aurorae = File(applicationInfo.nativeLibraryDir, "libplugins_org.kde.kdecoration3_org.kde.kwin.aurorae.so").exists() &&
+            File(data, "share/aurorae/themes/DDParty/metadata.desktop").exists()
+        if (aurorae && currentScheme == "DDParty")
+            Tuning.writeIfChanged(kwinrc, "[org.kde.kdecoration2]\nlibrary=org.kde.kwin.aurorae\ntheme=__aurorae__svg__DDParty\n")
+        else kwinrc.delete()
         // GTK programs (Floorp): Breeze for GTK (breeze-gtk), light or dark as
         // Plasma's colour scheme is, at every start. A settings.ini without
         // DeskDroid's first line is the user's own and is kept.

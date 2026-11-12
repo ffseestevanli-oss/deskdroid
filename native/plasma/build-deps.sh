@@ -584,6 +584,21 @@ build_breeze() {
   kde_cmake "$s" -DBUILD_QT5=OFF -DBUILD_QT6=ON -DWITH_DECORATIONS=ON -DWITH_WALLPAPERS=OFF
   test -e "$PREFIX/plugins/org.kde.kdecoration3/org.kde.breeze.so"
 }
+# Aurorae: KWin's themeable window borders (SVG themes such as DD Party's,
+# DeskDroid's default look), its own package since Plasma 6.4. It draws
+# with Qt Quick, on the GPU or in software as KWin does. Its settings
+# dialog and the Plastik theme stay out.
+build_aurorae() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/aurorae-$PLASMA_VERSION.tar.xz" "aurorae-$PLASMA_VERSION.tar.xz")"
+  sed -i 's/^add_subdirectory(config)/# add_subdirectory(config)/' "$s/src/CMakeLists.txt"
+  grep -q "^# add_subdirectory(config)" "$s/src/CMakeLists.txt"
+  sed -i 's/^add_subdirectory(themes)/# add_subdirectory(themes)/' "$s/CMakeLists.txt"
+  grep -q "^# add_subdirectory(themes)" "$s/CMakeLists.txt"
+  unandroid "$s"
+  kde_cmake "$s"
+  test -e "$PREFIX/plugins/org.kde.kdecoration3/org.kde.kwin.aurorae.so"
+  test -e "$PREFIX/share/kwin/aurorae/aurorae.qml"
+}
 build_kdecoration() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kdecoration-$PLASMA_VERSION.tar.xz" "kdecoration-$PLASMA_VERSION.tar.xz")"
   kde_cmake "$s"
@@ -1599,7 +1614,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
-     sonnet ktextwidgets kparts attica syndication knewstuff krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs app_menu kfilemetadata breeze_icons kcmutils_host dolphin
+     sonnet ktextwidgets kparts attica syndication knewstuff aurorae krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs app_menu kfilemetadata breeze_icons kcmutils_host dolphin
      syntax_highlighting kio_extras ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive

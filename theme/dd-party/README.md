@@ -65,9 +65,11 @@ Pillow and numpy. The palette lives in `gen/palette.py`. After changing it:
 
 ## In DeskDroid
 
-DD Party is DeskDroid's default look. The native desktop has no Kvantum or
-Aurorae, so there apps and window borders are Breeze, in DD Party's colours;
-the Plasma style, icons, colours, editor and terminal colours are the same.
+DD Party is DeskDroid's default look. The native desktop has no Kvantum,
+so apps there are Breeze in DD Party's colours; window borders are DD
+Party's Aurorae theme (Aurorae is built for Android in build-deps.sh, and
+KWin keeps Breeze in a build without it). The Plasma style, icons, colours,
+editor and terminal colours are the same.
 NativeDesk.kt sets it for new users and, once, for users still on the old
 Breeze Dark default.
 

@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Regenerates DD Party's files for DeskDroid's native Plasma (the Android app):
 #   native/plasma/shell/ddparty/  colours, Plasma style, icons, global theme,
-#                                 Kate/KWrite and Konsole colours (as share/)
+#                                 window borders (Aurorae), Kate/KWrite and
+#                                 Konsole colours (as share/)
 #   native/plasma/shell/images/DDParty/  the wallpaper, 4K and phone size, JPEG
 # native/nativedesk/build.sh ships both in the desktop's data. Native Plasma
-# has no Kvantum or Aurorae, so apps and window borders there are Breeze in
-# DD Party's colours. Needs python3 with numpy and Pillow.
+# has no Kvantum, so apps there are Breeze in DD Party's colours; window
+# borders are DD Party's Aurorae theme (build-deps.sh builds Aurorae).
+# Needs python3 with numpy and Pillow.
 # Usage: theme/dd-party/gen/native.sh   (from anywhere in the repository)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -17,13 +19,14 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 python3 colors.py "$TMP"
 python3 plasma.py "$TMP"
 python3 editor.py "$TMP"
+python3 aurorae.py "$TMP"
 python3 icons.py "$TMP" ../assets/deskdroid-logo-256.png
 DDP_NATIVE=1 python3 lookandfeel.py "$TMP" ../assets/deskdroid-logo.png
 python3 wallpaper.py "$TMP"
 
 rm -rf "$DEST" "$WALL"
 mkdir -p "$DEST" "$WALL/contents/images"
-cp -a "$TMP/color-schemes" "$TMP/plasma" "$TMP/icons" "$TMP/konsole" "$TMP/org.kde.syntax-highlighting" "$DEST/"
+cp -a "$TMP/color-schemes" "$TMP/plasma" "$TMP/icons" "$TMP/konsole" "$TMP/org.kde.syntax-highlighting" "$TMP/aurorae" "$DEST/"
 cp "$TMP/wallpapers/DDParty/metadata.json" "$WALL/"
 python3 - "$TMP/wallpapers/DDParty/contents/images" "$WALL/contents/images" <<'EOF'
 import sys
