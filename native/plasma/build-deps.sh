@@ -387,7 +387,9 @@ build_ffmpeg() {
 # (QtAudioDeviceManager.setAudioOutput): that would change calls and
 # Android's apps too, so it only notes the device; Android routes the sound.
 build_qtmultimedia() {
+  # qt_src applies patches/qtmultimedia-everywhere-src (the demuxer's).
   local s; s="$(qt_src qtmultimedia)"
+  grep -q "DeskDroid: a packet without a timestamp" "$s/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegdemuxer.cpp"
   local j="$s/src/android/jar/src/org/qtproject/qt/android/multimedia/QtAudioDeviceManager.java"
   perl -0pi -e 's/(private static void setAudioOutput\(AudioDeviceInfo deviceInfo,[^)]*\)\s*\{).*?(\n\s*m_currentOutputId = deviceInfo\.getId\(\);)/$1\n        \/\/ DeskDroid: the desktop leaves the phone audio mode and routing alone.$2/s' "$j"
   grep -q "DeskDroid: the desktop leaves" "$j"
@@ -398,7 +400,7 @@ build_qtmultimedia() {
   test -n "$(find "$PREFIX/plugins" -name '*ffmpegmediaplugin*.so' | head -1)"
   test -z "$(find "$PREFIX/plugins" "$PREFIX/lib/cmake/Qt6Multimedia" -iname '*androidmediaplugin*' | head -1)"
 }
-inputs_qtmultimedia() { declare -f build_ffmpeg; }
+inputs_qtmultimedia() { declare -f build_ffmpeg; cat "$HERE"/patches/qtmultimedia-everywhere-src/*; }
 # Text to speech, which KTextEditor needs (its "Say" actions); Qt Speech
 # builds nothing without Qt Multimedia.
 build_qtspeech() { qt_module qtspeech; test -e "$PREFIX/lib/libQt6TextToSpeech_arm64-v8a.so" || test -e "$PREFIX/lib/libQt6TextToSpeech.so"; }

@@ -1,0 +1,47 @@
+DeskDroid: Qt FFmpeg demuxer: a packet without a timestamp is never past
+the stream end, and the first packets and any read error go to the log.
+
+--- a/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegdemuxer.cpp	2026-11-12 18:57:30.901776323 +0000
++++ b/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegdemuxer.cpp	2026-11-12 18:57:39.188873741 +0000
+@@ -3,6 +3,7 @@
+ 
+ #include "playbackengine/qffmpegdemuxer_p.h"
+ #include <qloggingcategory.h>
++#include <atomic>
+ #include <chrono>
+ 
+ QT_BEGIN_NAMESPACE
+@@ -30,6 +31,10 @@
+     const AVPacket &avPacket = *packet.avPacket();
+     const AVStream &avStream = *context->streams[avPacket.stream_index];
+     const AVStreamDuration streamDuration(avStream.duration);
++    // DeskDroid: a packet without a timestamp can't be past the stream's end
++    // (pts - start_time would overflow and end the demuxing at once).
++    if (avPacket.pts == AV_NOPTS_VALUE)
++        return true;
+     if (streamDuration.get() <= 0
+         || context->duration_estimation_method != AVFMT_DURATION_FROM_STREAM)
+         return true; // Stream duration shouldn't or doesn't need to be compared to pts
+@@ -77,6 +82,22 @@
+ 
+     const int demuxStatus = av_read_frame(m_context, packet.avPacket());
+ 
++    // DeskDroid: the first packets and why demuxing ends, in the log.
++    static std::atomic<int> deskdroidLogged{ 0 };
++    if (deskdroidLogged.fetch_add(1) < 6 || demuxStatus < 0) {
++        const AVPacket &p = *packet.avPacket();
++        const AVStream *st = demuxStatus >= 0 ? m_context->streams[p.stream_index] : nullptr;
++        qCInfo(qLcDemuxer) << "DeskDroid: read status" << demuxStatus << "stream" << p.stream_index
++                           << "pts" << p.pts << "dts" << p.dts << "duration" << p.duration
++                           << "stream start" << (st ? st->start_time : 0)
++                           << "stream duration" << (st ? st->duration : 0)
++                           << "time base" << (st ? st->time_base.num : 0) << "/"
++                           << (st ? st->time_base.den : 0)
++                           << "duration method" << int(m_context->duration_estimation_method)
++                           << "within duration"
++                           << (demuxStatus >= 0 && isPacketWithinStreamDuration(m_context, packet));
++    }
++
+     if (demuxStatus == AVERROR_EOF || !isPacketWithinStreamDuration(m_context, packet)) {
+         ++m_loopOffset.loopIndex;
+ 
