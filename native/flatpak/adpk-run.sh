@@ -140,6 +140,9 @@ fake() { # <path under /proc> <contents>
 }
 fake /proc/version "Linux version $(uname -r) (deskdroid) $(uname -v)"
 fake /proc/sys/fs/inotify/max_user_watches 8192
+# The runtime's fonts.conf includes the host's font folders from here.
+printf '<?xml version="1.0"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n</fontconfig>\n' > "$F/flatpak-tmp/font-dirs.xml"
+mounts="$mounts;/run/host/font-dirs.xml=$F/flatpak-tmp/font-dirs.xml"
 export DDFLATPAK_MOUNTS="$mounts"
 # glibc's loader asks ddflatpak's audit library for /app and /usr in RUNPATHs.
 [ -e "$L/libddflatpak_audit.so" ] && export DDMASK_GLIBC_LD_AUDIT="$L/libddflatpak_audit.so"

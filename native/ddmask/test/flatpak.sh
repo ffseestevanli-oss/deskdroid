@@ -85,5 +85,9 @@ expect "the audit library maps RUNPATH /app/lib/<x> and /usr/lib/<x>" "$out" "^l
 out="$(run env LD_AUDIT="$T/libddflatpak_audit.so" "$APP/bin/probe" "exec:/app/bin/rpprobe")"
 expect "...in programs the app starts too" "$out" "^libs=42,7$"
 
+mkdir -p "$T/shm"
+out="$(run env DDFLATPAK_MOUNTS="/dev/shm=$T/shm;/run/ddtest-shm=$T/shm" "$APP/bin/probe" temp:/run/ddtest-shm/.org.chromium.Chromium.XXXXXX)"
+expect "mkostemp and unlink under a mounted path (Chromium's /dev/shm)" "$out" "^temp fd=yes named=yes removed=yes$"
+
 echo
 [ "$fails" = 0 ] && echo "all ddflatpak tests passed" || { echo "$fails failed"; exit 1; }

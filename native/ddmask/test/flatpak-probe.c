@@ -25,6 +25,16 @@ int main(int argc, char **argv) {
             printf("exec %s failed\n", a + 5);
             return 1;
         }
+        if (!strncmp(a, "temp:", 5)) { /* temp:<template>: Chromium's shared memory, then removed */
+            char t[PATH_MAX];
+            snprintf(t, sizeof t, "%s", a + 5);
+            int fd = mkostemp(t, O_CLOEXEC);
+            struct stat st;
+            int named = fd >= 0 && stat(t, &st) == 0 && strcmp(t, a + 5) && !strncmp(t, a + 5, strlen(a + 5) - 6);
+            int gone = fd >= 0 && unlink(t) == 0 && stat(t, &st) != 0;
+            printf("temp fd=%s named=%s removed=%s\n", fd >= 0 ? "yes" : "no", named ? "yes" : "no", gone ? "yes" : "no");
+            continue;
+        }
         if (a[0] != '/') { printf("%s fopen=no\n", a); continue; } /* a word, not a path */
         char line[256] = "";
         FILE *f = fopen(a, "r");
