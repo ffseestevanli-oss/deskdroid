@@ -23,9 +23,9 @@ object Prefs {
 
     /** In Venus mode, also put KWin (desktop effects) on the GPU. Off: KWin uses llvmpipe. */
     fun gpuDesktop(c: Context) = prefs(c).getBoolean("gpu_desktop", false)
-    /** Flathub apps on the GPU through the Venus server (NativeDesk.startGpu): experimental, off by default. */
-    fun linuxAppsGpu(c: Context) = prefs(c).getBoolean("linux_apps_gpu", false)
-    fun setLinuxAppsGpu(c: Context, on: Boolean) = prefs(c).edit().putBoolean("linux_apps_gpu", on).apply()
+    /** Flathub apps' OpenGL on Android's GLES through the virgl server (NativeDesk.startGpu). */
+    fun linuxAppsGpu(c: Context) = prefs(c).getBoolean("linux_apps_gpu_virgl", true)
+    fun setLinuxAppsGpu(c: Context, on: Boolean) = prefs(c).edit().putBoolean("linux_apps_gpu_virgl", on).apply()
     fun setGpuDesktop(c: Context, on: Boolean) = prefs(c).edit().putBoolean("gpu_desktop", on).apply()
 
     /** Plasma session: "x11" (default) or "wayland" (experimental: KWin nested in the X server, software rendering). */

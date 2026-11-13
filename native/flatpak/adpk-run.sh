@@ -185,6 +185,31 @@ mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
 # KDE's look (kdeglobals: Breeze style, DD Party colours and icons) through
 # the runtime's Plasma integration.
 export QT_QPA_PLATFORMTHEME=kde
+# GTK's look: on Wayland GTK takes its theme from GSettings, not the
+# desktop's gtk-3.0/settings.ini (which NativeDesk writes: DD-Party, its icons,
+# dark). So the settings file's choices go to GTK_THEME and to GSettings'
+# keyfile backend (~/.config/glib-2.0/settings/keyfile), only those keys.
+ini="$XDG_CONFIG_HOME/gtk-3.0/settings.ini"
+if [ -f "$ini" ]; then
+  gval() { sed -n "s/^$1 *= *//p" "$ini" | head -n 1; }
+  gtheme="$(gval gtk-theme-name)" gicons="$(gval gtk-icon-theme-name)" gcursor="$(gval gtk-cursor-theme-name)"
+  gdark="$(gval gtk-application-prefer-dark-theme)"
+  [ -n "$gtheme" ] && export GTK_THEME="$gtheme"
+  kf="$XDG_CONFIG_HOME/glib-2.0/settings/keyfile"
+  mkdir -p "${kf%/*}" && touch "$kf"
+  sed -i -e '/^gtk-theme=/d' -e '/^icon-theme=/d' -e '/^cursor-theme=/d' -e '/^color-scheme=/d' "$kf"
+  grep -q '^\[org/gnome/desktop/interface\]' "$kf" || printf '\n[org/gnome/desktop/interface]\n' >> "$kf"
+  scheme=default; [ "$gdark" = true ] && scheme=prefer-dark
+  keys="$F/flatpak-tmp/gtk-keys"
+  {
+    echo "color-scheme='$scheme'"
+    [ -n "$gtheme" ] && echo "gtk-theme='$gtheme'"
+    [ -n "$gicons" ] && echo "icon-theme='$gicons'"
+    [ -n "$gcursor" ] && echo "cursor-theme='$gcursor'"
+  } > "$keys"
+  sed -i "/^\[org\/gnome\/desktop\/interface\]/r $keys" "$kf"
+  export GSETTINGS_BACKEND=keyfile
+fi
 # Fonts: the runtime's, and Android's (Roboto, which the desktop's settings name).
 mkdir -p "$F/flatpak-tmp/fontconfig"
 cat > "$F/flatpak-tmp/fonts.conf" <<FONTS
@@ -211,18 +236,24 @@ for m in "$S/$RTPKG/program/metadata" "$meta"; do
 $envs
 ENVS
 done
-# The GPU: Android's own driver, through the Venus server the desktop starts
-# (NativeDesk.kt's startGpu, ../virgl). Vulkan goes to Mesa's Venus driver
-# (libdd_vulkan_virtio.so), OpenGL through Zink on top of it; frames reach the
-# desktop through Wayland shared memory (no DRM device behind Venus). Without
-# the server (Settings' GPU mode set to software), Mesa's llvmpipe draws.
-# DESKDROID_GPU=software in the environment turns it off for one app.
-V="${XDG_RUNTIME_DIR:-$F/runtime}/venus.sock"
-if [ "${DESKDROID_GPU:-}" != software ] && [ -S "$V" ] && [ -e "$L/libdd_vulkan_virtio.so" ]; then
+# The GPU: Android's own GLES driver, the one KWin and plasmashell draw with,
+# through the virgl server the desktop starts (NativeDesk.kt's startGpu,
+# ../virgl): Mesa's virpipe driver (in every Flathub Mesa) sends the app's
+# OpenGL there and reads frames back into Wayland shared memory. Without the
+# server (Settings' "GPU for Linux apps" off), Mesa's llvmpipe draws.
+# (Venus, Vulkan to Android's Vulkan driver, is used instead when a Venus
+# server runs.) DESKDROID_GPU=software in the environment: llvmpipe, one app.
+R="${XDG_RUNTIME_DIR:-$F/runtime}"
+if [ "${DESKDROID_GPU:-}" = software ]; then
+  gpu="software (llvmpipe)"
+elif [ -S "$R/virgl.sock" ]; then
+  export GALLIUM_DRIVER=virpipe LIBGL_ALWAYS_SOFTWARE=1 VTEST_SOCKET_NAME="$R/virgl.sock"
+  gpu="GPU (virgl on Android's GLES)"
+elif [ -S "$R/venus.sock" ] && [ -e "$L/libdd_vulkan_virtio.so" ]; then
   icd="$F/flatpak-tmp/venus_icd.json"
   printf '{"file_format_version": "1.0.0", "ICD": {"library_path": "%s", "api_version": "1.3.305"}}\n' \
     "$L/libdd_vulkan_virtio.so" > "$icd"
-  export VN_DEBUG=vtest VTEST_SOCKET_NAME="$V" VK_DRIVER_FILES="$icd" VK_ICD_FILENAMES="$icd" \
+  export VN_DEBUG=vtest VTEST_SOCKET_NAME="$R/venus.sock" VK_DRIVER_FILES="$icd" VK_ICD_FILENAMES="$icd" \
     MESA_VK_WSI_DEBUG=sw MESA_LOADER_DRIVER_OVERRIDE=zink GALLIUM_DRIVER=zink ZINK_DESCRIPTORS=lazy
   gpu="GPU (Venus)"
 else

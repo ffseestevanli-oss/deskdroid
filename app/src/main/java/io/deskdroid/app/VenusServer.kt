@@ -52,7 +52,7 @@ object VenusServer {
             AppLog.i("Mesa's Venus driver (virtio_icd) is missing from the system image")
             return null
         }
-        return startServer(c, paths, paths.virglSocket, log)
+        return startServer(c, paths, paths.virglSocket, log = log)
     }
 
     /**
@@ -60,8 +60,10 @@ object VenusServer {
      * programs (Flathub apps, native/flatpak/adpk-run.sh) bring their own Venus
      * driver (libdd_vulkan_virtio.so) instead of the rootfs's.
      */
-    fun startServer(c: Context, paths: Paths, socket: File, log: (Process) -> Unit): Process? {
-        val mode = memoryMode(c, paths)
+    fun startServer(c: Context, paths: Paths, socket: File, venus: Boolean = true, log: (Process) -> Unit): Process? {
+        // virgl (OpenGL over Android's GLES, the driver KWin draws with) needs
+        // no render server and no memory mode.
+        val mode = if (venus) memoryMode(c, paths) else "dmabuf"
         val suffix = if (mode == "ahb") "_ahb" else ""
         val server = File(paths.nativeLibs, "libvirgl_test_server$suffix.so")
         val renderServer = File(paths.nativeLibs, "libvirgl_render_server$suffix.so")
@@ -76,8 +78,10 @@ object VenusServer {
         link.delete()
         if (renderServer.exists()) Os.symlink(renderServer.path, link.path)
 
-        AppLog.i("Starting Venus server (${describeMemory(mode)} memory)")
-        val p = ProcessBuilder(server.path, "--venus", "--socket-path", socket.path)
+        AppLog.i(if (venus) "Starting Venus server (${describeMemory(mode)} memory)" else "Starting virgl server (Android's GLES)")
+        val args = if (venus) listOf(server.path, "--venus", "--socket-path", socket.path)
+            else listOf(server.path, "--socket-path", socket.path)
+        val p = ProcessBuilder(args)
             .directory(work).redirectErrorStream(true).also { pb ->
                 pb.environment().apply {
                     remove("LD_PRELOAD"); remove("LD_LIBRARY_PATH")

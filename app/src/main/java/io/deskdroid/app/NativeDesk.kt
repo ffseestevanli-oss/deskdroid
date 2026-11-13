@@ -1834,32 +1834,32 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     /**
-     * The GPU for Linux programs (Flathub apps): Android's own driver, through
-     * virglrenderer's Venus server (native/virgl, VenusServer.kt). Apps use the
-     * Venus Vulkan driver shipped as libdd_vulkan_virtio.so, with Zink for
-     * OpenGL (native/flatpak/adpk-run.sh), when $XDG_RUNTIME_DIR/venus.sock is
-     * there; otherwise they draw with llvmpipe. Experimental: only with
+     * The GPU for Linux programs (Flathub apps): Android's own GLES driver,
+     * through virglrenderer's vtest server (native/virgl, VenusServer.kt) on
+     * $XDG_RUNTIME_DIR/virgl.sock; apps use Mesa's virpipe driver from their
+     * runtime (native/flatpak/adpk-run.sh). Without it they draw with llvmpipe. Experimental: only with
      * Settings' "GPU for Linux apps" on.
      */
     private fun startGpu(libs: String, runtime: File) {
-        val socket = File(runtime, "venus.sock").apply { delete() }
-        // Off unless Settings' "GPU for Linux apps" is on: on the Pixel 10 Pro the
-        // server can't export the buffers Zink asks for yet (export_blob -22),
-        // and Kdenlive then stops at its splash screen.
-        if (!Prefs.linuxAppsGpu(this)) { AppLog.i("[venus] GPU for Linux apps is off: they draw in software"); return }
-        if (!File(libs, "libdd_vulkan_virtio.so").exists()) return
+        val socket = File(runtime, "virgl.sock").apply { delete() }
+        File(runtime, "venus.sock").delete()
+        // virgl: apps' OpenGL goes to the server, which draws with Android's own
+        // GLES driver, the one KWin and plasmashell use. (Venus, Vulkan to
+        // Android's Vulkan driver, couldn't share buffers on the Pixel 10 Pro:
+        // export_blob -22, Kdenlive stuck at its splash screen.)
+        if (!Prefs.linuxAppsGpu(this)) { AppLog.i("[virgl] GPU for Linux apps is off: they draw in software"); return }
         try {
-            val p = VenusServer.startServer(this, Paths(this), socket) { proc ->
+            val p = VenusServer.startServer(this, Paths(this), socket, venus = false) { proc ->
                 Thread {
-                    proc.inputStream.bufferedReader().outputLines { AppLog.i("[venus] $it") }
-                    AppLog.i("[venus] exited (${proc.waitFor()})")
+                    proc.inputStream.bufferedReader().outputLines { AppLog.i("[virgl] $it") }
+                    AppLog.i("[virgl] exited (${proc.waitFor()})")
                 }.apply { isDaemon = true }.start()
             }
-            if (p == null) { AppLog.i("[venus] no GPU server: Linux programs draw in software"); return }
+            if (p == null) { AppLog.i("[virgl] no GPU server: Linux programs draw in software"); return }
             apps += p
-            AppLog.i("[venus] Linux programs draw on the GPU (Venus server on ${socket.path})")
+            AppLog.i("[virgl] Linux programs' OpenGL goes to Android's GLES (server on ${socket.path})")
         } catch (e: Exception) {
-            AppLog.i("[venus] couldn't start the GPU server: $e")
+            AppLog.i("[virgl] couldn't start the GPU server: $e")
         }
     }
 

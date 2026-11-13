@@ -19,6 +19,9 @@ pkg() { # id metadata
   mkdir -p "$S/$1/program/files"; : > "$S/$1/app.txt"; : > "$S/$1/program/.ddsetup-done"
   printf '%s\n' "$2" > "$S/$1/program/metadata"
 }
+mkdir -p "$T/desk-config/gtk-3.0" "$T/desk-config/glib-2.0/settings"
+printf '# DeskDroid\n[Settings]\ngtk-theme-name=DD-Party\ngtk-icon-theme-name=DD-Party\ngtk-application-prefer-dark-theme=true\n' > "$T/desk-config/gtk-3.0/settings.ini"
+printf "[org/gnome/desktop/interface]\nother='kept'\ngtk-theme='Adwaita'\n" > "$T/desk-config/glib-2.0/settings/keyfile"
 pkg runtime-kde-6.11 '[Runtime]
 name = org.kde.Platform
 runtime = org.kde.Platform/aarch64/6.11
@@ -60,18 +63,29 @@ expect "the home folder as on Linux: the desktop's settings folder, ~/.local/sha
 expect "the desktop's theme: KDE's platform theme, its data and settings folders after the runtime's" "$out" \
   "^QT_QPA_PLATFORMTHEME=kde$" "^XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share:$T/desk-share$" \
   "^XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg:$T/desk-xdg$"
+expect "GTK apps get the desktop's GTK theme" "$out" "^GTK_THEME=DD-Party$" "^GSETTINGS_BACKEND=keyfile$"
+expect "...in GSettings too, only those keys" "$(cat "$T/desk-config/glib-2.0/settings/keyfile")" "^other='kept'$" \
+  "^\[org/gnome/desktop/interface\]$" "^color-scheme='prefer-dark'$" "^gtk-theme='DD-Party'$" "^icon-theme='DD-Party'$"
+run kid3 >/dev/null
+expect "...the same each start" "$(grep -c "^gtk-theme=" "$T/desk-config/glib-2.0/settings/keyfile")" "^1$"
 expect "Android's fonts beside the runtime's" "$(cat "$F/flatpak-tmp/fonts.conf")" "<include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>" "<dir>/system/fonts</dir>"
 expect "full FFmpeg (codecs-extra) ahead of the runtime's" "$out" "^DDMASK_GLIBC_LD_LIBRARY_PATH=$F/glibc/lib:$S/kid3/program/files/lib:$S/runtime-mesa-25.08/program/codecs-extra/lib:"
 if [ -r /proc/version ]; then
   expect "a readable /proc/version is left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?$"
 fi
 mkdir -p "$T/run" && : > "$L/libdd_vulkan_virtio.so"
+python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$T/run/virgl.sock"
+out2="$(run kid3)"
+expect "with the desktop's virgl server, OpenGL goes to Android's GLES" "$out2" "^GALLIUM_DRIVER=virpipe$" "^LIBGL_ALWAYS_SOFTWARE=1$" "^VTEST_SOCKET_NAME=$T/run/virgl.sock$"
+expect "...and says so" "$(cat "$S/kid3/run.log")" "GPU \(virgl on Android's GLES\)\)$"
+rm -f "$T/run/virgl.sock"
 python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$T/run/venus.sock"
 out2="$(run kid3)"
-expect "with the desktop's Venus server, apps draw on the GPU" "$out2" "^VN_DEBUG=vtest$" "^VTEST_SOCKET_NAME=$T/run/venus.sock$" \
+expect "with a Venus server, apps draw on the GPU" "$out2" "^VN_DEBUG=vtest$" "^VTEST_SOCKET_NAME=$T/run/venus.sock$" \
   "^MESA_LOADER_DRIVER_OVERRIDE=zink$" "^VK_DRIVER_FILES=$F/flatpak-tmp/venus_icd.json$"
 expect "...through the APK's Venus driver" "$(cat "$F/flatpak-tmp/venus_icd.json")" "\"library_path\": \"$L/libdd_vulkan_virtio.so\""
 expect "...and say so" "$(cat "$S/kid3/run.log")" "GPU \(Venus\)\)$"
+expect "a Venus server instead: Vulkan to Android's Vulkan driver" "$out2" "^VN_DEBUG=vtest$"
 expect "DESKDROID_GPU=software keeps one app on llvmpipe" "$(env -i HOME="$T/home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$T/run" DESKDROID_GPU=software DDAPP_PROGRAM="$S/kid3/program" DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$T/loader" sh "$HERE/../adpk-run.sh"; cat "$S/kid3/run.log")" "software \(llvmpipe\)\)$"
 rm -f "$T/run/venus.sock"
 expect "a Qt app gets no Electron flags" "$out" "^args: .*/app/bin/kid3-cli a b$"
