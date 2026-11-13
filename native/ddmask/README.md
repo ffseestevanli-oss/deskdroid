@@ -129,3 +129,25 @@ path, `PATH` search, `execvp`, `execle` with a cleaned environment,
 ddload, and a pretend AppImage (`fake-appimage.c`) unpacked and started. CI
 runs it on every APK build. `../glibc/test/run.sh` and `../musl/test/run.sh`
 test the glibc and musl loaders, and ddload for ARM64, under qemu.
+
+## The ddmask module (for now)
+
+While ddmask changes often, it also ships apart from the APK, as a package
+Software installs like a dependency (`module.sh` packs one from an APK
+build, `test/module.sh` tests it). Installed, it's
+`files/store/apps/ddmask/program`, and with `api-1` in it (it fits this APK):
+
+- the bionic ddmask (`libddmask.so`) is the module's when Android's linker
+  will preload it from app files (`NativeDesk.kt` checks at desktop start
+  and sets `DDMASK_MODULE_BIONIC=1`); otherwise the APK's;
+- ddmask hands glibc and musl programs the module's builds
+  (`libddmask_glibc.so`, `libddmask_musl.so`), and the launch scripts preload
+  the module's `libddflatpak.so` and audit library;
+- the APK's `adpk-run.sh`, `flatpak.sh` and `fex-run.sh` run the module's
+  copies instead.
+
+The loaders and runners ddmask execs stay in the APK (`DDMASK_LIBS`), since
+Android runs programs only from there; so does a copy of everything above,
+used whenever the module isn't installed or doesn't fit. Removing the
+module in Software goes back to the APK's ddmask. Once ddmask settles, the
+module goes away and the APK's copy is the only one again.

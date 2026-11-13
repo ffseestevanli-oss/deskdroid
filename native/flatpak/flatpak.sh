@@ -5,9 +5,19 @@
 #
 # Paths: $DESKDROID_FILES (default the app's files folder), this script's
 # folder (the APK's library folder) for DeskDroid's libraries.
+# The ddmask module (native/ddmask/module.sh), when it's installed: its copy
+# of this script runs instead, and its builds of ddmask's libraries are used
+# (ddlib). DDMASK_MODULE is where it would be (NativeDesk.kt); api-1 says it
+# fits this APK.
+DM="${DDMASK_MODULE:-}"
+[ -n "$DM" ] && [ -e "$DM/api-1" ] || DM=""
+if [ -n "$DM" ] && [ -e "$DM/scripts/flatpak.sh" ]; then
+  case "$0" in "$DM"/*) ;; *) exec "${DESKDROID_SH:-/system/bin/sh}" "$DM/scripts/flatpak.sh" "$@" ;; esac
+fi
+ddlib() { if [ -n "$DM" ] && [ -e "$DM/lib/$1" ]; then echo "$DM/lib/$1"; else echo "$L/$1"; fi; }
 F="${DESKDROID_FILES:-/data/data/io.deskdroid.app/files}"
 self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-L="${DESKDROID_LIBS:-${self%/*}}"
+L="${DESKDROID_LIBS:-${DDMASK_LIBS:-${self%/*}}}"
 CLI="$F/flatpak-cli"
 ARCH="${DESKDROID_FLATPAK_ARCH:-aarch64}"
 TRIPLE="$ARCH-linux-gnu"
@@ -15,7 +25,7 @@ export FLATPAK_USER_DIR="$F/flatpak" FLATPAK_SYSTEM_DIR="$F/flatpak-system"
 mkdir -p "$FLATPAK_USER_DIR" "$FLATPAK_SYSTEM_DIR" "$F/flatpak-tmp"
 GLIBC_LIB="$F/glibc/lib"
 # ddflatpak first, so the paths it maps are real before ddmask starts them.
-export DDMASK_GLIBC_LD_PRELOAD="$L/libddflatpak.so:$L/libddmask_glibc.so"
+export DDMASK_GLIBC_LD_PRELOAD="$(ddlib libddflatpak.so):$(ddlib libddmask_glibc.so)"
 export DDFLATPAK_TMP="$F/flatpak-tmp" TMPDIR="$F/flatpak-tmp"
 
 die() { echo "flatpak: $*" >&2; exit 1; }
@@ -164,7 +174,7 @@ run() {
   export DDFLATPAK_APP="$APP" DDFLATPAK_RUNTIME="$RT" DDFLATPAK_MOUNTS="$mounts"
   # The same paths for glibc's loader, which opens the folders programs name
   # for their libraries (RUNPATH /app/lib/<x>) itself (ddmask/ddflatpak-audit.c).
-  [ -e "$L/libddflatpak_audit.so" ] && export DDMASK_GLIBC_LD_AUDIT="$L/libddflatpak_audit.so"
+  [ -e "$(ddlib libddflatpak_audit.so)" ] && export DDMASK_GLIBC_LD_AUDIT="$(ddlib libddflatpak_audit.so)"
   export DDMASK_GLIBC_LD_LIBRARY_PATH="$libpath" DDFLATPAK_LIBPATH="$libpath"
   # The desktop's own (bionic) Qt and KDE settings would point the app's Qt at
   # the wrong plugins.
