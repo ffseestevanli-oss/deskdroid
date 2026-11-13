@@ -18,7 +18,7 @@ static int softwareMain(int argc, char **argv)
 {
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("software"));
-    QApplication::setApplicationDisplayName(QStringLiteral("Software"));
+    QApplication::setApplicationDisplayName(QStringLiteral("Agora"));
     QApplication::setOrganizationDomain(QStringLiteral("deskdroid.io"));
     QApplication::setDesktopFileName(QStringLiteral("org.deskdroid.software"));
     QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("org.deskdroid.software"), QIcon(QStringLiteral(":/icon.svg"))));

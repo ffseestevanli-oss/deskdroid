@@ -62,7 +62,7 @@ ColumnLayout {
 
     Heading { text: "—  UPDATES  —"; color: Party.yellow }
     Para {
-        text: "Software compares what you have with the catalog each time it opens. An app with a newer version shows <b>Update</b>, and the tabs count the updates waiting."
+        text: "Agora compares what you have with the catalog each time it opens. An app with a newer version shows <b>Update</b>, and the tabs count the updates waiting."
     }
 
     Heading { text: "—  CATALOG  —"; color: Party.green }

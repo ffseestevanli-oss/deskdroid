@@ -116,7 +116,7 @@ PartyPage {
                         : page.invalid ? backend.error
                         : page.done ? page.pkg.name + " is installed. It's in the menu now."
                         : page.working ? "Installing " + page.pkg.name + "…"
-                        : page.ready ? "From a file, not from the Software catalog: install packages only from people you trust."
+                        : page.ready ? "From a file, not from the Agora catalog: install packages only from people you trust."
                         : ""
                     font.family: Party.body; font.pixelSize: 15
                     color: page.invalid || backend.offline ? Party.orange : page.done ? Party.green : Party.muted

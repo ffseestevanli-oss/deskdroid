@@ -47,7 +47,7 @@ object SoftwareBridge {
         val what = req.substringBefore(':')
         val arg = req.substringAfter(':', "")
         val app = c.applicationContext
-        AppLog.i("Software: desktop asks for $req")
+        AppLog.i("Agora: desktop asks for $req")
         when (what) {
             "", "refresh" -> worker.execute { refresh(app) }
             "install" -> { setBusy(app, arg, 0f); worker.execute { install(app, arg) } }
@@ -55,7 +55,7 @@ object SoftwareBridge {
             "inspect" -> worker.execute { inspect(app, arg) }
             "adpk" -> { setBusy(app, "file:$arg", -1f); worker.execute { installFile(app, arg) } }
             "dismiss" -> synchronized(lock) { pkg = null; error = "" }.also { write(app) }
-            else -> AppLog.i("Software: unknown request $req")
+            else -> AppLog.i("Agora: unknown request $req")
         }
         return true
     }
@@ -134,7 +134,7 @@ object SoftwareBridge {
             busy.remove(id)
             error = failure ?: ""
         }
-        if (failure != null) AppLog.i("Software: $failure")
+        if (failure != null) AppLog.i("Agora: $failure")
         write(c)
     }
 
@@ -174,7 +174,7 @@ object SoftwareBridge {
             tmp.writeText(json)
             tmp.renameTo(File(dir(c), "state.json"))
         } catch (e: Exception) {
-            AppLog.i("Software: couldn't write the state: $e")
+            AppLog.i("Agora: couldn't write the state: $e")
         }
     }
 }

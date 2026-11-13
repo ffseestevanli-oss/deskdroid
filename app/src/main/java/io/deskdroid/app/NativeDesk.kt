@@ -908,12 +908,12 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "Icon=smartphone\nExec=android-open %u\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\nNoDisplay=true\n")
             // Termux's Firefox patches put /tmp under files/usr.
             File(filesDir, "usr/tmp").mkdirs()
-            // Software, the app store: the desktop's own app (native/plasma/software,
+            // Agora (Software), the app store: the desktop's own app (native/plasma/software,
             // its menu entry from the APK) when the build has it, else the phone's.
             File(filesDir, ".local/share/applications/org.deskdroid.store.desktop").apply {
                 if (File(applicationInfo.nativeLibraryDir, "libdd_software.so").exists()) delete()
                 else writeText(
-                    "[Desktop Entry]\nType=Application\nName=Software\nGenericName=Install apps\n" +
+                    "[Desktop Entry]\nType=Application\nName=Agora\nGenericName=Software\n" +
                     "Icon=plasmadiscover\nExec=android-open deskdroid:store\nCategories=System;\n")
             }
             // Set as Desktop Wallpaper in right-click menus (KDE's own entry needs
@@ -2181,7 +2181,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
         val actions = listOf(
             ui.tile("Keyboard", P.CYAN) { showMenu(false); toggleKeyboard() },
-            ui.tile("Software", P.GREEN) {
+            ui.tile("Agora (Software)", P.GREEN) {
                 showMenu(false)
                 startActivity(android.content.Intent(this@NativeDeskActivity, StoreActivity::class.java))
             },

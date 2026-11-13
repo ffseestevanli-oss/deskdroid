@@ -150,7 +150,7 @@ Item {
         id: confirm
         title: "Remove " + (row.app.name || row.app.id) + "?"
         text: row.neededByInstalled.length
-            ? row.neededByInstalled.join(", ") + (row.neededByInstalled.length === 1 ? " needs" : " need") + " it and won't open without it. Software installs it again when one of them is installed or updated."
+            ? row.neededByInstalled.join(", ") + (row.neededByInstalled.length === 1 ? " needs" : " need") + " it and won't open without it. Agora installs it again when one of them is installed or updated."
             : "Its menu entry goes too. Files you made with it stay."
         choices: [{ text: "Remove", accent: Party.red, run: () => backend.remove(row.app.id) }]
     }

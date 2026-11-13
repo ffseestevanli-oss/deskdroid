@@ -1,12 +1,12 @@
 [Desktop Entry]
 Type=Application
-Name=Software
-GenericName=Install apps
+Name=Agora
+GenericName=Software
 Comment=Find, install and update apps for DeskDroid, and install .adpk packages
 Exec=software %f
 Icon=org.deskdroid.software
 Terminal=false
 Categories=System;PackageManager;
-Keywords=store;app store;install;apps;adpk;package;update;
+Keywords=software;agora;store;app store;install;apps;adpk;package;update;
 MimeType=application/x-deskdroid-adpk;
 StartupWMClass=software

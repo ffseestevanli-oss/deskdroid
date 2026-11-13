@@ -89,11 +89,11 @@ object Store {
             val json = try {
                 JSONObject(fetch(url + "index.json").toString(Charsets.UTF_8))
             } catch (e: Exception) {
-                AppLog.i("Software: no catalog at $url: ${e.message}")
+                AppLog.i("Agora: no catalog at $url: ${e.message}")
                 if (failure == null) failure = e
                 continue
             }
-            if (activeUrl != url) AppLog.i("Software: catalog from $url")
+            if (activeUrl != url) AppLog.i("Agora: catalog from $url")
             activeUrl = url
             val apps = json.getJSONArray("apps")
             return (0 until apps.length()).map { i ->
@@ -198,7 +198,7 @@ object Store {
         for (id in missing) {
             val dep = cat.firstOrNull { it.id == id }
                 ?: throw Exception("it needs $id, which isn't in the catalog (install $id.adpk from a file first)")
-            AppLog.i("Software: installing ${dep.id} ${dep.version} first, for $forId")
+            AppLog.i("Agora: installing ${dep.id} ${dep.version} first, for $forId")
             install(c, dep, progress, seen)
         }
     }
@@ -240,7 +240,7 @@ object Store {
         if (app.id == "firefox") Etherium.applySettings(c) // its current settings, over the ones it was built with
         File(dir, "app.txt").writeText(app.id) // last: the app counts as installed from here on
         linkCommand(c, app.id)
-        AppLog.i("Software: installed ${app.id} ${app.version}")
+        AppLog.i("Agora: installed ${app.id} ${app.version}")
     }
 
     fun uninstall(c: Context, id: String) {
