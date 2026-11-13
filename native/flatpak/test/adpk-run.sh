@@ -58,6 +58,11 @@ expect "makes its data folders" "$(ls "$T/home/.var/app/org.kde.kid3")" "^config
 if [ -r /proc/version ]; then
   expect "a readable /proc/version is left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?$"
 fi
+expect "a Qt app gets no Electron flags" "$out" "^args: .*/app/bin/kid3-cli a b$"
+mkdir -p "$S/kid3/program/files/main" && : > "$S/kid3/program/files/main/chrome-sandbox"
+expect "an Electron app is asked for Wayland, without Chromium's sandbox" "$(run kid3 x)" \
+  "^args: .*/app/bin/kid3 --ozone-platform=wayland --enable-features=UseOzonePlatform,WaylandWindowDecorations --no-sandbox x$"
+rm -r "$S/kid3/program/files/main"
 rm "$S/runtime-kde-6.11/app.txt"
 run kid3 >/dev/null || true
 expect "a missing runtime says so" "$(cat "$S/kid3/run.log")" "^kid3: needs runtime-kde-6.11 first: Software is installing it"

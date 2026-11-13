@@ -183,8 +183,16 @@ for m in "$S/$RTPKG/program/metadata" "$meta"; do
 $envs
 ENVS
 done
-# Electron and Chromium apps: Wayland, since there's no X server.
-export ELECTRON_OZONE_PLATFORM_HINT="${ELECTRON_OZONE_PLATFORM_HINT:-wayland}"
+# Electron and Chromium apps: Wayland, since there's no X server (Flathub
+# builds often ask for X11 only). Newer Electron ignores the hint variable, so
+# apps started through zypak (Flathub's Electron base) or shipping
+# chrome-sandbox get the flags too; Chromium's own sandbox needs Flatpak's,
+# which isn't here.
+export ELECTRON_OZONE_PLATFORM_HINT="${ELECTRON_OZONE_PLATFORM_HINT:-wayland}" XDG_SESSION_TYPE=wayland
+electron=""
+grep -qs zypak "$APP/bin/$cmd" && electron=1
+for d in "$APP" "$APP"/*; do [ -e "$d/chrome-sandbox" ] && electron=1; done
+[ -n "$electron" ] && set -- --ozone-platform=wayland --enable-features=UseOzonePlatform,WaylandWindowDecorations --no-sandbox "$@"
 export PATH=/app/bin:/usr/bin
 echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-no runtime})" >&2
 # The runtime's sh starts the command, so ddflatpak handles it like any
