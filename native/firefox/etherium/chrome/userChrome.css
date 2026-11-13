@@ -138,4 +138,41 @@
     border-top: 3px solid transparent;
     border-image: var(--dd-rainbow) 1;
   }
+
+  /* Title bar buttons (tabs in the title bar): the window borders' own,
+     chamfered 28x24 boxes with the same glyphs and colours (theme/dd-party
+     gen/aurorae.py), so Etherium matches every other window. */
+  .titlebar-buttonbox { gap: 6px !important; margin-inline: 6px 10px !important; align-items: center !important; }
+  .titlebar-button {
+    appearance: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    min-width: 28px !important;
+    min-height: 24px !important;
+  }
+  .titlebar-button > .toolbarbutton-icon {
+    appearance: none !important;
+    width: 28px !important;
+    height: 24px !important;
+    padding: 0 !important;
+    background: none !important;
+    border-radius: 0 !important;
+    -moz-context-properties: none !important;
+  }
+  :root:-moz-window-inactive .titlebar-button:not(:hover) > .toolbarbutton-icon { opacity: 0.55; }
+  .titlebar-min { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%2312121E' stroke='%23262638' stroke-width='1'/%3E%3Cpath d='M9,16 H19' stroke='%23C9C9DC' stroke-width='1.8' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-min:hover { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%231A0F22' stroke='%23FF4D94' stroke-width='1'/%3E%3Cpath d='M9,16 H19' stroke='%23F2F2F7' stroke-width='1.8' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-min:hover:active { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%23990045' stroke='%23FF4D94' stroke-width='1'/%3E%3Cpath d='M9,16 H19' stroke='%23F2F2F7' stroke-width='1.8' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-max { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%2312121E' stroke='%23262638' stroke-width='1'/%3E%3Cpath d='M9.5,7.5 H18.5 V16.5 H9.5 Z' stroke='%23C9C9DC' stroke-width='1.6' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-max:hover { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%231A0F22' stroke='%23FF4D94' stroke-width='1'/%3E%3Cpath d='M9.5,7.5 H18.5 V16.5 H9.5 Z' stroke='%23F2F2F7' stroke-width='1.6' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-max:hover:active { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%23990045' stroke='%23FF4D94' stroke-width='1'/%3E%3Cpath d='M9.5,7.5 H18.5 V16.5 H9.5 Z' stroke='%23F2F2F7' stroke-width='1.6' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-restore { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%2312121E' stroke='%23262638' stroke-width='1'/%3E%3Cpath d='M8.5,10 H16 V17 H8.5 Z M11.5,10 V7.5 H19.5 V14 H16' stroke='%23C9C9DC' stroke-width='1.5' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-restore:hover { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%231A0F22' stroke='%23FF4D94' stroke-width='1'/%3E%3Cpath d='M8.5,10 H16 V17 H8.5 Z M11.5,10 V7.5 H19.5 V14 H16' stroke='%23F2F2F7' stroke-width='1.5' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-restore:hover:active { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%23990045' stroke='%23FF4D94' stroke-width='1'/%3E%3Cpath d='M8.5,10 H16 V17 H8.5 Z M11.5,10 V7.5 H19.5 V14 H16' stroke='%23F2F2F7' stroke-width='1.5' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-close { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%232A0F18' stroke='%23FF3B5C' stroke-width='1'/%3E%3Cpath d='M9.5,7.5 L18.5,16.5 M18.5,7.5 L9.5,16.5' stroke='%23FF6B82' stroke-width='1.9' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-close:hover { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%23FF3B5C' stroke='%23FF3B5C' stroke-width='1'/%3E%3Cpath d='M9.5,7.5 L18.5,16.5 M18.5,7.5 L9.5,16.5' stroke='%23FFFFFF' stroke-width='1.9' fill='none'/%3E%3C/svg%3E") !important; }
+  .titlebar-close:hover:active { list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M0.5,6.5 L6.5,0.5 L27.5,0.5 L27.5,17.5 L21.5,23.5 L0.5,23.5 Z' fill='%23B3203D' stroke='%23FF3B5C' stroke-width='1'/%3E%3Cpath d='M9.5,7.5 L18.5,16.5 M18.5,7.5 L9.5,16.5' stroke='%23FFFFFF' stroke-width='1.9' fill='none'/%3E%3C/svg%3E") !important; }
 }
