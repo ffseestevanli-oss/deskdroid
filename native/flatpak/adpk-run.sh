@@ -9,8 +9,8 @@
 #
 #   DDAPP_PROGRAM=<store/apps/<app>/program> libdd_adpk_run.so [--dd-command=<program in /app/bin>] [args]
 #
-# Everything about the app comes from the package: program/metadata (Flatpak's:
-# name, command, [Environment]) and app.json ("needs": its runtime and Mesa).
+# Everything about the app comes from the package's program/metadata
+# (Flatpak's: name, command, runtime, [Environment]).
 # Only Android's own tools (/system/bin) are used before the app starts:
 # PATH changes to the app's at the very end.
 #
@@ -24,14 +24,26 @@ meta="$P/metadata"
 # [Application] name= and command= (Flatpak's metadata, "key=value").
 FPID="$(sed -n '/^\[Application\]/,/^\[/{s/^name *= *//p}' "$meta" | head -n 1)"
 CMD="$(sed -n '/^\[Application\]/,/^\[/{s/^command *= *//p}' "$meta" | head -n 1)"
-# Its runtime and Mesa: app.json's "needs".
-needs="$(tr -d ' \n\r\t' < "${P%/program}/app.json" | sed -n 's/.*"needs":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' ' ')"
-RTPKG="" MESAPKG=""
-for n in $needs; do
-  case "$n" in runtime-mesa-*) MESAPKG="$n" ;; runtime-*) [ -n "$RTPKG" ] || RTPKG="$n" ;; esac
-done
 F="${DESKDROID_FILES:-${P%/store/apps/*}}"
 S="$F/store/apps"
+# Its runtime: the installed package whose metadata names the same
+# runtime=<name>/<arch>/<branch> (Software keeps program/ but not app.json),
+# else the name it would have (org.kde.Platform/aarch64/6.11 -> runtime-kde-6.11).
+want="$(sed -n '/^\[Application\]/,/^\[/{s/^runtime *= *//p}' "$meta" | head -n 1)"
+RTPKG=""
+for m in "$S"/runtime-*/program/metadata; do
+  [ -e "$m" ] || continue
+  [ "$(sed -n '/^\[Runtime\]/,/^\[/{s/^runtime *= *//p}' "$m" | head -n 1)" = "$want" ] || continue
+  RTPKG="${m%/program/metadata}"; RTPKG="${RTPKG##*/}"; break
+done
+if [ -z "$RTPKG" ]; then
+  n="${want%%/*}"; n="${n%.Platform}"; n="${n##*.}"
+  RTPKG="runtime-$(echo "$n" | tr 'A-Z' 'a-z')-${want##*/}"
+fi
+# Mesa and the codecs: whichever runtime-mesa-* is installed (the newest).
+MESAPKG=""
+for d in "$S"/runtime-mesa-*; do [ -e "$d/app.txt" ] && MESAPKG="${d##*/}"; done
+[ -n "$MESAPKG" ] || MESAPKG=runtime-mesa-25.08
 LOG="$S/$SID/run.log"
 exec 2>"$LOG"
 
@@ -60,14 +72,23 @@ fi
 # The runtime and Mesa are packages of their own.
 missing=""
 for need in "$RTPKG" "$MESAPKG"; do
-  [ -e "$S/$need/app.txt" ] || missing="$missing $need.adpk"
+  [ -e "$S/$need/app.txt" ] || missing="$missing $need"
 done
 if [ -n "$missing" ]; then
-  # Nothing else on the desktop would show why the app didn't open: open
-  # Software (NativeDesk.kt's deskdroid:store request) so the runtimes can go in.
-  mkdir -p "$F/open-requests" && echo "deskdroid:store" > "$F/open-requests/.$SID-$$" &&
-    mv "$F/open-requests/.$SID-$$" "$F/open-requests/$SID-$$.req"
-  die "needs$missing installed first (Software installs it with the app)"
+  # Software installs them (SoftwareBridge.kt's install:<id>, from the
+  # catalog) and opens to show it; then the app starts from its menu entry.
+  req() { # <request>
+    mkdir -p "$F/open-requests" && echo "$1" > "$F/open-requests/.$SID-$$-$2" &&
+      mv "$F/open-requests/.$SID-$$-$2" "$F/open-requests/$SID-$$-$2.req"
+  }
+  i=0
+  for need in $missing; do i=$((i+1)); req "deskdroid:software:install:$need" "$i"; done
+  if [ -x "$F/kwin/bin/software" ]; then
+    "$F/kwin/bin/software" </dev/null >/dev/null 2>&1 &
+  else
+    req deskdroid:store open
+  fi
+  die "needs$missing first: Software is installing it, then open $SID again"
 fi
 
 # Links, script execute bits and empty folders, once per package (ddapp.c).
