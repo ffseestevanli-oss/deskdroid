@@ -75,9 +75,15 @@ start_x() {
   # nothing else; the source is fex/xroot.c). -noreset: an X server starts
   # over each time its last client leaves (the xdpyinfo check below is one),
   # and Xwayland crashes doing that here.
-  if xdpyinfo >/dev/null 2>&1; then
+  # Seeing itself as root, Xwayland would let in only root's programs without
+  # a key: X clients use the key in $XAUTHORITY, made when Xwayland starts.
+  export XAUTHORITY="$HOME/.cache/deskdroid-x86-Xauthority"
+  local first
+  if first=$(xdpyinfo 2>&1 >/dev/null); then
+    say "using the X display :$DISPLAY_NUM that's already up"
     return 0
   fi
+  say "no X display :$DISPLAY_NUM yet ($first)"
   [ -n "${WAYLAND_DISPLAY:-}" ] || export WAYLAND_DISPLAY=wayland-0
   local geometry="1280x800" size
   [ -f "$HOME/.config/deskdroid-steam-geometry" ] && geometry=$(head -n 1 "$HOME/.config/deskdroid-steam-geometry")
@@ -88,19 +94,29 @@ start_x() {
   local xroot="${DESKDROID_X86:-$(dirname "$0")/..}/bin/deskdroid-xroot.so"
   [ -f "$xroot" ] || say "no $xroot: Xwayland will stop at its lock file"
   [ -n "${XDG_RUNTIME_DIR:-}" ] || export XDG_RUNTIME_DIR="$TMPDIR"
+  rm -f "$XAUTHORITY"; : >"$XAUTHORITY"
+  xauth -q -f "$XAUTHORITY" add ":$DISPLAY_NUM" . "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" \
+    || die "couldn't make the X key (xauth)"
   # Through the x86 loader (--preload) rather than LD_PRELOAD, which FEX would
   # pass on to Android's side too.
   # shellcheck disable=SC2086
   /lib64/ld-linux-x86-64.so.2 --preload "$xroot" "$(command -v Xwayland)" \
-    :$DISPLAY_NUM $size $decorate -nolisten tcp -nolock -pn -noreset &
+    :$DISPLAY_NUM $size $decorate -auth "$XAUTHORITY" -nolisten tcp -nolock -pn -noreset &
   XPID=$!
-  local i
-  for i in $(seq 1 60); do
-    xdpyinfo >/dev/null 2>&1 && return 0
-    kill -0 $XPID 2>/dev/null || die "Xwayland exited (see above)"
-    sleep 0.5
+  # Every x86 program starts slowly under FEX the first time (xdpyinfo too),
+  # so the wait is by the clock. The last error says why X clients can't
+  # connect, if they can't.
+  local deadline=$(($(date +%s) + 120)) err="" tries=0
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    err=$(xdpyinfo 2>&1 >/dev/null) && { say "X display :$DISPLAY_NUM is ready"; return 0; }
+    tries=$((tries + 1))
+    kill -0 $XPID 2>/dev/null || die "Xwayland exited (see above); X clients said: $err"
+    sleep 1
   done
-  die "Xwayland didn't start in 30 seconds"
+  say "X clients can't connect to Xwayland after $tries tries; the last one said: $err"
+  say "abstract X sockets: $(grep -c '@/tmp/.X11-unix/X' /proc/net/unix 2>/dev/null)"
+  kill "$XPID" 2>/dev/null
+  die "Xwayland didn't get ready in 2 minutes"
 }
 
 run() {
