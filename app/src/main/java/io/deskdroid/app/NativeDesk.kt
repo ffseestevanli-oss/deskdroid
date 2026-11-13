@@ -58,6 +58,23 @@ object NativeDesk {
         nativePointerRaw(x, y, buttons)
     }
     @JvmStatic external fun nativeScroll(dx: Float, dy: Float, wheel: Boolean)
+
+    /**
+     * The name KDE shows for the user (start menus, the logout screen):
+     * Android's name for this user when one is set, otherwise "DeskDroid".
+     * Bionic's account for the app is "u0_a123", which nobody chose; KUser
+     * reads this from DESKDROID_USER_NAME instead (patches/kcoreaddons).
+     * Android's default name ("Owner", in the phone's language) counts as unset.
+     */
+    fun userName(c: android.content.Context): String {
+        val name = try {
+            c.getSystemService(android.os.UserManager::class.java)?.userName?.trim().orEmpty()
+        } catch (e: Exception) { "" } // before Android 12 it takes a permission apps can't have
+        val owner = android.content.res.Resources.getSystem().let { r ->
+            r.getIdentifier("owner_name", "string", "android").takeIf { it != 0 }?.let { runCatching { r.getString(it) }.getOrNull() }
+        }
+        return if (name.isEmpty() || name.equals("Owner", true) || name.equals(owner, true)) "DeskDroid" else name
+    }
     @JvmStatic external fun nativeStats(): String
     @JvmStatic external fun nativeResized()
     @JvmStatic external fun nativeDetach()
@@ -824,6 +841,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("QT_QPA_PLATFORM", platform)
                     put("QT_QPA_FONTDIR", "/system/fonts")
                     put("HOME", filesDir.path)
+                    put("DESKDROID_USER_NAME", NativeDesk.userName(this@NativeDeskActivity))
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", (kwinRuntime ?: cacheDir).path)
                     if (kwinRuntime != null) {
@@ -966,6 +984,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("LD_LIBRARY_PATH", libs)
                     ddmask(this, libs)
                     put("HOME", filesDir.path)
+                    put("DESKDROID_USER_NAME", NativeDesk.userName(this@NativeDeskActivity))
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", runtime.path)
                     put("PULSE_SERVER", "unix:" + File(runtime, "pulse/native").path) // Linux programs: the sound server (startSound)
@@ -1085,6 +1104,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("LD_LIBRARY_PATH", libs)
                     ddmask(this, libs)
                     put("HOME", filesDir.path)
+                    put("DESKDROID_USER_NAME", NativeDesk.userName(this@NativeDeskActivity))
                     put("LANG", java.util.Locale.getDefault().let { "${it.language}_${it.country}.UTF-8" }) // the phone's language, for dates, times and text
                     put("TMPDIR", cacheDir.path)
                     put("XDG_RUNTIME_DIR", runtime.path)
@@ -1227,6 +1247,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         File(libs, "libdd_soundsrv.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "sound")) }
         val uid = android.os.Process.myUid()
         val home = File(filesDir, "home").apply { mkdirs() }
+        val gecos = NativeDesk.userName(this).replace(Regex("[:,\n]"), " ") // the full name Linux programs see
         val dns = try {
             val cm = getSystemService(android.net.ConnectivityManager::class.java)
             cm.getLinkProperties(cm.activeNetwork)?.dnsServers?.mapNotNull { it.hostAddress?.substringBefore('%') }.orEmpty()
@@ -1236,7 +1257,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val root = File(filesDir, name)
             val etc = File(root, "etc").apply { mkdirs() }
             File(etc, "passwd").writeText("root:x:0:0:root:/:/system/bin/sh\n" +
-                "deskdroid:x:$uid:$uid:DeskDroid:${home.path}:/system/bin/sh\n")
+                "deskdroid:x:$uid:$uid:$gecos:${home.path}:/system/bin/sh\n")
             File(etc, "group").writeText("root:x:0:\ndeskdroid:x:$uid:\n")
             File(etc, "resolv.conf").writeText((dns.ifEmpty { listOf("8.8.8.8", "1.1.1.1") }).joinToString("") { "nameserver $it\n" })
             File(etc, "hosts").takeIf { !it.exists() }?.writeText("127.0.0.1 localhost\n::1 localhost\n")

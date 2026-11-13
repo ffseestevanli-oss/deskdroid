@@ -253,6 +253,10 @@ edit(lo, "            LogoutButton {\n                id: cancelButton\n",
      "                visible: deskdroidPrivate\n"
      "            }\n"
      "            LogoutButton {\n                id: cancelButton\n")
+# No "Logging out in 30 seconds" countdown: the screen waits for a button.
+edit(lo, "        running: !showAllOptions\n", "        running: false // DeskDroid: no countdown\n")
+edit(lo, "            opacity: countDownTimer.running ? 1 : 0\n",
+     "            visible: false // DeskDroid: no countdown\n            opacity: countDownTimer.running ? 1 : 0\n")
 # --logout: show the logout prompt at start (SessionManagement starts it).
 mn = lg + "main.cpp"
 edit(mn, "        parser.addOption(lnfOption);\n",

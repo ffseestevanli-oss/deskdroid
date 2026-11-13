@@ -499,6 +499,7 @@ build_kconfig() { kf kconfig; }
 # of "org.kde.breeze"), so nothing asked for by ID is found. KCoreAddons uses
 # its Linux lookup instead: <plugin path>/<namespace>/<name>.so, which the app
 # lays out as links to the flat files the APK carries.
+inputs_kcoreaddons() { cat "$HERE"/patches/kcoreaddons/*; }
 build_kcoreaddons() {
   local s; s="$(kf_src kcoreaddons)"
   sed -i '0,/^#include <unordered_map>/s//#include <unordered_map>\n#undef Q_OS_ANDROID/' "$s/src/lib/plugin/kpluginmetadata.cpp"
@@ -509,6 +510,7 @@ build_kcoreaddons() {
   # name (thumbnailers...) matched. The ID comes from the link's name instead.
   perl -0pi -e 's/(if \(!d->m_fileName\.isEmpty\(\)\) \{\n\s*d->m_pluginId = QFileInfo\()d->m_fileName(\)\.completeBaseName\(\);)/$1pluginFile.startsWith(QLatin1Char(\x27\/\x27)) ? pluginFile : d->m_fileName$2/' "$s/src/lib/plugin/kpluginmetadata.cpp"
   grep -q "QFileInfo(pluginFile.startsWith" "$s/src/lib/plugin/kpluginmetadata.cpp"
+  python3 "$HERE/patches/kcoreaddons/user-name.py" "$s"
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON
   # kcoreaddons_add_plugin: plugins in their namespace folders, as on Linux
