@@ -279,6 +279,10 @@ if ! ready || ! steam_ready; then
   fi
 fi
 echo "=== $(date) deskdroid-steam: $(uname -srm), FEX $(cat "$X86/fex/share/deskdroid-fex/version" 2>/dev/null)" >>"$LOG"
+# Xwayland compiles the keyboard layout into /var/lib/xkb when it can write
+# there, else into $XDG_RUNTIME_DIR. In the x86 system that folder would be
+# half FEX's and half Android's: read-only sends it to the runtime folder.
+[ -d "$X86/rootfs/var/lib/xkb" ] && chmod 555 "$X86/rootfs/var/lib/xkb" 2>/dev/null
 start=$(wc -l <"$LOG")
 x86 run "$@" >>"$LOG" 2>&1
 status=$?

@@ -46,7 +46,7 @@ object X86 {
     private const val ROOTFS = "deskdroid-x86-rootfs.tar.zst"
     // The rootfs unpacks to about 4 GB; the download is kept until it's unpacked.
     private const val NEED_BYTES = 6_000_000_000L
-    private val SCRIPTS = listOf("deskdroid-steam", "steam-x86.sh")
+    private val SCRIPTS = listOf("deskdroid-steam", "steam-x86.sh", "deskdroid-xroot.so")
 
     fun dir(c: Context) = File(c.filesDir, "x86")
     private fun fexDir(c: Context) = File(dir(c), "fex")
