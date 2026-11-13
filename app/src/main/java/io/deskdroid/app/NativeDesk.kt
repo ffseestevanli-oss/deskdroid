@@ -196,13 +196,16 @@ object NativeDesk {
     @JvmStatic @androidx.annotation.Keep
     fun onIme(show: Boolean, purpose: Int, hints: Int) {
         Handler(Looper.getMainLooper()).post {
-            // Swipe typing, corrections and suggestions where the field allows them.
-            DeskInput.onField(show, purpose, hints)
-            // Manual keyboard (the default): a text field doesn't open it, only the menu does.
-            val c = touchpad?.get() ?: activity?.get()
-            if (show && c != null && !Prefs.autoKeyboard(c)) return@post
-            // On a monitor the keyboard belongs to the phone's touchpad screen.
-            touchpad?.get()?.softKeyboard(show) ?: (activity?.get() as? NativeDeskActivity)?.softKeyboard(show)
+            // Swipe typing, corrections and suggestions where the field allows
+            // them. A field that only blinks off and on (apps do, while typing)
+            // changes nothing: the keyboard follows the settled state.
+            DeskInput.onField(show, purpose, hints) { active ->
+                // Manual keyboard (the default): a text field doesn't open it, only the menu does.
+                val c = touchpad?.get() ?: activity?.get()
+                if (active && c != null && !Prefs.autoKeyboard(c)) return@onField
+                // On a monitor the keyboard belongs to the phone's touchpad screen.
+                touchpad?.get()?.softKeyboard(active) ?: (activity?.get() as? NativeDeskActivity)?.softKeyboard(active)
+            }
         }
     }
 

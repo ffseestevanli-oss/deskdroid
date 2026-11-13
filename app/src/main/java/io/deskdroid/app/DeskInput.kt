@@ -76,9 +76,59 @@ object DeskInput {
     // the keyboard type the same letters again), and the copy knows better.
     private var listening = true
 
-    /** From the compositor (NativeDesk.onIme), on the main thread. */
-    fun onField(active: Boolean, purpose: Int, hints: Int) {
+    // A field that says it lost the focus waits here a moment before the
+    // keyboard hears it: apps (Firefox, GTK) switch their text input off and
+    // on again while typing and on taps. Each blip used to restart the phone's
+    // keyboard mid-word, which then typed its word again ("cocomcom") and,
+    // with Automatic keyboard, closed and reopened it, losing keys.
+    private var leaving: Runnable? = null
+    private var blips = 0
+    private const val LEAVE_MS = 350L
+
+    /**
+     * From the compositor (NativeDesk.onIme), on the main thread. [settled]
+     * runs with the field's state once it's settled: right away for a focus,
+     * after [LEAVE_MS] for a loss that wasn't a blip.
+     */
+    fun onField(active: Boolean, purpose: Int, hints: Int, settled: (Boolean) -> Unit = {}) {
+        if (!active) {
+            if (!field) { settled(false); return }
+            leaving?.let { main.removeCallbacks(it) }
+            val r = Runnable {
+                leaving = null
+                apply(false, purpose, hints)
+                settled(false)
+            }
+            leaving = r
+            main.postDelayed(r, LEAVE_MS)
+            return
+        }
+        leaving?.let {
+            main.removeCallbacks(it)
+            leaving = null
+            if (field && purpose == this.purpose && hints == this.hints) {
+                // Off and on again: the same field, the same keyboard, nothing to do.
+                if (++blips <= 5 || blips % 50 == 0) AppLog.i("Phone keyboard: text field blinked off and on ($blips), kept")
+                settled(true)
+                return
+            }
+        }
+        apply(true, purpose, hints)
+        settled(true)
+    }
+
+    private fun apply(active: Boolean, purpose: Int, hints: Int) {
         if (active == field && purpose == this.purpose && hints == this.hints) return
+        if (active && field) {
+            // The same field with other hints (apps change some while typing,
+            // spell checking or completion): the keyboard is only restarted if
+            // what it's told about the field changes, never mid-word for nothing.
+            val was = inputType() to private()
+            val old = this.purpose to this.hints
+            this.purpose = purpose; this.hints = hints
+            if (inputType() to private() == was) return
+            AppLog.i("Phone keyboard: text field changed kind (purpose ${old.first} -> $purpose, hints ${old.second} -> $hints)")
+        }
         if (active != field) AppLog.i("Phone keyboard: desktop text field ${if (active) "focused (purpose $purpose, hints $hints)" else "left"}")
         field = active; this.purpose = purpose; this.hints = hints
         // A new field: the old copy is no use there (its composing word went
@@ -117,6 +167,7 @@ object DeskInput {
     }
 
     private fun restart() {
+        AppLog.i("Phone keyboard: restarted for the field (focused $field, purpose $purpose)")
         views.removeAll { it.get() == null }
         for (ref in views) {
             val v = ref.get() ?: continue
