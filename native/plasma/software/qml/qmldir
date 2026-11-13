@@ -7,3 +7,4 @@ Tile 1.0 Tile.qml
 PartyPage 1.0 PartyPage.qml
 PartyDialog 1.0 PartyDialog.qml
 AppRow 1.0 AppRow.qml
+AboutPane 1.0 AboutPane.qml

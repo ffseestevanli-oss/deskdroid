@@ -45,7 +45,22 @@ object Store {
         // Packages it needs installed first (a Flathub app's runtimes), and
         // "runtime" for those: Software installs them when an app needs them.
         val needs: List<String> = emptyList(), val kind: String = "",
+        // Where it comes from: "flathub" (Flathub's own ARM64 build, run
+        // through ddmask), else DeskDroid's own builds. See [section].
+        val source: String = "",
     )
+
+    /**
+     * Software's tabs: "deskdroid" (DeskDroid Repo: apps built for DeskDroid),
+     * "flathub" (Flathub's builds, unchanged, run through ddmask) and
+     * "dependencies" (runtimes those apps need). A catalog entry may say
+     * "source": "flathub"; one that needs a runtime is a Flathub app too.
+     */
+    fun section(a: App): String = when {
+        a.kind == "runtime" || a.id.startsWith("runtime-") -> "dependencies"
+        a.source == "flathub" || a.needs.any { it.startsWith("runtime-") } -> "flathub"
+        else -> "deskdroid"
+    }
 
     private fun ids(a: JSONObject?, key: String): List<String> =
         a?.optJSONArray(key)?.let { arr -> (0 until arr.length()).map { arr.getString(it) } }.orEmpty()
@@ -85,7 +100,7 @@ object Store {
                 val a = apps.getJSONObject(i)
                 App(a.getString("id"), a.optString("name", a.getString("id")), a.optString("summary"),
                     a.optString("version"), a.optLong("size"), a.getString("sha256"), a.getString("file"), a.optString("icon"),
-                    ids(a, "needs"), a.optString("kind"))
+                    ids(a, "needs"), a.optString("kind"), a.optString("source"))
             }.sortedBy { it.name.lowercase() }
         }
         throw failure ?: Exception("no catalog")

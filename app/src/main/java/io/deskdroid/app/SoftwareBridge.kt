@@ -19,7 +19,9 @@ import java.util.concurrent.Executors
  *   inspect:<path>      what the .adpk at <path> is: state.json's "package"
  *   adpk:<path>         install the .adpk at <path>
  *
- * state.json: {"apps": [{id, name, summary, version, size, installed, icon}],
+ * state.json: {"apps": [{id, name, summary, version, size, installed, icon, open,
+ * section ("deskdroid" | "flathub" | "dependencies", Software's tabs), kind,
+ * needs, neededBy, neededByInstalled (names of the apps that need it)}],
  * "busy": {id: progress 0..1 or -1}, "error": "...", "catalogError": "...",
  * "package": {path, id, name, summary, version, installed, icon} or absent,
  * "serial": n}. Icons are files in $HOME/software/icons.
@@ -142,17 +144,24 @@ object SoftwareBridge {
             val installed = Store.installed(c)
             val dir = icons(c)
             val apps = JSONArray()
-            // Runtimes come in with the apps that need them: listed once installed, to remove.
-            for (a in catalog) if (a.kind != "runtime" || a.id in installed) apps.put(JSONObject().put("id", a.id).put("name", a.name).put("summary", a.summary)
+            // Every entry, with its tab (Store.section). Runtimes are listed too,
+            // under Dependencies, with the apps that need them.
+            for (a in catalog) apps.put(JSONObject().put("id", a.id).put("name", a.name).put("summary", a.summary)
                 .put("version", a.version).put("size", a.size)
                 .put("installed", if (a.id in installed) Store.installedVersion(c, a.id) ?: "" else JSONObject.NULL)
                 .put("icon", File(dir, "${a.id}.png").takeIf { it.exists() }?.path ?: "")
-                .put("open", Store.openCommand(c, a.id) ?: ""))
+                .put("open", Store.openCommand(c, a.id) ?: "")
+                .put("section", Store.section(a)).put("kind", a.kind)
+                .put("needs", JSONArray(a.needs))
+                .put("neededBy", JSONArray(catalog.filter { a.id in it.needs }.map { it.name }))
+                .put("neededByInstalled", JSONArray(catalog.filter { a.id in it.needs && it.id in installed }.map { it.name })))
             // Installed from a file (.adpk) and not in the catalog: listed too, to remove.
             for (id in installed.sorted()) if (catalog.none { it.id == id }) apps.put(JSONObject().put("id", id).put("name", id)
                 .put("summary", "Installed from a file").put("version", Store.installedVersion(c, id) ?: "").put("size", 0)
                 .put("installed", Store.installedVersion(c, id) ?: "").put("icon", "").put("local", true)
-                .put("open", Store.openCommand(c, id) ?: ""))
+                .put("open", Store.openCommand(c, id) ?: "")
+                .put("section", if (id.startsWith("runtime-")) "dependencies" else "deskdroid")
+                .put("needs", JSONArray()).put("neededBy", JSONArray()).put("neededByInstalled", JSONArray()))
             val b = JSONObject()
             busy.forEach { (k, v) -> b.put(k, v.toDouble()) }
             serial++

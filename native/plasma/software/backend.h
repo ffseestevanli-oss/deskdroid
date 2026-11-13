@@ -19,6 +19,8 @@ class Backend : public QObject
     Q_PROPERTY(QVariantMap busy READ busy NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(QString catalogError READ catalogError NOTIFY changed)
+    // Where the catalog was read from.
+    Q_PROPERTY(QString source READ source NOTIFY changed)
     // The .adpk being looked at: {path, id, name, summary, version, installed, icon, done, invalid}
     Q_PROPERTY(QVariantMap package READ package NOTIFY changed)
     // Waiting for the first answer.
@@ -33,6 +35,7 @@ public:
     QVariantMap busy() const { return m_busy; }
     QString error() const { return m_error; }
     QString catalogError() const { return m_catalogError; }
+    QString source() const { return m_source; }
     QVariantMap package() const { return m_package; }
     bool loading() const { return m_serial < 0 && !m_offline; }
     bool offline() const { return m_offline; }
@@ -63,6 +66,7 @@ private:
     QVariantMap m_package;
     QString m_error;
     QString m_catalogError;
+    QString m_source;
     qint64 m_serial = -1;
     qint64 m_stamp = 0;
     qint64 m_started = 0;

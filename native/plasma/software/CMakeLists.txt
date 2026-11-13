@@ -23,7 +23,7 @@ set(party Party.qml Chamfer.qml PartyButton.qml RainbowBar.qml RainbowText.qml T
 foreach(f ${party})
     configure_file("${PARTY_DIR}/${f}" "${R}/qml/${f}" COPYONLY)
 endforeach()
-file(GLOB own RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/qml" "${CMAKE_CURRENT_SOURCE_DIR}/qml/*")
+file(GLOB own CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/qml" "${CMAKE_CURRENT_SOURCE_DIR}/qml/*")
 foreach(f ${own})
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/qml/${f}" "${R}/qml/${f}" COPYONLY)
 endforeach()

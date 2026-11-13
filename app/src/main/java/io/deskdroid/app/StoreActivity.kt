@@ -35,6 +35,18 @@ class StoreActivity : Activity() {
     private lateinit var ui: Ui
     private lateinit var list: LinearLayout
     private lateinit var status: TextView
+    private lateinit var tabs: LinearLayout
+    private lateinit var intro: TextView
+    private var catalog: List<Store.App>? = null
+    private var tab = "deskdroid"
+
+    /** Software's tabs (Store.section), as on the desktop: id, label, accent, what it is. */
+    private val tabList = listOf(
+        Triple("deskdroid", "DeskDroid Repo", Party.CYAN) to "Apps built for DeskDroid: KDE apps, DeskDroid's own, and themes.",
+        Triple("flathub", "Flathub", Party.GREEN) to "Flathub's own ARM64 builds, unchanged. ddmask translates them as they run, so nothing is recompiled. Software installs the runtime each one needs with it.",
+        Triple("dependencies", "Dependencies", Party.PURPLE) to "Runtimes: the shared libraries Flathub apps run on. Software installs them when an app needs them.",
+        Triple("about", "About", Party.YELLOW) to "",
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,9 +60,16 @@ class StoreActivity : Activity() {
                 spacer()
                 addView(ui.outlineButton("✕", Party.TEXT) { finish() }, LinearLayout.LayoutParams(dp(40), dp(40)))
             }, LinearLayout.LayoutParams(-1, -2))
-            addView(ui.text("Apps built for DeskDroid. Installed apps show up in the desktop's menu.", 14f, Party.TEXT_SOFT))
+            addView(ui.text("Find, install and update apps for DeskDroid. Installed apps show up in the desktop's menu.", 14f, Party.TEXT_SOFT))
             addView(ui.outlineButton("Install from a file (.adpk)…", Party.CYAN, Party.CYAN) { chooseFile() },
                 LinearLayout.LayoutParams(-2, dp(40)))
+            tabs = ui.row(8)
+            addView(android.widget.HorizontalScrollView(context).apply {
+                isHorizontalScrollBarEnabled = false
+                addView(tabs)
+            }, LinearLayout.LayoutParams(-1, -2))
+            intro = ui.text("", 13f, Party.MUTED)
+            addView(intro)
             addView(status)
             addView(list, LinearLayout.LayoutParams(-1, -2))
         }
@@ -136,26 +155,71 @@ class StoreActivity : Activity() {
         thread {
             val result = runCatching { Store.catalog() }
             main.post {
-                result.onSuccess { apps ->
-                    status.text = if (apps.isEmpty()) "No apps in the store yet." else ""
-                    status.visibility = if (apps.isEmpty()) View.VISIBLE else View.GONE
-                    list.removeAllViews()
-                    apps.forEach { list.addView(row(it), LinearLayout.LayoutParams(-1, -2)) }
-                    // Installed from a file, not in the catalog: listed to remove.
-                    (Store.installed(this) - apps.map { it.id }.toSet()).sorted().forEach { id ->
-                        list.addView(row(Store.App(id, id, "Installed from a file", Store.installedVersion(this, id).orEmpty(), 0, "", "", "")),
-                            LinearLayout.LayoutParams(-1, -2))
-                    }
-                }.onFailure {
+                result.onSuccess { catalog = it; show() }.onFailure {
                     status.visibility = View.VISIBLE
                     status.text = "Couldn't load the catalog: ${it.message}"
                     AppLog.i("Software: catalog failed: $it")
+                    show()
                 }
             }
         }
     }
 
-    private fun row(app: Store.App) = ui.accentRow(Party.CYAN) {
+    /** The tab row, then the current tab's apps (or About). */
+    private fun show() {
+        val apps = catalog.orEmpty()
+        // Installed from a file, not in the catalog: listed to remove.
+        val local = (Store.installed(this) - apps.map { it.id }.toSet()).sorted().map { id ->
+            Store.App(id, id, "Installed from a file", Store.installedVersion(this, id).orEmpty(), 0, "", "", "",
+                kind = if (id.startsWith("runtime-")) "runtime" else "")
+        }
+        val all = apps + local
+        tabs.removeAllViews()
+        for ((t, _) in tabList) {
+            val (id, label, accent) = t
+            val n = if (id == "about") 0 else all.count { Store.section(it) == id }
+            val active = id == tab
+            tabs.addView(ui.outlineButton(if (n > 0) "$label  $n" else label,
+                if (active) accent else Party.TEXT_SOFT, if (active) accent else Party.BORDER) { tab = id; show() },
+                LinearLayout.LayoutParams(-2, dp(40)))
+        }
+        intro.text = tabList.first { it.first.first == tab }.second
+        intro.visibility = if (intro.text.isEmpty()) View.GONE else View.VISIBLE
+        list.removeAllViews()
+        if (tab == "about") {
+            about(all)
+            return
+        }
+        val shown = all.filter { Store.section(it) == tab }
+        if (catalog != null) {
+            status.text = if (shown.isEmpty()) "Nothing here yet." else ""
+            status.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
+        }
+        shown.forEach { list.addView(row(it, all), LinearLayout.LayoutParams(-1, -2)) }
+    }
+
+    private fun about(all: List<Store.App>) {
+        status.visibility = View.GONE
+        val installed = Store.installed(this)
+        val counts = listOf("deskdroid" to "DeskDroid Repo", "flathub" to "Flathub", "dependencies" to "Dependencies")
+            .joinToString("  ·  ") { (id, label) -> "$label ${all.count { Store.section(it) == id }}" } +
+            "  ·  Installed ${all.count { it.id in installed }}"
+        fun section(title: String, color: Int, body: String) {
+            list.addView(ui.text(title, 13f, color, 700))
+            list.addView(ui.text(body, 14f, Party.TEXT_SOFT))
+        }
+        list.addView(ui.text(counts, 13f, Party.MUTED))
+        section("WHERE APPS COME FROM", Party.CYAN,
+            "DeskDroid Repo has apps built for DeskDroid itself: KDE apps compiled for Android, DeskDroid's own apps like Sasha, and themes.\n\n" +
+            "Flathub has Flathub's own ARM64 Linux builds, repackaged without changes. ddmask, DeskDroid's compatibility layer, translates what they ask of Linux into what Android allows while they run.\n\n" +
+            "Dependencies are the runtimes Flathub apps share (KDE, GNOME, Freedesktop, Mesa). Installing an app installs the runtimes it needs first.")
+        section(".ADPK PACKAGES", Party.PURPLE,
+            "An .adpk is a DeskDroid package, like a .deb: one file with the app, its menu entry and icons, and an app.json saying what it is and what it needs. " +
+            "Open one from a file manager, or use Install from a file. Install packages only from people you trust.")
+        section("CATALOG", Party.GREEN, Store.baseUrl)
+    }
+
+    private fun row(app: Store.App, all: List<Store.App>) = ui.accentRow(Party.CYAN) {
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(14), dp(12), dp(14), dp(12))
         val icon = ImageView(context)
@@ -166,6 +230,12 @@ class StoreActivity : Activity() {
             addView(ui.text(app.name, 16f, Party.TEXT, 700))
             if (app.summary.isNotEmpty()) addView(ui.text(app.summary, 13f, Party.MUTED))
             addView(ui.text(listOfNotNull(app.version.ifEmpty { null }, if (local) null else "%.1f MB".format(app.size / 1e6)).joinToString(" · "), 12f, Party.DIM))
+            // A Flathub app's runtimes, a runtime's apps.
+            val names = all.associate { it.id to it.name }
+            val usedBy = all.filter { app.id in it.needs }.map { it.name }
+            val line = if (app.needs.isNotEmpty()) "Needs " + app.needs.joinToString { names[it] ?: it }
+                else if (usedBy.isNotEmpty()) "Used by " + usedBy.joinToString() else ""
+            if (line.isNotEmpty()) addView(ui.text(line, 12f, Party.PURPLE))
         }, LinearLayout.LayoutParams(0, -2, 1f))
         val installed = app.id in Store.installed(context)
         val current = installed && (local || Store.installedVersion(context, app.id) == app.version)

@@ -10,6 +10,11 @@ Item {
     id: row
     property var app: ({})
     property var progress: undefined   // undefined: not busy; -1: busy, no estimate
+    // id -> name, to name an app's runtimes
+    property var names: ({})
+    readonly property var needs: app.needs || []
+    readonly property var neededBy: app.neededBy || []
+    readonly property var neededByInstalled: app.neededByInstalled || []
     readonly property bool installed: app.installed !== null && app.installed !== undefined
     readonly property bool current: installed && (app.local || app.installed === app.version)
     readonly property bool working: progress !== undefined
@@ -89,6 +94,17 @@ Item {
                 color: row.installed && !row.current ? Party.yellow : Party.dim
                 Layout.fillWidth: true
             }
+            // A Flathub app's runtimes, a runtime's apps.
+            Text {
+                visible: text !== ""
+                text: row.needs.length ? "Needs " + row.needs.map(n => row.names[n] || n).join(", ") + (row.installed ? "" : " (installed with it)")
+                    : row.neededBy.length ? "Used by " + row.neededBy.join(", ")
+                    : ""
+                font.family: Party.body; font.pixelSize: 12
+                color: Party.purple
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
             RainbowBar {
                 visible: row.working
                 fraction: row.progress >= 0 ? row.progress : 0
@@ -107,7 +123,8 @@ Item {
             color: Party.text
         }
         PartyButton {
-            visible: !row.working && row.installed && row.current
+            // Runtimes have nothing to open.
+            visible: !row.working && row.installed && row.current && row.app.section !== "dependencies"
             compact: true
             text: "Open"
             accent: Party.green
@@ -132,7 +149,9 @@ Item {
     PartyDialog {
         id: confirm
         title: "Remove " + (row.app.name || row.app.id) + "?"
-        text: "Its menu entry goes too. Files you made with it stay."
+        text: row.neededByInstalled.length
+            ? row.neededByInstalled.join(", ") + (row.neededByInstalled.length === 1 ? " needs" : " need") + " it and won't open without it. Software installs it again when one of them is installed or updated."
+            : "Its menu entry goes too. Files you made with it stay."
         choices: [{ text: "Remove", accent: Party.red, run: () => backend.remove(row.app.id) }]
     }
 }

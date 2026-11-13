@@ -150,6 +150,7 @@ void Backend::read()
     m_busy = o.value(QStringLiteral("busy")).toObject().toVariantMap();
     m_error = o.value(QStringLiteral("error")).toString();
     m_catalogError = o.value(QStringLiteral("catalogError")).toString();
+    m_source = o.value(QStringLiteral("source")).toString();
     const QVariantMap pkg = o.value(QStringLiteral("package")).toObject().toVariantMap();
     // Only the package this window asked about.
     if (!m_package.isEmpty() && pkg.value(QStringLiteral("path")) == m_package.value(QStringLiteral("path")))
