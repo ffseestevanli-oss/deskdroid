@@ -256,6 +256,9 @@ private:
 
     void send(const ndesk_msg &m, int passFd = -1);
     void readMessages();
+    // The phone's keyboard is up (portrait): the active window fits above it.
+    void updateKeyboardDodge();
+    void restoreDodged();
     void freeBuffers();
     // The phone's Back: Plasma's edit mode closes if it's on, else Escape.
     void back();
@@ -274,6 +277,13 @@ private:
     std::unique_ptr<NativeDeskInputDevice> m_pointer;
     std::unique_ptr<NativeDeskInputDevice> m_keyboard;
     std::unique_ptr<NativeDeskInputDevice> m_touch;
+    qreal m_keyboardPx = 0; // screen pixels the phone's keyboard covers (NDESK_SAFE)
+    bool m_dodgeConnected = false;
+    QPointer<Window> m_dodged; // the window fitted above the keyboard
+    QRectF m_dodgeGeometry; // where it was put
+    QRectF m_dodgeBefore; // where it was
+    QRectF m_dodgeRestore; // its own restore geometry, when it was maximized
+    int m_dodgeMaximize = 0; // its MaximizeMode then
     bool m_textInputActive = false;
     int m_textInputPurpose = 0;
     int m_textInputHints = 0;

@@ -57,7 +57,9 @@
  *     SCALE      desktops: the user picked a new scale (1.5 = 150%), for now
  *     SAFE       desktops: screen pixels at each edge that the camera cutout or
  *                rounded corners hide (0 when dodging is off); panels and
- *                maximized windows keep out, the wallpaper still fills
+ *                maximized windows keep out, the wallpaper still fills.
+ *                With it, keyboard: screen pixels the phone's on-screen
+ *                keyboard covers at the bottom (0 when it's down)
  *     ACTION     desktops: a desktop action from the phone (NDESK_ACTION_*),
  *                such as Home minimizing every window
  *     TEXT       desktops: text from the phone's keyboard for the focused text
@@ -176,7 +178,7 @@ struct ndesk_msg {
         struct { float dx, dy; uint32_t wheel; } scroll;
         struct { uint32_t kind; int32_t id; float x, y; } touch;
         struct { float scale; } scale;
-        struct { float left, top, right, bottom; } safe;
+        struct { float left, top, right, bottom, keyboard; } safe;
         struct { uint32_t action; } action;
         struct { uint8_t kind, more; uint16_t len; int32_t a, b; char text[NDESK_TEXT_CHUNK]; } text;
     };

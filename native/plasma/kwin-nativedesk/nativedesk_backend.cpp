@@ -1074,6 +1074,87 @@ void NativeDeskBackend::text(const ndesk_msg &m)
 
 float deskdroidSafePx[4] = {};
 
+// ---- the phone's keyboard ------------------------------------------------------
+
+// A window worth fitting above the keyboard: an app's own window that can be
+// moved and resized, not a panel, a plasmoid's popup or a fullscreen game.
+static bool dodgeable(Window *w)
+{
+    return w && !w->isDeleted() && w->isNormalWindow() && !w->isFullScreen() && w->isMovable()
+        && w->isResizable() && !isPlasmoidPopup(w);
+}
+
+// While the phone's keyboard is up in portrait, the active window is
+// maximized into the space above it, so what's typed stays in sight; when
+// the keyboard goes (or another window becomes active) it goes back where it
+// was, maximized or not. Landscape leaves windows alone: too little height
+// is left above a keyboard there.
+void NativeDeskBackend::updateKeyboardDodge()
+{
+    if (!workspace() || !m_output) {
+        return;
+    }
+    if (!m_dodgeConnected) {
+        m_dodgeConnected = true;
+        connect(workspace(), &Workspace::windowActivated, this, [this] {
+            if (m_keyboardPx > 0 || m_dodged) {
+                updateKeyboardDodge();
+            }
+        });
+    }
+    const QSize px = m_output->pixelSize();
+    Window *target = nullptr;
+    if (m_keyboardPx > 0 && px.height() > px.width()) {
+        target = workspace()->activeWindow();
+        if (!dodgeable(target)) {
+            target = nullptr;
+        }
+    }
+    if (m_dodged && m_dodged != target) {
+        restoreDodged();
+    }
+    if (!target) {
+        return;
+    }
+    const QRectF screen = m_output->geometryF();
+    QRectF area = workspace()->clientArea(MaximizeArea, target);
+    area.setBottom(std::min(area.bottom(), screen.bottom() - m_keyboardPx / outputScale()));
+    if (area.height() < 120) {
+        return; // no room worth having
+    }
+    if (m_dodged != target) {
+        m_dodged = target;
+        m_dodgeBefore = target->moveResizeGeometry();
+        m_dodgeMaximize = int(target->maximizeMode());
+        m_dodgeRestore = target->geometryRestore();
+        if (target->maximizeMode() != MaximizeRestore) {
+            target->maximize(MaximizeRestore);
+        }
+        qInfo("nativedesk: keyboard up, fitting %s above it", qPrintable(target->resourceClass()));
+    }
+    m_dodgeGeometry = area;
+    target->moveResize(area);
+}
+
+void NativeDeskBackend::restoreDodged()
+{
+    Window *w = m_dodged;
+    m_dodged = nullptr;
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    // Moved, resized or maximized by hand meanwhile: it stays as the user left it.
+    if (w->moveResizeGeometry() != m_dodgeGeometry || w->maximizeMode() != MaximizeRestore) {
+        return;
+    }
+    if (m_dodgeMaximize != MaximizeRestore) {
+        w->maximize(MaximizeMode(m_dodgeMaximize), m_dodgeRestore);
+    } else {
+        w->moveResize(m_dodgeBefore);
+    }
+    qInfo("nativedesk: keyboard gone, %s back", qPrintable(w->resourceClass()));
+}
+
 QMargins deskdroidSafeMargins(const Output *output)
 {
     const qreal s = output ? output->scale() : 1;
@@ -1168,6 +1249,10 @@ void NativeDeskBackend::readMessages()
             deskdroidSafePx[3] = m.safe.bottom;
             if (Workspace::self()) {
                 Workspace::self()->scheduleRearrange();
+            }
+            if (m.safe.keyboard != m_keyboardPx) {
+                m_keyboardPx = m.safe.keyboard;
+                updateKeyboardDodge();
             }
             break;
         case NDESK_KEY:

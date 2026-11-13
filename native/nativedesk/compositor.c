@@ -102,7 +102,7 @@ static struct {
     uint32_t screen_w, screen_h; /* the surface size the last frame was drawn at */
     bool resized;                /* set by nativeResized: draw a frame to pick up the new size */
     float new_scale;             /* set by nativeSetScale: for the desktops, then 0 */
-    float safe[4];               /* nativeSetSafeArea: left, top, right, bottom, screen pixels */
+    float safe[5];               /* nativeSetSafeArea: left, top, right, bottom, screen pixels; nativeSetKeyboard: the keyboard's height */
     bool safe_changed;           /* send safe to the desktops */
     uint32_t action;             /* nativeAction: for the desktops, then 0 */
     bool sleeping;               /* nativeSetSleeping: the phone's screen is off, frames at 1 a second */
@@ -430,7 +430,7 @@ static bool read_client(int i)
         send_msg(cl, &r);
         if (cl->desktop) {
             pthread_mutex_lock(&C.lock);
-            struct ndesk_msg s = { .op = NDESK_SAFE, .safe = { C.safe[0], C.safe[1], C.safe[2], C.safe[3] } };
+            struct ndesk_msg s = { .op = NDESK_SAFE, .safe = { C.safe[0], C.safe[1], C.safe[2], C.safe[3], C.safe[4] } };
             pthread_mutex_unlock(&C.lock);
             send_msg(cl, &s);
         }
@@ -892,7 +892,7 @@ static void *loop(void *unused)
         C.safe_changed = false;
         uint32_t action = C.action;
         C.action = 0;
-        struct ndesk_msg safe = { .op = NDESK_SAFE, .safe = { C.safe[0], C.safe[1], C.safe[2], C.safe[3] } };
+        struct ndesk_msg safe = { .op = NDESK_SAFE, .safe = { C.safe[0], C.safe[1], C.safe[2], C.safe[3], C.safe[4] } };
         pthread_mutex_unlock(&C.lock);
         for (int i = 0; action && i < MAX_CLIENTS; i++) {
             struct client *cl = C.clients[i];
@@ -1184,6 +1184,20 @@ Java_io_deskdroid_app_NativeDesk_nativeSetSafeArea(JNIEnv *env, jclass cls, jflo
     pthread_mutex_lock(&C.lock);
     if (C.safe[0] != l || C.safe[1] != t || C.safe[2] != r || C.safe[3] != b) {
         C.safe[0] = l; C.safe[1] = t; C.safe[2] = r; C.safe[3] = b;
+        C.safe_changed = true;
+    }
+    pthread_mutex_unlock(&C.lock);
+    wake();
+}
+
+/* The phone's on-screen keyboard covers this many screen pixels at the bottom (0: down). */
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeSetKeyboard(JNIEnv *env, jclass cls, jfloat height)
+{
+    (void)env; (void)cls;
+    pthread_mutex_lock(&C.lock);
+    if (C.safe[4] != height) {
+        C.safe[4] = height;
         C.safe_changed = true;
     }
     pthread_mutex_unlock(&C.lock);

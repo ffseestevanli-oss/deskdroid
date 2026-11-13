@@ -87,6 +87,8 @@ object NativeDesk {
     @JvmStatic external fun nativeDetach()
     @JvmStatic external fun nativeSetScale(scale: Float)
     @JvmStatic external fun nativeSetSafeArea(left: Float, top: Float, right: Float, bottom: Float)
+    /** Screen pixels the phone's keyboard covers at the desktop's bottom (0: down); KWin fits the active window above it in portrait. */
+    @JvmStatic external fun nativeSetKeyboard(height: Float)
     /** Android's clipboard has new text: desktop apps can paste it (SharedClipboard). */
     @JvmStatic external fun nativeClipboardChanged()
     /** The phone's apps in Plasma's menu are watched once per process (watchAndroidApps). */
@@ -617,6 +619,23 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         NativeDesk.nativeSetSafeArea(e[0], e[1], e[2], e[3])
     }
+    /**
+     * How much of the desktop the phone's keyboard covers: KWin fits the
+     * active window above it while it's up (portrait), and puts it back after.
+     * Not on a monitor: the keyboard is on the phone, not over the desktop.
+     */
+    private fun sendKeyboard() {
+        var h = 0f
+        val insets = lastInsets
+        if (Build.VERSION.SDK_INT >= 30 && insets != null && !external && !NativeDesk.onMonitor &&
+                insets.isVisible(WindowInsets.Type.ime()) && ::surfaceView.isInitialized) {
+            // The desktop may end above Android's navigation bar ("Show Android bars").
+            val below = (surfaceView.layoutParams as? FrameLayout.LayoutParams)?.bottomMargin ?: 0
+            h = (insets.getInsets(WindowInsets.Type.ime()).bottom - below).coerceAtLeast(0).toFloat()
+        }
+        NativeDesk.nativeSetKeyboard(h)
+    }
+
     /** On a monitor (display out): the phone becomes its touchpad and keyboard. */
     private val external get() = (display?.displayId ?: android.view.Display.DEFAULT_DISPLAY) != android.view.Display.DEFAULT_DISPLAY
     // The Qt demo's last output lines, shown in the overlay so its errors are visible.
@@ -678,6 +697,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         window.decorView.setOnApplyWindowInsetsListener { v, insets ->
             lastInsets = insets
             sendSafeArea()
+            sendKeyboard()
             padMenu()
             fitSurface()
             v.onApplyWindowInsets(insets)
