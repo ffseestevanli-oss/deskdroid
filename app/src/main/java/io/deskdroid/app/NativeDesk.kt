@@ -1486,8 +1486,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             // (only its per-script Noto Sans fonts): asked for it, fontconfig
             // picked one of those, whose own digits drew thinner than the
             // letters around them (which fell back to Roboto). Desktop fonts
-            // apps ask for by name go to Roboto too.
-            alias(listOf("sans-serif", "sans", "Sans", "Noto Sans", "Noto Sans UI", "DejaVu Sans", "Liberation Sans",
+            // apps ask for by name go to Roboto too. KWin has no KDE platform
+            // theme, so its window titles ask for Qt's own default, "Sans Serif"
+            // (which fontconfig doesn't match to "sans-serif"): Roboto as well.
+            alias(listOf("sans-serif", "sans", "Sans", "Sans Serif", "Noto Sans", "Noto Sans UI", "DejaVu Sans", "Liberation Sans",
                     "Cantarell", "Arial", "Helvetica", "Segoe UI", "Ubuntu", "Open Sans"),
                 listOf("Roboto", "Google Sans")) +
             alias(listOf("serif", "Serif"),
