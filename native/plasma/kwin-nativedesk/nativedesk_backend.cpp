@@ -1114,8 +1114,9 @@ void NativeDeskBackend::readMessages()
             break;
         case NDESK_TOUCH:
             // A tap in a text field, as for a click: the phone's keyboard
-            // hears the field's text again.
-            if (m.touch.kind == NDESK_TOUCH_DOWN && m_textInputActive) {
+            // hears the field's text again, once the finger lifts (apps move
+            // the cursor on the lift: a report before it had the old one).
+            if (m.touch.kind == NDESK_TOUCH_UP && m_textInputActive) {
                 QTimer::singleShot(150, this, [this] {
                     if (m_textInputActive && !m_surroundingPending) {
                         sendSurrounding();
