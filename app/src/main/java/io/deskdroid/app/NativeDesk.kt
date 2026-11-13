@@ -58,6 +58,13 @@ object NativeDesk {
         nativePointerRaw(x, y, buttons)
     }
     @JvmStatic external fun nativeScroll(dx: Float, dy: Float, wheel: Boolean)
+    /** Direct touch: one finger's change (TOUCH_*, protocol.h's NDESK_TOUCH_*), in screen pixels. */
+    @JvmStatic external fun nativeTouch(kind: Int, id: Int, x: Float, y: Float)
+    const val TOUCH_DOWN = 1
+    const val TOUCH_MOTION = 2
+    const val TOUCH_UP = 3
+    const val TOUCH_CANCEL = 4
+    const val TOUCH_FRAME = 5
 
     /**
      * The name KDE shows for the user (start menus, the logout screen):
@@ -1949,7 +1956,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
 
     private val touchpad = Touchpad()
-    private val touchScreen by lazy { TouchScreen(surfaceView) }
+    private val touchScreen by lazy { NativeTouch(surfaceView) }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (!started) return false
@@ -1957,11 +1964,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         val mode = Prefs.touchMode(this)
         when {
             e.isFromSource(InputDevice.SOURCE_MOUSE) -> mouse(e)
-            // Direct touch: like a phone (TouchScreen).
-            mode == "direct" -> {
-                touchScreen.wheel = Prefs.scrollWheel(this)
-                touchScreen.onTouch(e)
-            }
+            // Direct touch: the fingers themselves, to KDE (NativeTouch).
+            mode == "direct" -> touchScreen.onTouch(e)
             else -> {
                 touchpad.wheel = Prefs.scrollWheel(this)
                 touchpad.onTouch(e, surfaceView.width.toFloat(), surfaceView.height.toFloat())
@@ -2325,7 +2329,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     // ---- Swipes up from the bottom corners (in every touch mode): left
     // brings the keyboard, right opens the DD menu. A touch that starts in a
     // corner is held back until it's clearly a swipe up or clearly not one;
-    // if not, it goes to the desktop as it happened.
+    // if not, it goes to the desktop as it happened. Android's navigation bar
+    // comes up only for a swipe from the bottom's middle: one that a corner
+    // swipe revealed is put away again (the menu shows its own).
     private var edge = 0 // 0 none, 1 left corner, 2 right corner, -1 swipe done (rest of the touch ignored)
     private var edgeX = 0f
     private var edgeY = 0f
@@ -2362,14 +2368,33 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             edge = -1
             held.forEach { it.recycle() }; held.clear()
             if (which == 1) toggleKeyboard() else showMenu(true)
+            hideCornerBars()
             return true
         }
         val notASwipe = end || e.actionMasked == MotionEvent.ACTION_POINTER_DOWN ||
             side > dp(32f) || e.eventTime - e.downTime > 500
         if (!notASwipe) { held.add(MotionEvent.obtain(e)); return true }
         edge = 0
+        hideCornerBars()
         held.forEach { super.dispatchTouchEvent(it); it.recycle() }; held.clear()
         return super.dispatchTouchEvent(e)
+    }
+
+    /**
+     * Android shows its hidden bars for a swipe from anywhere along the
+     * bottom edge, and has no way to keep a part of that edge for an app: a
+     * swipe that started in a corner hides them again as they arrive (over
+     * the next moments, as the system takes a little while to show them).
+     * Not while the DD menu is open (it shows the bars) or the bars are kept.
+     */
+    private val hideBars = Runnable {
+        if (Build.VERSION.SDK_INT >= 30 && !keepBars() && menu.visibility != android.view.View.VISIBLE)
+            window.insetsController?.hide(WindowInsets.Type.systemBars())
+    }
+    private fun hideCornerBars() {
+        if (Build.VERSION.SDK_INT < 30 || keepBars()) return
+        main.removeCallbacks(hideBars)
+        for (d in longArrayOf(0L, 150L, 400L, 900L)) main.postDelayed(hideBars, d)
     }
 
     // Home (button or swipe up) while the desktop is already showing: like
@@ -3081,106 +3106,121 @@ class PhoneTouchpadActivity : Activity() {
  * the left button (selecting text, moving windows and files). A two-finger tap
  * is the right button too.
  */
-class TouchScreen(private val view: android.view.View) {
-    var wheel = true
-    private enum class State { IDLE, PENDING, SCROLL, HOLD, DRAG, TWO }
+/**
+ * Direct touch: the phone's fingers go to KDE as a touchscreen's (Wayland
+ * touch events through KWin), not as a mouse. KWin and the apps do what they
+ * do with a touchscreen on a Linux tablet: lists and pages follow the finger
+ * 1:1 and keep going with a flick, two fingers pinch to zoom, title bars and
+ * panels take taps and drags. Qt Widgets lists get a flick scroller too
+ * (patches/plasma-integration).
+ *
+ * One thing stays from the mouse: most desktop apps have no long-press menu,
+ * so touch and hold (still) hands the touch back from the apps and right-
+ * clicks where the finger is on lift; moving after the hold drags with the
+ * left button (files, text selection), as before.
+ */
+class NativeTouch(private val view: android.view.View) {
+    private enum class State { IDLE, TOUCH, HOLD, DRAG }
     private var state = State.IDLE
     private var downX = 0f
     private var downY = 0f
     private var lastX = 0f
     private var lastY = 0f
-    private var wheelSteps = 0f
+    // Where each finger was last sent, by Android's pointer id.
+    private val sent = HashMap<Int, Pair<Float, Float>>()
     private val handler = Handler(Looper.getMainLooper())
     private val slop = view.context.resources.displayMetrics.density * 10f
 
     private val longPress = Runnable {
-        if (state == State.PENDING) {
+        if (state == State.TOUCH && sent.size == 1) {
+            // The apps let go of this touch (wl_touch.cancel) before it turns into a mouse.
+            NativeDesk.nativeTouch(NativeDesk.TOUCH_CANCEL, 0, 0f, 0f)
+            sent.clear()
             state = State.HOLD
             view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
         }
     }
 
     fun onTouch(e: MotionEvent) {
-        val n = e.pointerCount
-        val cx = (0 until n).map { e.getX(it) }.average().toFloat()
-        val cy = (0 until n).map { e.getY(it) }.average().toFloat()
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                state = State.PENDING
+                handler.removeCallbacks(longPress)
+                if (sent.isNotEmpty()) NativeDesk.nativeTouch(NativeDesk.TOUCH_CANCEL, 0, 0f, 0f) // a lost lift
+                sent.clear()
+                state = State.TOUCH
                 downX = e.x; downY = e.y
-                wheelSteps = 0f
-                NativeDesk.nativePointer(e.x, e.y, 0) // the pointer goes where the finger is
+                // A tap may move a text field's cursor: the phone keyboard's word ends first.
+                DeskInput.interrupted()
+                down(e, 0)
                 handler.postDelayed(longPress, LONG_PRESS_MS)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 handler.removeCallbacks(longPress)
-                when (state) {
-                    State.PENDING, State.HOLD -> state = State.TWO
-                    State.DRAG -> { NativeDesk.nativePointer(lastX, lastY, 0); state = State.SCROLL }
-                    else -> {}
-                }
+                if (state == State.TOUCH) down(e, e.actionIndex)
             }
-            MotionEvent.ACTION_MOVE -> {
-                val moved = abs(e.x - downX) > slop || abs(e.y - downY) > slop
-                when (state) {
-                    State.PENDING, State.TWO -> if (moved) {
-                        handler.removeCallbacks(longPress)
-                        state = State.SCROLL
-                        scroll(cx - lastX, cy - lastY)
+            MotionEvent.ACTION_MOVE -> when (state) {
+                State.TOUCH -> {
+                    if (abs(e.x - downX) > slop || abs(e.y - downY) > slop) handler.removeCallbacks(longPress)
+                    var any = false
+                    for (i in 0 until e.pointerCount) {
+                        val id = e.getPointerId(i)
+                        val was = sent[id] ?: continue
+                        val x = e.getX(i); val y = e.getY(i)
+                        if (was.first == x && was.second == y) continue
+                        sent[id] = x to y
+                        NativeDesk.nativeTouch(NativeDesk.TOUCH_MOTION, id, x, y)
+                        any = true
                     }
-                    State.HOLD -> if (moved) {
-                        state = State.DRAG
-                        NativeDesk.nativePointer(downX, downY, 1)
-                        NativeDesk.nativePointer(e.x, e.y, 1)
-                    }
-                    State.SCROLL -> scroll(cx - lastX, cy - lastY)
-                    State.DRAG -> NativeDesk.nativePointer(e.x, e.y, 1)
-                    State.IDLE -> {}
+                    if (any) NativeDesk.nativeTouch(NativeDesk.TOUCH_FRAME, 0, 0f, 0f)
                 }
+                State.HOLD -> if (abs(e.x - downX) > slop || abs(e.y - downY) > slop) {
+                    state = State.DRAG
+                    NativeDesk.nativePointer(downX, downY, 1)
+                    NativeDesk.nativePointer(e.x, e.y, 1)
+                }
+                State.DRAG -> NativeDesk.nativePointer(e.x, e.y, 1)
+                else -> {}
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_POINTER_UP -> if (state == State.TOUCH) up(e.getPointerId(e.actionIndex))
+            MotionEvent.ACTION_UP -> {
                 handler.removeCallbacks(longPress)
-                val cancel = e.actionMasked == MotionEvent.ACTION_CANCEL
                 when (state) {
-                    State.PENDING -> if (!cancel) click(downX, downY, 1)
-                    State.HOLD, State.TWO -> if (!cancel) click(downX, downY, 2)
+                    State.TOUCH -> up(e.getPointerId(e.actionIndex))
+                    State.HOLD -> { NativeDesk.nativePointer(downX, downY, 2); NativeDesk.nativePointer(downX, downY, 0) }
                     State.DRAG -> NativeDesk.nativePointer(e.x, e.y, 0)
                     else -> {}
                 }
+                if (sent.isNotEmpty()) NativeDesk.nativeTouch(NativeDesk.TOUCH_CANCEL, 0, 0f, 0f)
+                sent.clear()
+                state = State.IDLE
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                handler.removeCallbacks(longPress)
+                if (state == State.DRAG) NativeDesk.nativePointer(lastX, lastY, 0)
+                if (sent.isNotEmpty()) NativeDesk.nativeTouch(NativeDesk.TOUCH_CANCEL, 0, 0f, 0f)
+                sent.clear()
                 state = State.IDLE
             }
         }
-        // Re-anchor after the finger count changes, so a scroll doesn't jump.
-        if (e.actionMasked == MotionEvent.ACTION_POINTER_UP) {
-            val rest = (0 until n).filter { it != e.actionIndex }
-            lastX = rest.map { e.getX(it) }.average().toFloat()
-            lastY = rest.map { e.getY(it) }.average().toFloat()
-        } else {
-            lastX = cx; lastY = cy
-        }
+        lastX = e.x; lastY = e.y
     }
 
-    private fun click(x: Float, y: Float, button: Int) {
-        NativeDesk.nativePointer(x, y, button)
-        NativeDesk.nativePointer(x, y, 0)
+    private fun down(e: MotionEvent, i: Int) {
+        val id = e.getPointerId(i)
+        val x = e.getX(i); val y = e.getY(i)
+        sent[id] = x to y
+        NativeDesk.nativeTouch(NativeDesk.TOUCH_DOWN, id, x, y)
+        NativeDesk.nativeTouch(NativeDesk.TOUCH_FRAME, 0, 0f, 0f)
     }
 
-    /** The content follows the finger. */
-    private fun scroll(dx: Float, dy: Float) {
-        if (wheel) {
-            wheelSteps += -dy * NativeDeskActivity.Touchpad.WHEEL_PER_PX
-            val steps = wheelSteps.toInt()
-            if (steps != 0) {
-                NativeDesk.nativeScroll(0f, steps.toFloat(), true)
-                wheelSteps -= steps
-            }
-        } else {
-            NativeDesk.nativeScroll(-dx, -dy, false)
-        }
+    private fun up(id: Int) {
+        if (sent.remove(id) == null) return
+        NativeDesk.nativeTouch(NativeDesk.TOUCH_UP, id, 0f, 0f)
+        NativeDesk.nativeTouch(NativeDesk.TOUCH_FRAME, 0, 0f, 0f)
     }
 
     companion object {
-        const val LONG_PRESS_MS = 450L
+        const val LONG_PRESS_MS = 500L
     }
 }
 

@@ -45,6 +45,12 @@
  *                app has a frame of slack, and three buffers are enough.
  *     POINTER    pointer position (window coordinates) and buttons
  *     KEY        Android key code, Unicode character, down/up
+ *     TOUCH      desktops: the touchscreen's fingers, as they are (Direct touch):
+ *                DOWN, MOTION and UP of finger <id> at x, y (window
+ *                coordinates), CANCEL (the phone took the touch back: every
+ *                finger is gone) and FRAME after each set of changes, like
+ *                wl_touch. The desktop hands them on as real touch events, so
+ *                its apps scroll, flick and pinch with the fingers themselves
  *     SCROLL     scroll by dx, dy pixels (two-finger drag), at the last POINTER
  *                position; with wheel set, dx, dy are mouse-wheel steps in
  *                120ths of a click instead (a wheel: apps scroll by lines)
@@ -100,6 +106,15 @@ enum ndesk_op {
     NDESK_ACTION,
     NDESK_TEXT,
     NDESK_CLIPBOARD,
+    NDESK_TOUCH,
+};
+
+enum ndesk_touch {
+    NDESK_TOUCH_DOWN = 1,
+    NDESK_TOUCH_MOTION = 2,
+    NDESK_TOUCH_UP = 3,
+    NDESK_TOUCH_CANCEL = 4,
+    NDESK_TOUCH_FRAME = 5,
 };
 
 enum ndesk_clip {
@@ -159,6 +174,7 @@ struct ndesk_msg {
         struct { float x, y; uint32_t buttons, inside; } pointer;
         struct { int32_t keycode, unicode; uint32_t down; } key;
         struct { float dx, dy; uint32_t wheel; } scroll;
+        struct { uint32_t kind; int32_t id; float x, y; } touch;
         struct { float scale; } scale;
         struct { float left, top, right, bottom; } safe;
         struct { uint32_t action; } action;

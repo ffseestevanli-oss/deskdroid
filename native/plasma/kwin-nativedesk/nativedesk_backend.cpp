@@ -165,22 +165,25 @@ void NativeDeskOutput::setUserScale(qreal scale)
 
 // ---- input -------------------------------------------------------------------
 
-NativeDeskInputDevice::NativeDeskInputDevice(bool keyboard)
+NativeDeskInputDevice::NativeDeskInputDevice(bool keyboard, bool touch)
     : m_keyboard(keyboard)
+    , m_touch(touch)
 {
 }
 
 QString NativeDeskInputDevice::name() const
 {
-    return m_keyboard ? QStringLiteral("DeskDroid keyboard") : QStringLiteral("DeskDroid pointer");
+    return m_keyboard ? QStringLiteral("DeskDroid keyboard")
+        : m_touch     ? QStringLiteral("DeskDroid touchscreen")
+                      : QStringLiteral("DeskDroid pointer");
 }
 
 bool NativeDeskInputDevice::isEnabled() const { return true; }
 void NativeDeskInputDevice::setEnabled(bool) { }
 bool NativeDeskInputDevice::isKeyboard() const { return m_keyboard; }
-bool NativeDeskInputDevice::isPointer() const { return !m_keyboard; }
+bool NativeDeskInputDevice::isPointer() const { return !m_keyboard && !m_touch; }
 bool NativeDeskInputDevice::isTouchpad() const { return false; }
-bool NativeDeskInputDevice::isTouch() const { return false; }
+bool NativeDeskInputDevice::isTouch() const { return m_touch; }
 bool NativeDeskInputDevice::isTabletTool() const { return false; }
 bool NativeDeskInputDevice::isTabletPad() const { return false; }
 bool NativeDeskInputDevice::isTabletModeSwitch() const { return false; }
@@ -332,6 +335,47 @@ void NativeDeskInputDevice::pointer(const QPointF &pos, uint32_t buttons)
     }
     m_buttons = buttons;
     Q_EMIT pointerFrame(this);
+}
+
+// Direct touch: the fingers reach KWin as a touchscreen's, so KWin and the
+// apps (wl_touch) do what they do with touch: lists and pages follow the
+// finger and keep going with a flick, two fingers pinch, title bars drag,
+// panels and Plasma's popups take taps. No mouse is emulated here.
+void NativeDeskInputDevice::touch(uint32_t kind, int32_t id, const QPointF &pos)
+{
+    focusAppletPopupsWhenShown();
+    const auto time = now();
+    switch (kind) {
+    case NDESK_TOUCH_DOWN:
+        if (m_fingers.contains(id)) { // a lift that never came: end that one first
+            Q_EMIT touchUp(id, time, this);
+        }
+        if (m_fingers.isEmpty()) {
+            closeAppletPopups(pos);
+        }
+        m_fingers.insert(id);
+        Q_EMIT touchDown(id, pos, time, this);
+        break;
+    case NDESK_TOUCH_MOTION:
+        if (m_fingers.contains(id)) {
+            Q_EMIT touchMotion(id, pos, time, this);
+        }
+        break;
+    case NDESK_TOUCH_UP:
+        if (m_fingers.remove(id)) {
+            Q_EMIT touchUp(id, time, this);
+        }
+        break;
+    case NDESK_TOUCH_CANCEL:
+        if (!m_fingers.isEmpty()) {
+            m_fingers.clear();
+            Q_EMIT touchCanceled(this);
+        }
+        break;
+    case NDESK_TOUCH_FRAME:
+        Q_EMIT touchFrame(this);
+        break;
+    }
 }
 
 void NativeDeskInputDevice::scroll(qreal dx, qreal dy, bool wheel)
@@ -517,6 +561,7 @@ void NativeDeskInputBackend::initialize()
 {
     Q_EMIT deviceAdded(m_backend->pointerDevice());
     Q_EMIT deviceAdded(m_backend->keyboardDevice());
+    Q_EMIT deviceAdded(m_backend->touchDevice());
 }
 
 // ---- rendering (QPainter) ------------------------------------------------------
@@ -783,6 +828,7 @@ NativeDeskBackend::NativeDeskBackend(const QSize &size, qreal scale)
     , m_scale(scale)
     , m_pointer(std::make_unique<NativeDeskInputDevice>(false))
     , m_keyboard(std::make_unique<NativeDeskInputDevice>(true))
+    , m_touch(std::make_unique<NativeDeskInputDevice>(false, true))
 {
 }
 
@@ -923,6 +969,11 @@ NativeDeskInputDevice *NativeDeskBackend::pointerDevice() const
     return m_pointer.get();
 }
 
+NativeDeskInputDevice *NativeDeskBackend::touchDevice() const
+{
+    return m_touch.get();
+}
+
 NativeDeskInputDevice *NativeDeskBackend::keyboardDevice() const
 {
     return m_keyboard.get();
@@ -1060,6 +1111,18 @@ void NativeDeskBackend::readMessages()
             // The compositor speaks screen pixels, KWin logical ones, at
             // whatever scale KWin's output configuration settled on.
             m_pointer->pointer(QPointF(m.pointer.x, m.pointer.y) / outputScale(), m.pointer.buttons);
+            break;
+        case NDESK_TOUCH:
+            // A tap in a text field, as for a click: the phone's keyboard
+            // hears the field's text again.
+            if (m.touch.kind == NDESK_TOUCH_DOWN && m_textInputActive) {
+                QTimer::singleShot(150, this, [this] {
+                    if (m_textInputActive && !m_surroundingPending) {
+                        sendSurrounding();
+                    }
+                });
+            }
+            m_touch->touch(m.touch.kind, m.touch.id, QPointF(m.touch.x, m.touch.y) / outputScale());
             break;
         case NDESK_SCROLL:
             if (m.scroll.wheel) {
