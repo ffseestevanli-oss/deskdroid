@@ -73,10 +73,10 @@ struct client {
 };
 
 struct input {
-    enum { IN_POINTER, IN_KEY, IN_SCROLL, IN_TEXT } type;
+    enum { IN_POINTER, IN_KEY, IN_SCROLL, IN_TEXT, IN_TOUCH } type;
     float x, y;     /* pointer position, or scroll amount */
     int buttons;    /* or, scrolling: 1 for wheel steps */
-    int keycode, unicode, down;
+    int keycode, unicode, down; /* IN_TOUCH: keycode the NDESK_TOUCH_* kind, unicode the finger */
     struct ndesk_msg text; /* IN_TEXT: the TEXT packet, ready to send */
 };
 
@@ -121,9 +121,11 @@ static struct {
     int grab;                 /* client index being dragged, -1 if none */
     int focus;                /* client index under a held button, -1 if none */
     float grab_dx, grab_dy;
+    int touch;                /* client index the fingers went down on, -1 if none */
+    int fingers;              /* fingers down on it */
     bool dirty;
     bool dirty_next;          /* draw again next loop */
-} C = { .listen_fd = -1, .wake = -1, .grab = -1, .focus = -1, .lock = PTHREAD_MUTEX_INITIALIZER };
+} C = { .listen_fd = -1, .wake = -1, .grab = -1, .focus = -1, .touch = -1, .lock = PTHREAD_MUTEX_INITIALIZER };
 
 static PFNEGLGETNATIVECLIENTBUFFERANDROIDPROC pGetNativeClientBuffer;
 static PFNEGLCREATEIMAGEKHRPROC pCreateImage;
@@ -282,6 +284,7 @@ static void drop_client(int i)
     C.n_order = k;
     if (C.grab == i) C.grab = -1;
     if (C.focus == i) C.focus = -1;
+    if (C.touch == i) C.touch = -1, C.fingers = 0;
     C.dirty = true;
 }
 
@@ -551,8 +554,48 @@ static void send_pointer(int i, bool inside)
     send_msg(cl, &m);
 }
 
+/*
+ * Direct touch: the fingers go to the window the first one landed on, all of
+ * them until the last lifts, as on Wayland. Only a desktop (KWin) knows
+ * TOUCH; the native test windows get the first finger as the mouse.
+ */
+static void handle_touch(const struct input *in)
+{
+    const int kind = in->keycode;
+    if (kind == NDESK_TOUCH_DOWN && C.fingers == 0) {
+        bool title = false;
+        C.touch = client_at(in->x, in->y, &title);
+        if (C.touch >= 0) raise_client(C.touch);
+    }
+    const int i = C.touch;
+    if (kind == NDESK_TOUCH_DOWN) C.fingers++;
+    else if (kind == NDESK_TOUCH_UP && C.fingers > 0) C.fingers--;
+    else if (kind == NDESK_TOUCH_CANCEL) C.fingers = 0;
+    /* The last lift's FRAME (or a CANCEL) ends the touch. */
+    if (C.fingers == 0 && (kind == NDESK_TOUCH_FRAME || kind == NDESK_TOUCH_CANCEL)) C.touch = -1;
+    if (i < 0) return;
+    struct client *cl = C.clients[i];
+    if (cl->desktop) {
+        struct ndesk_msg m = { .op = NDESK_TOUCH,
+            .touch = { (uint32_t)kind, in->unicode, in->x - cl->x, in->y - cl->y } };
+        send_msg(cl, &m);
+        return;
+    }
+    if (kind == NDESK_TOUCH_FRAME || in->unicode != 0) return;
+    if (kind == NDESK_TOUCH_DOWN || kind == NDESK_TOUCH_MOTION) {
+        C.px = in->x;
+        C.py = in->y;
+    }
+    C.buttons = kind == NDESK_TOUCH_UP || kind == NDESK_TOUCH_CANCEL ? 0 : 1;
+    send_pointer(i, true);
+}
+
 static void handle_input(const struct input *in)
 {
+    if (in->type == IN_TOUCH) {
+        handle_touch(in);
+        return;
+    }
     if (in->type == IN_SCROLL) {
         bool title;
         int i = client_at(C.px, C.py, &title);
@@ -1003,8 +1046,9 @@ Java_io_deskdroid_app_NativeDesk_nativeStop(JNIEnv *env, jclass cls)
 static void queue(struct input in)
 {
     pthread_mutex_lock(&C.lock);
-    /* Text mustn't be lost: wait for the loop to take what's queued. */
-    for (int tries = 0; in.type == IN_TEXT && C.n_input >= INPUT_QUEUE && tries < 100; tries++) {
+    /* Text and touches mustn't be lost (a lost lift leaves a finger down):
+     * wait for the loop to take what's queued. */
+    for (int tries = 0; (in.type == IN_TEXT || in.type == IN_TOUCH) && C.n_input >= INPUT_QUEUE && tries < 100; tries++) {
         pthread_mutex_unlock(&C.lock);
         wake();
         usleep(2000);
@@ -1072,6 +1116,14 @@ Java_io_deskdroid_app_NativeDesk_nativeClipboardChanged(JNIEnv *env, jclass cls)
     in.text.op = NDESK_CLIPBOARD;
     in.text.clip.kind = NDESK_CLIP_PHONE;
     queue(in);
+}
+
+/* Direct touch: one finger's change (NDESK_TOUCH_*), in screen pixels. */
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeTouch(JNIEnv *env, jclass cls, jint kind, jint id, jfloat x, jfloat y)
+{
+    (void)env; (void)cls;
+    queue((struct input){ .type = IN_TOUCH, .keycode = kind, .unicode = id, .x = x, .y = y });
 }
 
 JNIEXPORT void JNICALL

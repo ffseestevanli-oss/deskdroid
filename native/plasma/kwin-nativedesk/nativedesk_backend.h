@@ -67,7 +67,9 @@ class NativeDeskInputDevice : public InputDevice
     Q_OBJECT
 
 public:
-    explicit NativeDeskInputDevice(bool keyboard);
+    // A keyboard, the pointer, or (touch) the touchscreen: the phone's
+    // fingers as they are, for Direct touch.
+    explicit NativeDeskInputDevice(bool keyboard, bool touch = false);
 
     QString name() const override;
     bool isEnabled() const override;
@@ -83,12 +85,16 @@ public:
 
     void pointer(const QPointF &pos, uint32_t buttons);
     void scroll(qreal dx, qreal dy, bool wheel);
+    // One finger's change (NDESK_TOUCH_*), in logical pixels.
+    void touch(uint32_t kind, int32_t id, const QPointF &pos);
     void key(int androidKeyCode, int unicode, bool down);
 
 private:
     void evdevKey(uint32_t key, bool down);
 
     const bool m_keyboard;
+    const bool m_touch;
+    QSet<int32_t> m_fingers; // down, as KWin was told
     uint32_t m_buttons = 0;
     // Keys KWin has been told are down. A key is pressed once and released
     // once, whatever Android sends: its auto-repeat presses again (KWin and
@@ -222,6 +228,7 @@ public:
     NativeDeskOutput *output() const;
     NativeDeskInputDevice *pointerDevice() const;
     NativeDeskInputDevice *keyboardDevice() const;
+    NativeDeskInputDevice *touchDevice() const;
 
     // Copies a finished frame into a free buffer and shows it.
     void submit(const QImage &image);
@@ -266,6 +273,7 @@ private:
     NativeDeskOutput *m_output = nullptr;
     std::unique_ptr<NativeDeskInputDevice> m_pointer;
     std::unique_ptr<NativeDeskInputDevice> m_keyboard;
+    std::unique_ptr<NativeDeskInputDevice> m_touch;
     bool m_textInputActive = false;
     int m_textInputPurpose = 0;
     int m_textInputHints = 0;

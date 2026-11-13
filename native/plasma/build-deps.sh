@@ -771,6 +771,13 @@ build_plasma_integration() {
   perl -0pi -e 's/find_package\(X11\)\s*set_package_properties\(X11 [^)]*\)/set(X11_FOUND OFF)/' "$t/CMakeLists.txt"
   grep -q "set(X11_FOUND OFF)" "$t/CMakeLists.txt"
   cp "$HERE/patches/plasma-integration/x11integration.cpp" "$t/x11integration.cpp"
+  # Direct touch: Qt Widgets' scroll areas (lists, settings pages, text
+  # views) follow the finger with a flick scroller, as QtQuick's do by
+  # themselves; without it a touch drag there selects instead of scrolling.
+  cp "$HERE/patches/plasma-integration/deskdroidtouchscroll.cpp" "$t/deskdroidtouchscroll.cpp"
+  sed -i 's/^    kdeplatformtheme.cpp kdeplatformtheme.h$/&\n    deskdroidtouchscroll.cpp/' "$t/CMakeLists.txt"
+  grep -q "deskdroidtouchscroll.cpp" "$t/CMakeLists.txt"
+  perl -0pi -e 's/(KdePlatformTheme::KdePlatformTheme\(\)\n\{\n)/void deskdroidInstallTouchScroll();\n\n$1    deskdroidInstallTouchScroll();\n/ or die "touch scroll patch"' "$t/kdeplatformtheme.cpp"
   # "Open With" asks xdg-desktop-portal-kde for its app chooser over D-Bus;
   # there's no portal here, so the dialog never appeared. Without that
   # handler KIO shows its own Open With dialog in the app.
