@@ -117,6 +117,9 @@ export XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg
 h="${HOME:-$F}/.var/app/$FPID"
 export XDG_DATA_HOME="$h/data" XDG_CONFIG_HOME="$h/config" XDG_CACHE_HOME="$h/cache" XDG_STATE_HOME="$h/.local/state"
 mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
+# Chromium's sandbox (QtWebEngine: Ghostwriter, Anki...) needs namespaces
+# Android doesn't give apps, as bubblewrap does.
+export QTWEBENGINE_DISABLE_SANDBOX=1
 export FLATPAK_ID="$FPID" LOCPATH="$RT/lib/locale" LANG="${LANG:-C.UTF-8}"
 export GST_PLUGIN_SYSTEM_PATH=/app/lib/gstreamer-1.0:/usr/lib/extensions/gstreamer-1.0:/usr/lib/$TRIPLE/gstreamer-1.0
 # [Environment] from the runtime's metadata (QT_PLUGIN_PATH=/app/lib/plugins...),
