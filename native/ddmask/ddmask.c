@@ -1011,6 +1011,28 @@ static void on_sigsys(int sig, siginfo_t *si, void *ctx) {
             as = "fchmodat";
         }
         break;
+    /* Android's app filter blocks the set*id calls, even ones that change
+     * nothing: PulseAudio drops "root" with setresgid(gid, gid, gid) as a
+     * plain user and aborts when it fails. A call that asks only for the ids
+     * the process already has succeeds; any real change gets EPERM, as it
+     * would for an unprivileged user. */
+    case SYS_setresuid: case SYS_setresgid: case SYS_setreuid: case SYS_setregid:
+    case SYS_setuid: case SYS_setgid: {
+        int gid = nr == SYS_setresgid || nr == SYS_setregid || nr == SYS_setgid;
+        long cur[3] = { -1, -1, -1 };
+        unsigned int ids[3];
+        if (syscall(gid ? SYS_getresgid : SYS_getresuid, &ids[0], &ids[1], &ids[2]) == 0)
+            for (int i = 0; i < 3; i++) cur[i] = ids[i];
+        int nargs = nr == SYS_setresuid || nr == SYS_setresgid ? 3 : nr == SYS_setuid || nr == SYS_setgid ? 1 : 2;
+        ret = 0;
+        for (int i = 0; i < nargs; i++) {
+            long want = (long)(unsigned int)ARG(i);
+            if (want == 0xffffffffL) continue;   /* -1: leave it */
+            if (want != cur[0] || want != cur[1] || want != cur[2]) ret = -EPERM;
+        }
+        as = "a no-op (same ids)";
+        break;
+    }
     case SYS_close_range: {
         /* close_range(first, last, flags): each one, up to the open-file limit;
          * CLOSE_RANGE_CLOEXEC (4) marks them instead. Not CLOSE_RANGE_UNSHARE. */

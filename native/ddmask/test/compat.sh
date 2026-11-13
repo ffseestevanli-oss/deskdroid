@@ -81,8 +81,9 @@ expect "a bionic program started from a glibc one gets the desktop's back" "$out
 out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so" DDMASK_JOURNAL="$J" DDMASK_SIGSYS_LOG="$T/sigsys.log" "$T/app/bin/sigsys-probe" 2>&1)"
 expect "blocked calls with an allowed twin are made with it" "$out" "^faccessat2=0/ok$" "^epoll_pwait2=0/ok$" "^accept=-1/Resource temporarily unavailable$" \
   "^close_range=0/ok closed=both$"
+expect "set*id calls that change nothing succeed, others get EPERM" "$out" "^setresgid-same=0/ok$" "^setresgid-other=-1/Operation not permitted$"
 expect "...the rest fail with ENOSYS" "$out" "^getcpu=-1/Function not implemented$"
 expect "...noted in the journal" "$(cat "$J")" "Android blocks system call [0-9]+, made as faccessat" "Android blocks system call [0-9]+, failed with ENOSYS"
-expect "...and in sigsys.log, by number" "$(sort -un "$T/sigsys.log" | tr '\n' ' ')" "^[0-9]+ [0-9]+ [0-9]+ [0-9]+ [0-9]+ $"
+expect "...and in sigsys.log, by number" "$(sort -un "$T/sigsys.log" | tr '\n' ' ')" "^[0-9]+ [0-9]+ [0-9]+ [0-9]+ [0-9]+ [0-9]+ $"
 
 [ "$fails" -eq 0 ] && echo "all compatibility tests passed" || { echo "$fails failed"; exit 1; }
