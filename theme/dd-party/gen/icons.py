@@ -252,6 +252,95 @@ def write_set(base, d, fn):
         seen[key] = name
 
 
+# ---- System Settings' pages and other settings icons ----------------------
+# Breeze's own artwork for each page (the sidebar needs its details: a mouse,
+# a keyboard, a bell...), redrawn in one DD Party colour (duotone: the
+# picture's light and shade in that colour) on DD Party's chamfered tile.
+# Needs Breeze's icons (DDP_BREEZE, default /usr/share/icons/breeze) and the
+# cairosvg module; without them these are left to Breeze Dark.
+SETTINGS_EXTRA = ["battery", "krunner", "ktip", "xorg", "system-run", "preferences-system", "kwalletmanager", "krdc",
+                  "preferences-desktop", "preferences-system-network", "system-users", "system-lock-screen"]
+SETTINGS_SKIP = ("yast-", "amarok", "podcast", "financial-schedule", "face-smile", "window-duplicate", "preferences-git",
+                 "preferences-releasenotes", "preferences-virtualization", "plasmagik")
+SETTINGS_COLORS = [
+    (("network", "web-browser", "bluetooth", "kdeconnect", "kde-connect", "online-accounts", "krdc", "remote"), CYAN),
+    (("security", "firewall", "apparmor", "kerberos", "password", "lock", "cryptography", "sudo", "kwallet"), RED),
+    (("sound", "multimedia", "mediacontrol", "notification", "speech", "ktip"), ORANGE),
+    (("theme", "font", "cursor", "color", "emoticons", "splash", "icons", "wallpaper", "gtk", "plasma"), PINK),
+    (("mouse", "keyboard", "touchpad", "tablet", "touchscreen", "gestures", "peripherals", "devices", "printer",
+      "scanner", "thunderbolt", "drive", "disk", "removable", "device", "gaming", "battery", "accessibility", "kaccess"), YELLOW),
+    (("system", "power", "startup", "services", "session", "performance", "backup", "time", "locale", "user",
+      "login", "language", "smart", "log", "kded", "ksmserver", "xorg", "run"), GREEN),
+]
+
+
+def settings_color(name):
+    for keys, c in SETTINGS_COLORS:
+        if any(k in name for k in keys):
+            return c
+    return PURPLE
+
+
+def breeze_icon(base, name):
+    for sub in ("preferences/32", "apps/48", "categories/32", "devices/64", "status/64", "actions/32"):
+        f = f"{base}/{sub}/{name}.svg"
+        if os.path.exists(f):
+            return os.path.realpath(f)
+    return None
+
+
+def duotone_tile(color, src, px=72):
+    import io
+    import numpy as np
+    import cairosvg
+    from PIL import Image
+    png = cairosvg.svg2png(url=src, output_width=px, output_height=px)
+    im = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA")).astype(float) / 255
+    a = im[..., 3]
+    lum = 0.2126 * im[..., 0] + 0.7152 * im[..., 1] + 0.0722 * im[..., 2]
+    m = a > 0.05
+    lo, hi = (np.percentile(lum[m], 2), np.percentile(lum[m], 98)) if m.any() else (0.0, 1.0)
+    t = np.clip((lum - lo) / max(hi - lo, 1e-3), 0, 1)[..., None]
+    c = np.array([int(color[i:i + 2], 16) for i in (1, 3, 5)]) / 255
+    rgb = (0.25 + 0.75 * t) * c + (t ** 3) * 0.35 * (1 - c)
+    out = Image.fromarray((np.dstack([np.clip(rgb, 0, 1), a]) * 255).astype(np.uint8))
+    b = io.BytesIO()
+    out.quantize(colors=96, method=Image.Quantize.FASTOCTREE).save(b, "PNG", optimize=True)
+    b64 = base64.b64encode(b.getvalue()).decode()
+    return ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="64" viewBox="0 0 64 64">'
+            f'<path d="M4 14 L14 4 H60 V50 L50 60 H4 Z" fill="{CARD}" stroke="{BORDER}" stroke-width="2" stroke-linejoin="round"/>'
+            f'<path d="M5 52 H58 L54 56 V56 L52 58 H5 Z" fill="{color}"/>'
+            f'<image x="14" y="10" width="36" height="36" xlink:href="data:image/png;base64,{b64}"/></svg>\n')
+
+
+def write_settings(out):
+    base = os.environ.get("DDP_BREEZE", "/usr/share/icons/breeze")
+    try:
+        import cairosvg  # noqa: F401
+    except ImportError:
+        print("icons: no cairosvg, System Settings' icons left to Breeze", file=sys.stderr)
+        return
+    if not os.path.isdir(f"{base}/preferences/32"):
+        print(f"icons: no Breeze icons in {base}, System Settings' icons left to Breeze", file=sys.stderr)
+        return
+    names = sorted({f[:-4] for f in os.listdir(f"{base}/preferences/32") if f.endswith(".svg") and not f.endswith("-symbolic.svg")}
+                   | set(SETTINGS_EXTRA))
+    d = f"{out}/scalable/apps"
+    done = {}
+    for name in names:
+        if name.startswith(SETTINGS_SKIP) or os.path.lexists(f"{d}/{name}.svg"):
+            continue
+        src = breeze_icon(base, name)
+        if not src:
+            continue
+        key = (src, settings_color(name))
+        if key in done:
+            os.symlink(done[key] + ".svg", f"{d}/{name}.svg")
+            continue
+        open(f"{d}/{name}.svg", "w").write(duotone_tile(settings_color(name), src))
+        done[key] = name
+
+
 if __name__ == "__main__":
     out = sys.argv[1] + "/icons/DD-Party"
     logo_png = sys.argv[2]
@@ -262,6 +351,7 @@ if __name__ == "__main__":
     write_set(f"{out}/scalable/mimetypes", MIMES, filetype)
     write_set(f"{out}/scalable/devices", DEVICES, tile)
     write_set(f"{out}/scalable/apps", APPS, tile)
+    write_settings(out)
     open(f"{out}/scalable/apps/start-here-kde.svg", "w").write(start_icon())
     for n in START_NAMES:
         if n != "start-here-kde":
