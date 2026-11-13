@@ -71,6 +71,13 @@ cli() {
   # OpenPGP engine ("Invalid crypto engine") and no remote can be added.
   # ddflatpak maps /usr/bin to Flatpak's own programs here.
   case ":$PATH:" in *:/usr/bin:*) ;; *) export PATH="$PATH:/usr/bin" ;; esac
+  # Installing an app checks parental controls (malcontent) over the system
+  # D-Bus, which Android doesn't have: "Could not connect: No such file or
+  # directory" after the runtimes were in. Flatpak skips the check when its
+  # system helper is on the session bus, which only changes system-wide
+  # installs (never used here: everything is --user). Tests on this machine
+  # ran as root, which skips the check too.
+  export FLATPAK_SYSTEM_HELPER_ON_SESSION=1
   # Helpers that can't start are noted here (gpgme hides their errors).
   export DDMASK_LOG="$F/glibc/exec.log"
   rm -f "$F/glibc/sigsys.log" "$DDMASK_LOG"
