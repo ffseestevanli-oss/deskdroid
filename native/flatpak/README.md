@@ -11,6 +11,7 @@ Flathub serves the apps and Debian serves the `flatpak` command.
 | `libdd_flatpakcli.so` | A zip of Debian trixie's arm64 `flatpak`, OSTree, `gpg` and the libraries they need (95 packages, `build.sh` and `debs.py`), unpacked into `files/flatpak-cli` once per app version (`NativeDesk.kt`). They run on DeskDroid's glibc (`../glibc`). |
 | `libddflatpak.so` (`../ddmask/ddflatpak.c`) | Preloaded into Flatpak's programs and into the apps: maps the paths they expect (`/usr`, `/app`, `/etc/...`) to the folders they're really in, as bubblewrap's mounts would. |
 | `libddflatpak_audit.so` (`../ddmask/ddflatpak-audit.c`) | The same paths for glibc's loader (`DDMASK_GLIBC_LD_AUDIT` in `flatpak run`): library folders programs name by absolute path (`RUNPATH /app/lib/<x>`), which the loader opens itself. |
+| `libdd_adpk_run.so` (`adpk-run.sh`) | Starts store packages made from Flathub apps (`.adpk`, `tools/flathub-adpk`): `store-program.sh` points each package's `ddapp` here, so how apps start is fixed in the APK, not by rebuilding packages. It reads the app, its command and its runtime from the package (`program/metadata`, `app.json`), applies the runtime's and app's `[Environment]`, stands in for parts of `/proc` Android hides (`/proc/version`), and asks Electron apps for Wayland. |
 | `libdd_nobwrap.so` (`nobwrap.sh`) | Stands in for bubblewrap, which needs user namespaces Android doesn't give apps. Flatpak only uses it for its install triggers here. |
 
 Installs are per-user, in `files/flatpak` (`FLATPAK_USER_DIR`), so no
@@ -50,6 +51,8 @@ In Konsole:
     flatpak run org.kde.kcalc
 
 ## Tests
+
+`test/adpk-run.sh` checks what `adpk-run.sh` reads from a package and hands glibc's loader.
 
 Desktop Linux (x86_64): `../ddmask/test/flatpak.sh` (ddflatpak's rules),
 and Flathub's x86_64 KCalc and ytDownloader with

@@ -36,6 +36,7 @@ int main(void) {
         TRAP(SYS_accept),
         TRAP(SYS_getcpu),
         TRAP(SYS_close_range),
+        TRAP(SYS_setresgid),
         BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
     };
     struct sock_fprog prog = { sizeof f / sizeof f[0], f };
@@ -61,6 +62,11 @@ int main(void) {
     r = syscall(SYS_close_range, d < d2 ? d : d2, d < d2 ? d2 : d, 0);
     printf("close_range=%ld/%s closed=%s\n", r, r < 0 ? strerror(errno) : "ok",
            fcntl(d, F_GETFD) == -1 && fcntl(d2, F_GETFD) == -1 ? "both" : "not both");
+    gid_t g = getgid();
+    r = syscall(SYS_setresgid, g, g, g);
+    printf("setresgid-same=%ld/%s\n", r, r < 0 ? strerror(errno) : "ok");
+    r = syscall(SYS_setresgid, -1, g + 1, -1);
+    printf("setresgid-other=%ld/%s\n", r, r < 0 ? strerror(errno) : "ok");
     unsigned cpu;
     r = syscall(SYS_getcpu, &cpu, NULL, NULL);
     printf("getcpu=%ld/%s\n", r, r < 0 ? strerror(errno) : "ok");

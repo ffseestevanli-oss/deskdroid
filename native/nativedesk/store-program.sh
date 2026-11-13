@@ -23,6 +23,12 @@ if [ -e "$dir/program.env" ]; then
     export "$(printf '%s' "$line" | sed "s|@PROGRAM@|$P|g")"
   done < "$dir/program.env"
 fi
+# A package made from a Flathub app (an .adpk with Flatpak's metadata) starts
+# through this build's launcher (native/flatpak/adpk-run.sh), not the copy of
+# it the package was made with: fixes to how apps start reach installed apps.
+if [ -n "$DDAPP_RUN" ] && [ -e "$libs/libdd_adpk_run.so" ] && grep -q '^\[Application\]' "$P/metadata" 2>/dev/null; then
+  export DDAPP_RUN="$libs/libdd_adpk_run.so" DDAPP_PROGRAM="$P"
+fi
 # ddmask (native/ddmask) runs it, and every program it starts (GIMP's
 # plug-ins...), through the linker, each keeping its own name, argv[0] and
 # /proc/self/exe. The desktop's apps already have it preloaded; otherwise
