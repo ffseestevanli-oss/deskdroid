@@ -142,7 +142,8 @@ object SoftwareBridge {
             val installed = Store.installed(c)
             val dir = icons(c)
             val apps = JSONArray()
-            for (a in catalog) apps.put(JSONObject().put("id", a.id).put("name", a.name).put("summary", a.summary)
+            // Runtimes come in with the apps that need them: listed once installed, to remove.
+            for (a in catalog) if (a.kind != "runtime" || a.id in installed) apps.put(JSONObject().put("id", a.id).put("name", a.name).put("summary", a.summary)
                 .put("version", a.version).put("size", a.size)
                 .put("installed", if (a.id in installed) Store.installedVersion(c, a.id) ?: "" else JSONObject.NULL)
                 .put("icon", File(dir, "${a.id}.png").takeIf { it.exists() }?.path ?: "")
