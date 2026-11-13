@@ -593,6 +593,7 @@ build_breeze() {
 # DeskDroid's default look), its own package since Plasma 6.4. It draws
 # with Qt Quick, on the GPU or in software as KWin does. Its settings
 # dialog and the Plastik theme stay out.
+inputs_aurorae() { cat "$HERE"/patches/aurorae/*; }
 build_aurorae() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/aurorae-$PLASMA_VERSION.tar.xz" "aurorae-$PLASMA_VERSION.tar.xz")"
   sed -i 's/^add_subdirectory(config)/# add_subdirectory(config)/' "$s/src/CMakeLists.txt"
@@ -602,6 +603,9 @@ build_aurorae() {
   # GLES 2's headers have no GL_RGBA8 (its value is GLES 3's and desktop GL's).
   sed -i 's/setInternalTextureFormat(GL_RGBA8)/setInternalTextureFormat(0x8058 \/* GL_RGBA8 *\/)/' "$s/src/renderer.cpp"
   grep -q "0x8058" "$s/src/renderer.cpp"
+  # The first window after Plasma starts: its title bar's SVGs load again
+  # once things are up (patches/aurorae/reload-first-svgs.py).
+  python3 "$HERE/patches/aurorae/reload-first-svgs.py" "$s"
   unandroid "$s"
   kde_cmake "$s"
   test -e "$PREFIX/plugins/org.kde.kdecoration3/org.kde.kwin.aurorae.so"
