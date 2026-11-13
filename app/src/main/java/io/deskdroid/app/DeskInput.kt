@@ -278,6 +278,14 @@ object DeskInput {
         private var preedit = ""
         private var preeditCursor = 0
         private var batch = 0
+        // The keyboard marked a word that's already in the field as the one it
+        // composes (setComposingRegion: after the cursor moved into or next to
+        // a word, for corrections and suggestions). That word stays plain text
+        // in the field: turning it into preedit took it out with Backspaces
+        // and put it back underlined, and wherever the field's real cursor
+        // differed from the copy's (a tap, a late report) that typed junk.
+        // A replacement the keyboard makes is sent as the difference instead.
+        private var recomposing = false
         // A selection in the field (from the app's report): typing replaces it
         // there, so the first edit deletes it with one Backspace.
         private var selLo = 0
@@ -314,6 +322,7 @@ object DeskInput {
             if (dead) return
             if (preedit.isNotEmpty()) send(TEXT_COMMIT, preedit)
             preedit = ""; preeditCursor = 0
+            recomposing = false
             batch = 0
             text.clear()
             before = ""; after = ""; selLo = 0; selHi = 0
@@ -353,8 +362,14 @@ object DeskInput {
         }
 
         override fun commitText(t: CharSequence?, cursor: Int) = edit { super.commitText(t, cursor) }
-        override fun setComposingText(t: CharSequence?, cursor: Int) = edit { super.setComposingText(t, cursor) }
-        override fun setComposingRegion(start: Int, end: Int) = edit { super.setComposingRegion(start, end) }
+        override fun setComposingText(t: CharSequence?, cursor: Int) = edit {
+            if (getComposingSpanStart(text) < 0) recomposing = false // a new word: preedit as usual
+            super.setComposingText(t, cursor)
+        }
+        override fun setComposingRegion(start: Int, end: Int) = edit {
+            recomposing = true
+            super.setComposingRegion(start, end)
+        }
         override fun finishComposingText() = edit { super.finishComposingText() }
         override fun setSelection(start: Int, end: Int) = edit { super.setSelection(start, end) }
         override fun replaceText(start: Int, end: Int, t: CharSequence, cursor: Int, attr: android.view.inputmethod.TextAttribute?) =
@@ -480,7 +495,8 @@ object DeskInput {
             val na: String
             val np: String
             val npc: Int
-            if (cs in 0..ce && ce <= text.length && ce > cs) {
+            if (cs < 0 || ce <= cs) recomposing = false // the composing word is done
+            if (!recomposing && cs in 0..ce && ce <= text.length && ce > cs) {
                 nb = text.substring(0, cs)
                 np = text.substring(cs, ce)
                 na = text.substring(ce)
