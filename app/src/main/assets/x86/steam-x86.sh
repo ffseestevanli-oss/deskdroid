@@ -72,7 +72,9 @@ start_x() {
   # server stops when one of its sockets fails (the /tmp one always does
   # here) unless it's told to carry on with the others. -nolock works only
   # for root: deskdroid-xroot.so makes Xwayland see itself as root (it changes
-  # nothing else; the source is fex/xroot.c).
+  # nothing else; the source is fex/xroot.c). -noreset: an X server starts
+  # over each time its last client leaves (the xdpyinfo check below is one),
+  # and Xwayland crashes doing that here.
   if xdpyinfo >/dev/null 2>&1; then
     return 0
   fi
@@ -90,7 +92,7 @@ start_x() {
   # pass on to Android's side too.
   # shellcheck disable=SC2086
   /lib64/ld-linux-x86-64.so.2 --preload "$xroot" "$(command -v Xwayland)" \
-    :$DISPLAY_NUM $size $decorate -nolisten tcp -nolock -pn &
+    :$DISPLAY_NUM $size $decorate -nolisten tcp -nolock -pn -noreset &
   XPID=$!
   local i
   for i in $(seq 1 60); do
