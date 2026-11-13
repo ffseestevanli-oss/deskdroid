@@ -78,4 +78,9 @@ application/vnd.oasis.opendocument.presentation=org.deskdroid.android-open.deskt
 application/zip=org.deskdroid.android-open.desktop;
 # DeskDroid packages (.adpk): Software installs them (native/plasma/software).
 application/x-deskdroid-adpk=org.deskdroid.software.desktop;
+# Flatpak's files: a .flatpakref (one Flathub app), a .flatpakrepo (a remote)
+# and a .flatpak bundle; Software installs them with the flatpak command.
+application/vnd.flatpak.ref=org.deskdroid.software.desktop;
+application/vnd.flatpak.repo=org.deskdroid.software.desktop;
+application/vnd.flatpak=org.deskdroid.software.desktop;
 application/vnd.android.package-archive=org.deskdroid.android-open.desktop;

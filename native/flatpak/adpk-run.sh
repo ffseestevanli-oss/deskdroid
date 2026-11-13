@@ -30,6 +30,8 @@ S="$F/store/apps"
 # runtime=<name>/<arch>/<branch> (Software keeps program/ but not app.json),
 # else the name it would have (org.kde.Platform/aarch64/6.11 -> runtime-kde-6.11).
 want="$(sed -n '/^\[Application\]/,/^\[/{s/^runtime *= *//p}' "$meta" | head -n 1)"
+# x86-64 apps (a runtime for x86_64) run through FEX-Emu (fex-run.sh).
+ARCH="$(echo "$want" | cut -d/ -f2)"
 RTPKG=""
 for m in "$S"/runtime-*/program/metadata; do
   [ -e "$m" ] || continue
@@ -39,11 +41,18 @@ done
 if [ -z "$RTPKG" ]; then
   n="${want%%/*}"; n="${n%.Platform}"; n="${n##*.}"
   RTPKG="runtime-$(echo "$n" | tr 'A-Z' 'a-z')-${want##*/}"
+  [ "$ARCH" = x86_64 ] && RTPKG="$RTPKG-x86_64"
 fi
 # Mesa and the codecs: whichever runtime-mesa-* is installed (the newest).
 MESAPKG=""
-for d in "$S"/runtime-mesa-*; do [ -e "$d/app.txt" ] && MESAPKG="${d##*/}"; done
-[ -n "$MESAPKG" ] || MESAPKG=runtime-mesa-25.08
+if [ "$ARCH" = x86_64 ]; then
+  # An x86-64 Mesa package if there is one (runtime-mesa-*-x86_64); the
+  # ARM64 one is no use to an x86 program.
+  for d in "$S"/runtime-mesa-*x86_64*; do [ -e "$d/app.txt" ] && MESAPKG="${d##*/}"; done
+else
+  for d in "$S"/runtime-mesa-*; do case "$d" in *x86_64*) continue ;; esac; [ -e "$d/app.txt" ] && MESAPKG="${d##*/}"; done
+  [ -n "$MESAPKG" ] || MESAPKG=runtime-mesa-25.08
+fi
 LOG="$S/$SID/run.log"
 exec 2>"$LOG"
 
@@ -95,7 +104,7 @@ fi
 
 # The runtime and Mesa are packages of their own.
 missing=""
-for need in "$RTPKG" "$MESAPKG"; do
+for need in "$RTPKG" $MESAPKG; do
   [ -e "$S/$need/app.txt" ] || missing="$missing $need"
 done
 if [ -n "$missing" ]; then
@@ -131,14 +140,14 @@ setup() {
 }
 setup "$P"
 setup "$S/$RTPKG/program"
-setup "$S/$MESAPKG/program"
+[ -n "$MESAPKG" ] && setup "$S/$MESAPKG/program"
 
 cmd="$CMD"
 case "$1" in --dd-command=*) cmd="${1#--dd-command=}"; shift ;; esac
 
 APP="$P/files"
 RT="$S/$RTPKG/program/files"
-GL="$S/$MESAPKG/program/gl"
+GL="${MESAPKG:+$S/$MESAPKG/program/gl}"
 CX="$S/$MESAPKG/program/codecs-extra"
 
 G="${DESKDROID_GLIBC_RUN:-}"
@@ -308,7 +317,13 @@ echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-no runtime}, $gpu)" 
 # program the app starts (a script, zypak, an ELF program). Not exec'd: the
 # launcher waits, so a failure gets the crash dialog. Closing normally (0) or
 # being told to stop (SIGHUP, SIGINT, SIGTERM: 129, 130, 143) isn't a failure.
-$G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
+if [ "$ARCH" = x86_64 ]; then
+  guest="$(sed -n '/^\[Environment\]/,/^\[/{s/^LD_LIBRARY_PATH *= *//p}' "$meta" | head -n 1)"
+  FEXRUN_ID="$SID" FEXRUN_APP="$APP" FEXRUN_RT="$RT" FEXRUN_GL="$GL" FEXRUN_LIBPATH="$guest" \
+    "${DESKDROID_SH:-/system/bin/sh}" "$L/libdd_flatpak_fex.so" "$cmd" "$@"
+else
+  $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
+fi
 st=$?
 case "$st" in
   0|129|130|143) ;;
