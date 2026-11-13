@@ -941,6 +941,11 @@ EXPORT int eaccess(const char *path, int mode) { return faccessat(AT_FDCWD, path
 #endif
 static char sigsys_log[PATH_MAX];       /* the numbers, one a line, as glibc's loader notes them */
 static unsigned char sigsys_seen[128];  /* calls already in the journal */
+static int sigsys_on;                   /* on_sigsys is installed */
+/* The SIGSYS action the program asked for. It is recorded rather than
+ * installed (see the wrappers after catch_sigsys), and on_sigsys passes it
+ * any SIGSYS that seccomp did not send. */
+static struct sigaction prog_sigsys;
 
 static size_t put_num(char *p, unsigned long v) {
     char t[24];
@@ -982,6 +987,12 @@ static void on_sigsys(int sig, siginfo_t *si, void *ctx) {
 #endif
     /* Sent by kill() rather than seccomp (SYS_SECCOMP, 1): no call to make,
      * just ENOSYS as glibc's loader answers (its test sends one that way). */
+    if (si->si_code != 1 && prog_sigsys.sa_handler != SIG_DFL && prog_sigsys.sa_handler != SIG_IGN) {
+        errno = e;
+        if (prog_sigsys.sa_flags & SA_SIGINFO) prog_sigsys.sa_sigaction(sig, si, ctx);
+        else prog_sigsys.sa_handler(sig);
+        return;
+    }
     long nr = si->si_code == 1 ? si->si_syscall : -1, ret = -ENOSYS;
     const char *as = NULL;
     switch (nr) {
@@ -1078,6 +1089,9 @@ static void on_sigsys(int sig, siginfo_t *si, void *ctx) {
     errno = e;
 }
 
+typedef long (*syscall_fn)(long, ...);
+static syscall_fn real_syscall;
+
 static void catch_sigsys(void) {
     const char *off = getenv("DDMASK_SIGSYS");
     if (off && *off == '0') return;
@@ -1086,8 +1100,109 @@ static void catch_sigsys(void) {
     struct sigaction sa;
     memset(&sa, 0, sizeof sa);
     sa.sa_sigaction = on_sigsys;
-    sa.sa_flags = SA_SIGINFO;
-    sigaction(SIGSYS, &sa, NULL);
+    sa.sa_flags = SA_SIGINFO | SA_NODEFER;
+    typedef int (*sigaction_fn)(int, const struct sigaction *, struct sigaction *);
+    sigaction_fn real = (sigaction_fn)dlsym(RTLD_NEXT, "sigaction");
+    real_syscall = (syscall_fn)dlsym(RTLD_NEXT, "syscall");
+    if (real && real(SIGSYS, &sa, &prog_sigsys) == 0) sigsys_on = 1;
+}
+
+/*
+ * Keeping the handler. A program that sets its own SIGSYS handler (FEX-Emu
+ * takes every signal for the x86 program it runs) would otherwise replace
+ * on_sigsys, and the next blocked call, such as set_robust_list in a new
+ * thread, would reach that handler as a signal for the program and kill it
+ * ("Bad system call"). So while on_sigsys is installed, setting SIGSYS only
+ * records the program's handler, and blocking SIGSYS leaves it unblocked,
+ * since a blocked seccomp SIGSYS kills the process outright. This covers
+ * sigaction, signal, sigprocmask, pthread_sigmask and syscall() for
+ * rt_sigaction and rt_sigprocmask, which is how FEX makes them.
+ */
+struct k_sigaction { void *handler; unsigned long flags; void *restorer; unsigned long mask; };
+#define SIGSYS_BIT (1UL << (SIGSYS - 1))
+
+static void record_sigsys(const struct sigaction *act, struct sigaction *old) {
+    if (old) *old = prog_sigsys;
+    if (act) prog_sigsys = *act;
+}
+
+EXPORT long syscall(long nr, ...) {
+    va_list ap;
+    va_start(ap, nr);
+    long a[6];
+    for (int i = 0; i < 6; i++) a[i] = va_arg(ap, long);
+    va_end(ap);
+    if (!real_syscall) real_syscall = (syscall_fn)dlsym(RTLD_NEXT, "syscall");
+    if (sigsys_on && nr == SYS_rt_sigaction && a[0] == SIGSYS) {
+        const struct k_sigaction *act = (const struct k_sigaction *)a[1];
+        struct k_sigaction *old = (struct k_sigaction *)a[2];
+        if (old) {
+            memset(old, 0, sizeof *old);
+            old->handler = prog_sigsys.sa_handler == SIG_DFL ? NULL : (void *)prog_sigsys.sa_handler;
+            old->flags = (unsigned long)(unsigned int)prog_sigsys.sa_flags;
+            memcpy(&old->mask, &prog_sigsys.sa_mask, sizeof old->mask);
+        }
+        if (act) {
+            struct sigaction sa;
+            memset(&sa, 0, sizeof sa);
+            sa.sa_handler = (void (*)(int))act->handler;
+            sa.sa_flags = (int)act->flags;
+            memcpy(&sa.sa_mask, &act->mask, sizeof act->mask);
+            prog_sigsys = sa;
+        }
+        return 0;
+    }
+    if (sigsys_on && nr == SYS_rt_sigprocmask && a[1] && a[0] != SIG_UNBLOCK) {
+        unsigned long set = *(const unsigned long *)a[1] & ~SIGSYS_BIT;
+        return real_syscall(nr, a[0], (long)&set, a[2], a[3], a[4], a[5]);
+    }
+    return real_syscall(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+}
+
+EXPORT int sigaction(int sig, const struct sigaction *act, struct sigaction *old) {
+    typedef int (*fn)(int, const struct sigaction *, struct sigaction *);
+    static fn real;
+    if (!real) real = (fn)dlsym(RTLD_NEXT, "sigaction");
+    if (sigsys_on && sig == SIGSYS) { record_sigsys(act, old); return 0; }
+    return real(sig, act, old);
+}
+
+EXPORT sighandler_t signal(int sig, sighandler_t h) {
+    typedef sighandler_t (*fn)(int, sighandler_t);
+    static fn real;
+    if (!real) real = (fn)dlsym(RTLD_NEXT, "signal");
+    if (sigsys_on && sig == SIGSYS) {
+        struct sigaction sa, old;
+        memset(&sa, 0, sizeof sa);
+        sa.sa_handler = h;
+        sa.sa_flags = SA_RESTART;
+        record_sigsys(&sa, &old);
+        return old.sa_handler;
+    }
+    return real(sig, h);
+}
+
+static const sigset_t *keep_sigsys(int how, const sigset_t *set, sigset_t *copy) {
+    if (!sigsys_on || !set || how == SIG_UNBLOCK || !sigismember(set, SIGSYS)) return set;
+    *copy = *set;
+    sigdelset(copy, SIGSYS);
+    return copy;
+}
+
+EXPORT int sigprocmask(int how, const sigset_t *set, sigset_t *old) {
+    typedef int (*fn)(int, const sigset_t *, sigset_t *);
+    static fn real;
+    if (!real) real = (fn)dlsym(RTLD_NEXT, "sigprocmask");
+    sigset_t copy;
+    return real(how, keep_sigsys(how, set, &copy), old);
+}
+
+EXPORT int pthread_sigmask(int how, const sigset_t *set, sigset_t *old) {
+    typedef int (*fn)(int, const sigset_t *, sigset_t *);
+    static fn real;
+    if (!real) real = (fn)dlsym(RTLD_NEXT, "pthread_sigmask");
+    sigset_t copy;
+    return real(how, keep_sigsys(how, set, &copy), old);
 }
 #endif
 

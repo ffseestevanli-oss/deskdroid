@@ -2,6 +2,8 @@
  * way Android's seccomp filter does (SIGSYS), then makes them. */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <pthread.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
@@ -28,7 +30,36 @@
 
 #define TRAP(nr) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (nr), 0, 1), BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_TRAP)
 
-int main(void) {
+/* "own": the program takes SIGSYS itself, as FEX-Emu does with raw
+ * rt_sigaction and rt_sigprocmask calls, then makes a blocked call from a new
+ * thread and sends itself a SIGSYS. */
+static volatile int own_got;
+static void own_handler(int sig) { (void)sig; own_got++; }
+struct k_sa { void *h; unsigned long flags; void *restorer; unsigned long mask; };
+static void *own_thread(void *x) {
+    unsigned cpu;
+    long r = syscall(SYS_getcpu, &cpu, NULL, NULL);
+    printf("own-thread-getcpu=%ld/%s\n", r, r < 0 ? strerror(errno) : "ok");
+    return x;
+}
+static void own(void) {
+    struct k_sa sa = { (void *)own_handler, 0x10000000 /* SA_RESTART */, NULL, 0 }, old;
+    syscall(SYS_rt_sigaction, SIGSYS, &sa, &old, 8);
+    unsigned long all = ~0UL;
+    syscall(SYS_rt_sigprocmask, SIG_BLOCK, &all, NULL, 8);
+    pthread_t t;
+    pthread_create(&t, NULL, own_thread, NULL);
+    pthread_join(t, NULL);
+    unsigned long none = 0;
+    syscall(SYS_rt_sigprocmask, SIG_SETMASK, &none, NULL, 8);
+    struct sigaction now;
+    sigaction(SIGSYS, NULL, &now);
+    printf("own-handler-kept=%s\n", now.sa_handler == own_handler ? "yes" : "no");
+    kill(getpid(), SIGSYS);
+    printf("own-kill-reached=%d\n", own_got);
+}
+
+int main(int argc, char **argv) {
     struct sock_filter f[] = {
         BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
         TRAP(SYS_faccessat2),
@@ -70,5 +101,6 @@ int main(void) {
     unsigned cpu;
     r = syscall(SYS_getcpu, &cpu, NULL, NULL);
     printf("getcpu=%ld/%s\n", r, r < 0 ? strerror(errno) : "ok");
+    if (argc > 1 && !strcmp(argv[1], "own")) own();
     return 0;
 }

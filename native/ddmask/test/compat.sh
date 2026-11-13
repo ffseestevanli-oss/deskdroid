@@ -14,7 +14,7 @@ mkdir -p "$T/lib" "$T/app/bin" "$T/glib"
 # Its glibc build, in a folder of its own so the bionic one isn't its partner.
 "$CC" -O2 -Wall -shared -fPIC -DDDMASK_GLIBC "$HERE/../ddmask.c" -o "$T/glib/libddmask_glibc.so" -ldl
 "$CC" -O2 -Wall "$HERE/probe.c" -o "$T/app/bin/probe"
-"$CC" -O2 -Wall "$HERE/sigsys-probe.c" -o "$T/app/bin/sigsys-probe"
+"$CC" -O2 -Wall "$HERE/sigsys-probe.c" -o "$T/app/bin/sigsys-probe" -lpthread
 cp "$T/app/bin/probe" "$T/app/bin/nox"
 printf '#!/bin/sh\necho "nox-script $*"\n' > "$T/app/bin/noxscript"
 echo "just text" > "$T/app/bin/notes"
@@ -85,5 +85,8 @@ expect "set*id calls that change nothing succeed, others get EPERM" "$out" "^set
 expect "...the rest fail with ENOSYS" "$out" "^getcpu=-1/Function not implemented$"
 expect "...noted in the journal" "$(cat "$J")" "Android blocks system call [0-9]+, made as faccessat" "Android blocks system call [0-9]+, failed with ENOSYS"
 expect "...and in sigsys.log, by number" "$(sort -un "$T/sigsys.log" | tr '\n' ' ')" "^[0-9]+ [0-9]+ [0-9]+ [0-9]+ [0-9]+ [0-9]+ $"
+out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so" DDMASK_JOURNAL="$J" "$T/app/bin/sigsys-probe" own 2>&1)"
+expect "a program with its own SIGSYS handler still gets ENOSYS, from any thread" "$out" "^own-thread-getcpu=-1/Function not implemented$"
+expect "...sees its handler as set, and gets the SIGSYS it sends itself" "$out" "^own-handler-kept=yes$" "^own-kill-reached=1$"
 
 [ "$fails" -eq 0 ] && echo "all compatibility tests passed" || { echo "$fails failed"; exit 1; }
