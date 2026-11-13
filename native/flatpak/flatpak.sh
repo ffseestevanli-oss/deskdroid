@@ -66,6 +66,11 @@ cli() {
   # ARM test that installed from Flathub; ddmask only sees the loader.
   export DDFLATPAK_LOADER="$L/libdd_ld-glibc.so" DDFLATPAK_LIBPATH="$DDMASK_GLIBC_LD_LIBRARY_PATH"
   export FLATPAK_BWRAP="$L/libdd_nobwrap.so" GIO_USE_VFS=local GSETTINGS_BACKEND=memory
+  # gpgme finds gpgconf (and through it gpg) by searching PATH, and the
+  # desktop's PATH has no /usr/bin: without it gpgme decides there's no
+  # OpenPGP engine ("Invalid crypto engine") and no remote can be added.
+  # ddflatpak maps /usr/bin to Flatpak's own programs here.
+  case ":$PATH:" in *:/usr/bin:*) ;; *) export PATH="$PATH:/usr/bin" ;; esac
   # Helpers that can't start are noted here (gpgme hides their errors).
   export DDMASK_LOG="$F/glibc/exec.log"
   rm -f "$F/glibc/sigsys.log" "$DDMASK_LOG"
