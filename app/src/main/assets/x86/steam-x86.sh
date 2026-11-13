@@ -67,10 +67,12 @@ setup() {
 # Xwayland as one window on the desktop, unless it's already up.
 start_x() {
   export DISPLAY=:$DISPLAY_NUM
-  # No /tmp/.X11-unix here (see clean_env): Xwayland listens on its abstract
-  # socket, which X clients try first, and keeps no lock file. -pn: the X
+  # No /tmp here (see clean_env): Xwayland listens on its abstract socket,
+  # which X clients try first, and keeps no lock file (-nolock). -pn: the X
   # server stops when one of its sockets fails (the /tmp one always does
-  # here) unless it's told to carry on with the others.
+  # here) unless it's told to carry on with the others. -nolock works only
+  # for root: deskdroid-xroot.so makes Xwayland see itself as root (it changes
+  # nothing else; the source is fex/xroot.c).
   if xdpyinfo >/dev/null 2>&1; then
     return 0
   fi
@@ -81,8 +83,14 @@ start_x() {
   local decorate=""
   Xwayland -help 2>&1 | grep -q -- '-decorate' && decorate="-decorate"
   say "starting Xwayland :$DISPLAY_NUM ($geometry)"
+  local xroot="${DESKDROID_X86:-$(dirname "$0")/..}/bin/deskdroid-xroot.so"
+  [ -f "$xroot" ] || say "no $xroot: Xwayland will stop at its lock file"
+  [ -n "${XDG_RUNTIME_DIR:-}" ] || export XDG_RUNTIME_DIR="$TMPDIR"
+  # Through the x86 loader (--preload) rather than LD_PRELOAD, which FEX would
+  # pass on to Android's side too.
   # shellcheck disable=SC2086
-  Xwayland :$DISPLAY_NUM $size $decorate -nolisten tcp -nolock -pn &
+  /lib64/ld-linux-x86-64.so.2 --preload "$xroot" "$(command -v Xwayland)" \
+    :$DISPLAY_NUM $size $decorate -nolisten tcp -nolock -pn &
   XPID=$!
   local i
   for i in $(seq 1 60); do
