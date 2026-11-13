@@ -137,6 +137,17 @@ edit(ls, '#include "layershellv1integration.h"\n', '#include "layershellv1integr
 edit(ls, "        QRect workArea = output->geometry();\n",
      "        QRect workArea = output->geometry().marginsRemoved(deskdroidSafeMargins(output)); // DeskDroid\n")
 
+# Windows dodge the cutouts too, in landscape only (where the camera cutout
+# and rounded corners are at the sides): what maximized windows and window
+# placement get is the screen less the panels' margins (deskdroidWindowMargins,
+# 0 in portrait or with dodging off).
+ws = "src/workspace.cpp"
+edit(ws, '#include "workspace.h"\n',
+     '#include "workspace.h"\n#include <QMargins>\n'
+     'namespace KWin { class Output; QMargins deskdroidWindowMargins(const Output *output); }\n')
+edit(ws, "            screenAreas[desktop][output] = output->geometryF();\n",
+     "            screenAreas[desktop][output] = output->geometryF().marginsRemoved(deskdroidWindowMargins(output)); // DeskDroid\n")
+
 edit("src/backends/CMakeLists.txt", "add_subdirectory(virtual)", "add_subdirectory(virtual)\nadd_subdirectory(nativedesk)")
 m = "src/main_wayland.cpp"
 edit(m, '#include "backends/virtual/virtual_backend.h"\n',
