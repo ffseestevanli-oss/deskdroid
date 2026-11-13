@@ -42,7 +42,8 @@ env | sort
 L
 chmod +x "$T/loader"
 run() {
-  env -i HOME="$T/home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$T/run" QT_PLUGIN_PATH=/desktop/plugins DDAPP_PROGRAM="$S/$1/program" \
+  env -i HOME="$T/home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$T/run" XDG_CONFIG_HOME="$T/desk-config" \
+    XDG_DATA_DIRS="$T/desk-share" XDG_CONFIG_DIRS="$T/desk-xdg" QT_QPA_PLATFORMTHEME=deskdroid QT_PLUGIN_PATH=/desktop/plugins DDAPP_PROGRAM="$S/$1/program" \
     DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$T/loader" sh "$HERE/../adpk-run.sh" "${@:2}"
 }
 out="$(run kid3 --dd-command=kid3-cli a b)"
@@ -54,7 +55,13 @@ expect "the runtime's [Environment] replaces the desktop's Qt settings" "$out" \
   "^QT_PLUGIN_PATH=/app/lib/plugins:/usr/share/runtime/lib/plugins$" "^KDE_FORK_SLAVES=1$" "^TMPDIR=/var/tmp$"
 expect "the app's own paths" "$out" "^PATH=/app/bin:/usr/bin$" "^FLATPAK_ID=org.kde.kid3$" "^ELECTRON_OZONE_PLATFORM_HINT=wayland$" \
   "^DDMASK_GLIBC_LD_LIBRARY_PATH=.*$S/kid3/program/files/lib/extra" "^DDFLATPAK_RUNTIME=$S/runtime-kde-6.11/program/files$"
-expect "makes its data folders" "$(ls "$T/home/.var/app/org.kde.kid3")" "^config$" "^data$"
+expect "the home folder as on Linux: the desktop's settings folder, ~/.local/share" "$out" \
+  "^XDG_CONFIG_HOME=$T/desk-config$" "^XDG_DATA_HOME=$T/home/.local/share$" "^XDG_CACHE_HOME=$T/home/.cache$"
+expect "the desktop's theme: KDE's platform theme, its data and settings folders after the runtime's" "$out" \
+  "^QT_QPA_PLATFORMTHEME=kde$" "^XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share:$T/desk-share$" \
+  "^XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg:$T/desk-xdg$"
+expect "Android's fonts beside the runtime's" "$(cat "$F/flatpak-tmp/fonts.conf")" "<include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>" "<dir>/system/fonts</dir>"
+expect "full FFmpeg (codecs-extra) ahead of the runtime's" "$out" "^DDMASK_GLIBC_LD_LIBRARY_PATH=$F/glibc/lib:$S/kid3/program/files/lib:$S/runtime-mesa-25.08/program/codecs-extra/lib:"
 if [ -r /proc/version ]; then
   expect "a readable /proc/version is left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?$"
 fi

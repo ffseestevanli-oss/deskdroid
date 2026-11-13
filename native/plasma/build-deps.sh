@@ -354,7 +354,8 @@ build_qtsensors() { qt_module qtsensors; }
 # have (Sasha's music, Gwenview's videos): nothing goes through Android's
 # media service, so the desktop plays on its own, beside Android's apps.
 # Software decoders for common audio and video, no programs, no network, no
-# encoders, no MediaCodec (that is Android's media service too).
+# encoders, no MediaCodec (that is Android's media service too). The few
+# filters Dolphin's video thumbnails use (ffmpegthumbs: buffer, yadif).
 # Static, in a folder of its own: it goes into Qt's FFmpeg plugin, and other
 # recipes' pkg-config doesn't find it (GEGL would pick it up).
 build_ffmpeg() {
@@ -372,11 +373,11 @@ build_ffmpeg() {
     --prefix="$PREFIX/ffmpeg" --target-os=android --arch=aarch64 --cpu=armv8-a --enable-cross-compile \
     --cc="$CC" --cxx="$CXX" --nm="$BIN/llvm-nm" --ar="$BIN/llvm-ar" --ranlib="$BIN/llvm-ranlib" --strip="$BIN/llvm-strip" \
     --enable-static --disable-shared --enable-pic --extra-cflags=-fvisibility=hidden --disable-programs --disable-doc \
-    --disable-avdevice --disable-avfilter --disable-postproc --disable-network \
+    --disable-avdevice --disable-postproc --disable-network \
     --disable-autodetect --enable-pthreads --enable-zlib --enable-jni \
     --disable-everything --enable-decoder="$dec" --enable-demuxer="$dmx" \
     --enable-parser=mpegaudio,aac,aac_latm,flac,vorbis,opus,ac3,dca,mlp,mjpeg,png,gif,webp,h264,hevc,vp8,vp9,mpeg4video,mpegvideo,h263,vc1 \
-    --enable-protocol=file,pipe && make -j"$JOBS" && make install)
+    --enable-protocol=file,pipe --enable-filter=buffer,buffersink,yadif,scale,format,null && make -j"$JOBS" && make install)
   test -e "$PREFIX/ffmpeg/lib/libavcodec.a"
   test -e "$PREFIX/ffmpeg/lib/libswscale.a"
 }
@@ -983,8 +984,16 @@ build_kcms_desktop() {
   done
 }
 inputs_kcms_desktop() { cat "$HERE"/desktopkcms/*; }
+# TagLib: audio files' tags and cover art, for kio-extras' audio thumbnails
+# (album art on music files in Dolphin). The release tarball has utfcpp.
+build_taglib() {
+  local s; s="$(unpack https://github.com/taglib/taglib/releases/download/v2.1.1/taglib-2.1.1.tar.gz taglib-2.1.1.tar.gz)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DBUILD_BINDINGS=OFF -DWITH_ZLIB=ON
+  test -e "$PREFIX/lib/libtag.so"
+}
 # Thumbnails (Dolphin, the wallpaper picker): kio-extras' thumbnail worker
-# and its thumbnailers only; the rest of kio-extras isn't needed.
+# and its thumbnailers only; the rest of kio-extras isn't needed. With TagLib,
+# music files show their cover art (audiothumbnail).
 build_kio_extras() {
   local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/kio-extras-$GEAR_VERSION.tar.xz" "kio-extras-$GEAR_VERSION.tar.xz")"
   perl -0pi -e 's/\n    DNSSD\n/\n/ or die "dnssd"; s/find_package\(QCoro6 REQUIRED COMPONENTS Core\)\nqcoro_enable_coroutines\(\)\n// or die "qcoro"; s/^add_subdirectory\(kcms\)\n.*?(?=^if\(BUILD_DOC\)\n    add_subdirectory\(doc\))/add_subdirectory(thumbnail)\n\n/ms or die "subdirs"' "$s/CMakeLists.txt"
@@ -1010,7 +1019,28 @@ PY
   KEEP_GOING=1 kde_cmake "$s" -DWITHOUT_X11=ON -DBUILD_DOC=OFF -DUSE_DBUS=ON -DBUILD_ACTIVITIES=OFF
   test -e "$PREFIX/plugins/kf6/kio/thumbnail.so"
   test -e "$PREFIX/plugins/kf6/thumbcreator/imagethumbnail.so"
+  test -e "$PREFIX/plugins/kf6/thumbcreator/audiothumbnail.so"
 }
+inputs_kio_extras() { declare -f build_taglib; }
+# Video thumbnails in Dolphin (ffmpegthumbs), on the desktop's own FFmpeg
+# (static, linked in, as in Qt's FFmpeg plugin).
+build_ffmpegthumbs() {
+  local s; s="$(unpack "https://download.kde.org/stable/release-service/$GEAR_VERSION/src/ffmpegthumbs-$GEAR_VERSION.tar.xz" "ffmpegthumbs-$GEAR_VERSION.tar.xz")"
+  # Asked for by ID, like kio-extras' thumbnailers (see build_kio_extras).
+  python3 - "$s/ffmpegthumbs.json" <<'PY'
+import json, pathlib, sys
+f = pathlib.Path(sys.argv[1]); d = json.loads(f.read_text())
+d.setdefault("KPlugin", {})["Id"] = "ffmpegthumbs"
+f.write_text(json.dumps(d, indent=4) + "\n")
+PY
+  # FFmpeg's static libraries need zlib and libm after them.
+  echo 'target_link_libraries(ffmpegthumbs z m)' >> "$s/CMakeLists.txt"
+  unandroid "$s"
+  # FindFFmpeg falls back to find_path/find_library: FFmpeg's own prefix first.
+  kde_cmake "$s" -DCMAKE_PREFIX_PATH="$PREFIX/ffmpeg;$PREFIX"
+  test -e "$PREFIX/plugins/kf6/thumbcreator/ffmpegthumbs.so"
+}
+inputs_ffmpegthumbs() { declare -f build_ffmpeg; }
 # KWrite: KDE's text editor, from Kate's sources without Kate and its
 # plugins. KSyntaxHighlighting builds its indexer for the host itself.
 build_syntax_highlighting() {
@@ -1620,7 +1650,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
      kxmlgui kstatusnotifieritem plasma_activities libplasma layer_shell_qt kitemmodels kdeclarative kcmutils plasma5support
      sonnet ktextwidgets kparts attica syndication knewstuff aurorae krunner plasma_activities_stats kirigami_addons qqc2_desktop_style plasma_integration plasmashell plasma_desktop_packages plasma_desktop_folder plasma_desktop_taskmanager mime_stubs app_menu kfilemetadata breeze_icons kcmutils_host dolphin
-     syntax_highlighting kio_extras ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
+     syntax_highlighting taglib kio_extras ffmpegthumbs ktexteditor kwrite libjpeg_turbo libpng exiv2 gwenview gmp mpfr mpc kcalc icu kpty knotifyconfig konsole
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
      curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp
