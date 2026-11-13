@@ -51,6 +51,11 @@ out="$(run "$APP/bin/probe" "exec:/usr/bin/rtprobe" /app/share/probe/data)"
 expect "a program at /usr/bin starts through the loader" "$out" \
   "argv0=child exe=$RT/bin/rtprobe" "/app/share/probe/data fopen=app-data"
 
+# Chromium overwrites the environment's old memory with its process title.
+out="$(run "$APP/bin/probe" clobber-env "exec:/usr/bin/rtprobe" /app/share/probe/data)"
+expect "programs started after the environment's memory is overwritten still go through the loader" "$out" \
+  "argv0=child exe=$RT/bin/rtprobe" "/app/share/probe/data fopen=app-data"
+
 # Chromium (Electron) finds its files next to /proc/self/exe and execs it.
 out="$(run "$LOADER" "$APP/bin/probe")"
 expect "/proc/self/exe names the program, not the loader" "$out" "exe=$APP/bin/probe"

@@ -56,11 +56,17 @@ static int n_mounts;
 static char self_exe[PATH_MAX];
 
 __attribute__((constructor)) static void ddflatpak_init(void) {
-    env_app = getenv("DDFLATPAK_APP");
-    env_rt = getenv("DDFLATPAK_RUNTIME");
-    env_tmp = getenv("DDFLATPAK_TMP");
-    env_loader = getenv("DDFLATPAK_LOADER");
-    env_libpath = getenv("DDFLATPAK_LIBPATH");
+    /* Copies: Chromium (Electron) sets its process title by writing over
+     * the memory the environment came in, after moving the variables, so
+     * pointers into it would later read the title (helpers then started as
+     * "/data/data/io.de"). */
+#define ENV_COPY(n) (getenv(n) ? strdup(getenv(n)) : NULL)
+    env_app = ENV_COPY("DDFLATPAK_APP");
+    env_rt = ENV_COPY("DDFLATPAK_RUNTIME");
+    env_tmp = ENV_COPY("DDFLATPAK_TMP");
+    env_loader = ENV_COPY("DDFLATPAK_LOADER");
+    env_libpath = ENV_COPY("DDFLATPAK_LIBPATH");
+#undef ENV_COPY
     debug = getenv("DDFLATPAK_DEBUG") != NULL;
     const char *ms = getenv("DDFLATPAK_MOUNTS");
     if (ms) {
