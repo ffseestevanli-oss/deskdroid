@@ -29,17 +29,30 @@ PartyPage {
     ]
     readonly property var tab: tabs.find(t => t.id === current) || tabs[0]
 
-    // All of Flathub (backend.flathub, FlathubCatalog.kt): Flathub's own
-    // main categories, searched as the search field changes.
+    // All of Flathub (backend.flathub, FlathubCatalog.kt). The tab opens on
+    // a grid of categories; picking one, or searching, lists apps. "native"
+    // and "fex" are Agora's own: apps with an ARM64 build, and apps Flathub
+    // only builds for x86-64 (FEX runs those).
     readonly property var categories: [
-        { id: "", label: "Popular" }, { id: "AudioVideo", label: "Audio & Video" },
-        { id: "Development", label: "Developer" }, { id: "Education", label: "Education" },
-        { id: "Game", label: "Games" }, { id: "Graphics", label: "Graphics" },
-        { id: "Network", label: "Internet" }, { id: "Office", label: "Office" },
-        { id: "Science", label: "Science" }, { id: "System", label: "System" },
-        { id: "Utility", label: "Utilities" },
+        { id: "popular", label: "Popular", subtitle: "What people install most", icon: "starred-symbolic", accent: Party.pink },
+        { id: "native", label: "Runs natively", subtitle: "ARM64 builds, at full speed", icon: "cpu", accent: Party.green },
+        { id: "fex", label: "Through FEX", subtitle: "x86-64 only, translated as they run", icon: "application-x-executable", accent: Party.orange },
+        { id: "AudioVideo", label: "Audio & Video", subtitle: "Players, editors, music", icon: "applications-multimedia", accent: Party.cyan },
+        { id: "Development", label: "Developer Tools", subtitle: "Editors, IDEs, git", icon: "applications-development", accent: Party.purple },
+        { id: "Education", label: "Education", subtitle: "Learn, teach, study", icon: "applications-education", accent: Party.yellow },
+        { id: "Game", label: "Games", subtitle: "Play, and game launchers", icon: "applications-games", accent: Party.red },
+        { id: "Graphics", label: "Graphics", subtitle: "Draw, paint, photos, 3D", icon: "applications-graphics", accent: Party.pink },
+        { id: "Network", label: "Internet", subtitle: "Browsers, chat, mail", icon: "applications-internet", accent: Party.cyan },
+        { id: "Office", label: "Office", subtitle: "Documents, notes, finance", icon: "applications-office", accent: Party.green },
+        { id: "Science", label: "Science", subtitle: "Maths, astronomy, data", icon: "applications-science", accent: Party.purple },
+        { id: "System", label: "System", subtitle: "Monitors and tools", icon: "applications-system", accent: Party.yellow },
+        { id: "Utility", label: "Utilities", subtitle: "Small helpers", icon: "applications-utilities", accent: Party.orange },
     ]
-    property string category: ""
+    property string category: ""      // "" : the grid
+    readonly property var categoryInfo: categories.find(c => c.id === category) || null
+    // The list: compact rows (the desktop's default) or the big cards.
+    property bool compactList: true
+    readonly property bool flathubListing: category !== "" || filter.trim() !== "" || installedOnly
     readonly property var flathub: backend.flathub
     readonly property var flathubResults: flathub.results || []
     readonly property var flathubShown: {
@@ -54,18 +67,29 @@ PartyPage {
                 return f === "" || (h.name + " " + h.summary + " " + h.id).toLowerCase().indexOf(f) >= 0
             })
     }
+    // Native apps first, then FEX ones, then those with no build for here.
+    function byBuild(kind) { return flathubShown.filter(h => backend.archFor(h.arches || []) === kind) }
+    readonly property var flathubSections: [
+        { kind: "", label: "RUNS NATIVELY  ·  ARM64", accent: Party.green, list: byBuild("") },
+        { kind: "x86_64", label: "THROUGH FEX  ·  X86-64 ONLY", accent: Party.orange, list: byBuild("x86_64") },
+        { kind: "none", label: "NO BUILD FOR THIS DEVICE", accent: Party.dim, list: byBuild("none") },
+    ]
+    function requestCategory() { return category === "popular" ? "" : category }
     function searchFlathub(more) {
-        const pageNo = more ? (flathub.page || 1) + 1 : 1
-        backend.searchFlathub(page.filter.trim(), page.category, pageNo)
+        if (!flathubListing || installedOnly) return
+        backend.searchFlathub(page.filter.trim(), requestCategory(), more ? (flathub.next || 2) : 1)
+    }
+    function flathubStale() {
+        return flathubResults.length === 0 || (flathub.query || "") !== filter.trim() || (flathub.category || "") !== requestCategory()
     }
     // Asked again when the tab opens with a search Flathub hasn't answered.
-    onCurrentChanged: if (current === "flathub" && (flathubResults.length === 0 || (flathub.query || "") !== filter.trim()
-                                                    || (flathub.category || "") !== category) && !flathub.loading) searchFlathub(false)
+    onCurrentChanged: if (current === "flathub" && flathubListing && flathubStale() && !flathub.loading) searchFlathub(false)
     onCategoryChanged: searchFlathub(false)
+    onInstalledOnlyChanged: if (!installedOnly && current === "flathub" && flathubStale()) searchFlathub(false)
     Timer {
         id: searchDelay
         interval: 450
-        onTriggered: if (page.current === "flathub") page.searchFlathub(false)
+        onTriggered: if (page.current === "flathub" && page.flathubStale()) page.searchFlathub(false)
     }
     onFilterChanged: searchDelay.restart()
 
@@ -151,7 +175,7 @@ PartyPage {
                     contentItem: Text {
                         id: tabLabel
                         text: modelData.label
-                            + (tabButton.list.length ? "  " + tabButton.list.length : "")
+                            + (tabButton.list.length && modelData.id !== "flathub" ? "  " + tabButton.list.length : "")
                             + (tabButton.updates ? "  ·  " + tabButton.updates + " ↑" : "")
                         font.family: Party.heading
                         font.weight: Font.Black
@@ -267,13 +291,13 @@ PartyPage {
         }
         // Flathub: the packages DeskDroid tested, first.
         Text {
-            visible: page.current === "flathub" && page.shown.length > 0
+            visible: page.current === "flathub" && page.shown.length > 0 && page.category === ""
             text: "—  TESTED ON DESKDROID  —"
             font.family: Party.heading; font.weight: Font.Black; font.pixelSize: 14; font.letterSpacing: 3
             color: Party.green
         }
         Repeater {
-            model: page.current === "about" ? [] : page.shown
+            model: page.current === "about" || (page.current === "flathub" && page.category !== "") ? [] : page.shown
             AppRow {
                 Layout.fillWidth: true
                 app: modelData
@@ -282,36 +306,12 @@ PartyPage {
             }
         }
 
-        // Flathub: all of it.
+        // Flathub: the category grid, or a list.
         ColumnLayout {
             visible: page.current === "flathub"
             Layout.fillWidth: true
-            Layout.topMargin: 8
             spacing: 14
-            Text {
-                text: page.installedOnly ? "—  INSTALLED FROM FLATHUB  —"
-                    : page.filter.trim() !== "" ? "—  ALL OF FLATHUB: \"" + page.filter.trim().toUpperCase() + "\"  —"
-                    : "—  ALL OF FLATHUB  —"
-                font.family: Party.heading; font.weight: Font.Black; font.pixelSize: 14; font.letterSpacing: 3
-                color: Party.cyan
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-            Flow {
-                visible: !page.installedOnly
-                Layout.fillWidth: true
-                spacing: 8
-                Repeater {
-                    model: page.categories
-                    PartyButton {
-                        compact: true
-                        text: modelData.label
-                        accent: page.category === modelData.id ? Party.green : Party.border
-                        textColor: page.category === modelData.id ? Party.green : Party.text
-                        onClicked: page.category = modelData.id
-                    }
-                }
-            }
+
             Text {
                 visible: !backend.flatpakAvailable
                 text: "The flatpak command isn't on this desktop: you can look around, but installing from Flathub needs a newer DeskDroid."
@@ -320,13 +320,70 @@ PartyPage {
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
+
+            // The grid.
             Text {
-                visible: text !== ""
+                visible: !page.flathubListing
+                text: "—  BROWSE FLATHUB  —"
+                font.family: Party.heading; font.weight: Font.Black; font.pixelSize: 14; font.letterSpacing: 3
+                color: Party.cyan
+            }
+            GridLayout {
+                id: grid
+                visible: !page.flathubListing
+                Layout.fillWidth: true
+                columns: Math.max(2, Math.floor((width + columnSpacing) / (210 + columnSpacing)))
+                columnSpacing: 12
+                rowSpacing: 12
+                Repeater {
+                    model: page.categories
+                    Tile {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 210
+                        implicitHeight: 118
+                        text: modelData.label
+                        subtitle: modelData.subtitle
+                        iconName: modelData.icon
+                        accent: modelData.accent
+                        onClicked: page.category = modelData.id
+                    }
+                }
+            }
+
+            // The list: where it is, and how to show it.
+            Flow {
+                visible: page.flathubListing
+                Layout.fillWidth: true
+                spacing: 10
+                PartyButton {
+                    compact: true
+                    text: "‹  Categories"
+                    onClicked: { page.category = ""; search.text = ""; page.installedOnly = false }
+                }
+                Text {
+                    height: 34
+                    verticalAlignment: Text.AlignVCenter
+                    text: page.installedOnly ? "INSTALLED FROM FLATHUB"
+                        : (page.categoryInfo ? page.categoryInfo.label.toUpperCase() : "ALL OF FLATHUB")
+                          + (page.filter.trim() !== "" ? "  ·  \"" + page.filter.trim().toUpperCase() + "\"" : "")
+                    font.family: Party.heading; font.weight: Font.Black; font.pixelSize: 14; font.letterSpacing: 2
+                    color: page.categoryInfo ? page.categoryInfo.accent : Party.cyan
+                }
+                Item { width: 12; height: 1 }
+                PartyButton {
+                    compact: true
+                    text: page.compactList ? "▤  Compact" : "▦  Large"
+                    accent: Party.border
+                    onClicked: page.compactList = !page.compactList
+                }
+            }
+            Text {
+                visible: page.flathubListing && text !== ""
                 text: page.installedOnly ? (page.flathubShown.length === 0 ? "Nothing from Flathub is installed yet." : "")
                     : (page.flathub.error || "") !== "" ? "Couldn't reach Flathub (" + page.flathub.error + "). Check the phone's internet connection, then Refresh."
                     : backend.offline ? "DeskDroid's app isn't answering, so Flathub can't be searched right now."
-                    : page.flathub.loading && page.flathubResults.length === 0 ? "Asking Flathub…"
-                    : !page.flathub.loading && page.flathubResults.length === 0 && page.filter.trim() !== "" ? "Nothing on Flathub matches \"" + page.filter.trim() + "\"."
+                    : page.flathub.loading && (page.flathubResults.length === 0 || page.flathubStale()) ? (page.category === "fex" ? "Picking out the x86-64-only apps…" : "Asking Flathub…")
+                    : !page.flathub.loading && page.flathubResults.length === 0 ? "Nothing here matches" + (page.filter.trim() !== "" ? " \"" + page.filter.trim() + "\"." : ".")
                     : ""
                 font.family: Party.body; font.pixelSize: 15
                 color: (page.flathub.error || "") !== "" || backend.offline ? Party.orange : Party.muted
@@ -334,22 +391,38 @@ PartyPage {
                 Layout.fillWidth: true
             }
             RainbowBar {
-                visible: !page.installedOnly && page.flathub.loading === true
+                visible: page.flathubListing && !page.installedOnly && page.flathub.loading === true
                 indeterminate: true
                 Layout.fillWidth: true
             }
             Repeater {
-                model: page.current === "flathub" ? page.flathubShown : []
-                FlathubRow {
+                model: page.current === "flathub" && page.flathubListing && !(page.flathub.loading && page.flathubStale()) ? page.flathubSections : []
+                ColumnLayout {
+                    visible: modelData.list.length > 0
                     Layout.fillWidth: true
-                    hit: modelData
+                    spacing: page.compactList ? 6 : 12
+                    Text {
+                        // One heading is enough in a category that is one kind.
+                        visible: page.category !== "native" && page.category !== "fex"
+                        Layout.topMargin: 6
+                        text: "—  " + modelData.label + "  ·  " + modelData.list.length + "  —"
+                        font.family: Party.heading; font.weight: Font.Black; font.pixelSize: 13; font.letterSpacing: 2
+                        color: modelData.accent
+                    }
+                    Repeater {
+                        model: modelData.list
+                        FlathubRow {
+                            Layout.fillWidth: true
+                            hit: modelData
+                            compact: page.compactList
+                        }
+                    }
                 }
             }
             PartyButton {
-                visible: !page.installedOnly && !page.flathub.loading && page.flathubResults.length > 0
-                    && page.flathubResults.length < (page.flathub.total || 0)
+                visible: page.flathubListing && !page.installedOnly && !page.flathub.loading && (page.flathub.next || 0) > 0
                 Layout.alignment: Qt.AlignHCenter
-                text: "Show more  (" + page.flathubResults.length + " of " + page.flathub.total + ")"
+                text: "Show more" + ((page.flathub.total || 0) > 0 ? "  (" + page.flathubResults.length + " of " + page.flathub.total + ")" : "")
                 accent: Party.cyan
                 onClicked: page.searchFlathub(true)
             }

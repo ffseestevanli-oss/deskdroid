@@ -380,6 +380,7 @@ void Backend::enqueue(Job job)
         return;
     }
     m_flatpakBusy.insert(job.key, -1.0);
+    m_failures.remove(job.key);
     m_jobs.append(std::move(job));
     Q_EMIT changed();
     if (!m_proc) nextJob();
@@ -418,6 +419,8 @@ void Backend::runStep()
     });
     connect(m_proc, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
         m_output += QString::fromUtf8(m_proc->readAll());
+        log(m_output.trimmed() + QStringLiteral("\n(exit %1%2)").arg(code).arg(status == QProcess::CrashExit ? QStringLiteral(", crashed") : QString()));
+        m_proc->disconnect(this);
         m_proc->deleteLater();
         m_proc = nullptr;
         Job &job = m_jobs.first();
@@ -435,8 +438,10 @@ void Backend::runStep()
             runStep();
             return;
         }
-        if (!ok)
+        if (!ok) {
             m_flatpakError = QStringLiteral("Couldn't %1: %2").arg(job.what, flatpakError(m_output));
+            m_failures.insert(job.key, flatpakError(m_output));
+        }
         m_flatpakBusy.remove(job.key);
         auto done = job.done;
         m_jobs.removeFirst();
@@ -445,7 +450,34 @@ void Backend::runStep()
         listFlatpaks();
         nextJob();
     });
+    log(QStringLiteral("\n$ flatpak ") + args.join(QLatin1Char(' ')));
+    // A program that can't start at all (no flatpak on PATH, a bad exec):
+    // finished() never comes, so end the job here.
+    connect(m_proc, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
+        if (e != QProcess::FailedToStart || !m_proc) return;
+        m_output += QStringLiteral("error: the flatpak command couldn't start (%1)").arg(m_proc->errorString());
+        Q_EMIT m_proc->finished(-1, QProcess::CrashExit);
+    });
     m_proc->start(QStringLiteral("flatpak"), args);
+}
+
+void Backend::log(const QString &text)
+{
+    // $HOME/software/flatpak.log, the last ~256 KB (Screens.kt adds it to
+    // the saved log).
+    QFile f(stateDir() + QStringLiteral("/flatpak.log"));
+    if (f.size() > 256 * 1024) {
+        if (f.open(QIODevice::ReadOnly)) {
+            f.seek(f.size() - 128 * 1024);
+            const QByteArray keep = f.readAll();
+            f.close();
+            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { f.write(keep); f.close(); }
+        }
+    }
+    if (f.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        f.write(QDateTime::currentDateTime().toString(QStringLiteral("[yyyy-MM-dd HH:mm:ss] ")).toUtf8() + text.toUtf8() + '\n');
+        f.close();
+    }
 }
 
 QString Backend::flatpakError(const QString &output) const

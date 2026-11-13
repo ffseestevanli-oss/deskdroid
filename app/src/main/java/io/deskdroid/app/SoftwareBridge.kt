@@ -20,7 +20,8 @@ import java.util.concurrent.Executors
  *   adpk:<path>         install the .adpk at <path>
  *   flathub:<category>:<page>:<query>
  *                       a page of all of Flathub (FlathubCatalog): state.json's
- *                       "flathub". No category and no query: the popular list.
+ *                       "flathub". No category and no query: the popular list;
+ *                       category "native" (ARM64 builds) or "fex" (x86-64 only).
  *                       Installing those is the desktop's flatpak command, which
  *                       Agora runs itself (backend.cpp), so nothing else here.
  *
@@ -29,7 +30,8 @@ import java.util.concurrent.Executors
  * needs, neededBy, neededByInstalled (names of the apps that need it)}],
  * "busy": {id: progress 0..1 or -1}, "error": "...", "catalogError": "...",
  * "package": {path, id, name, summary, version, installed, icon} or absent,
- * "flathub": {category, query, page, total, loading, error, results: [{id, name,
+ * "flathub": {category, query, page, next (the page "Show more" asks for, 0 at
+ * the end), total (-1 for "fex": not known), loading, error, results: [{id, name,
  * summary, description, icon (a file, or ""), arches, developer, verified,
  * license, installs, category}]}, "serial": n}. Icons are files in
  * $HOME/software/icons (Flathub's in icons/flathub).
@@ -161,7 +163,8 @@ object SoftwareBridge {
                     // A later page adds to what's shown.
                     val results = if (page > 1) flathub.optJSONArray("results") ?: JSONArray() else JSONArray()
                     for (h in p.hits) results.put(h.json(File(dir, "${h.id}.png").takeIf { it.length() > 0 }?.path ?: ""))
-                    flathub.put("results", results).put("total", p.total).put("loading", false).put("error", "")
+                    flathub.put("results", results).put("total", p.total)
+                        .put("next", p.next).put("loading", false).put("error", "")
                 }
                 r.onFailure {
                     flathub.put("loading", false).put("error", it.message ?: it.toString())

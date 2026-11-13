@@ -45,6 +45,10 @@ class Backend : public QObject
     // ("ref" | "repo" | "bundle"), name, title, summary, description,
     // homepage, url, branch, icon (an http URL or ""), runtime, done, invalid}.
     Q_PROPERTY(QVariantMap flatpakFile READ flatpakFile NOTIFY changed)
+    // The last flatpak job that failed, per busy key ("flatpak:<id>"): why,
+    // shown on that app's row and page. Everything flatpak said is in
+    // $HOME/software/flatpak.log (in the app's saved log too).
+    Q_PROPERTY(QVariantMap failures READ failures NOTIFY changed)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -62,6 +66,7 @@ public:
     bool flatpakAvailable() const;
     QString arch() const;
     QVariantMap flatpakFile() const { return m_flatpakFile; }
+    QVariantMap failures() const { return m_failures; }
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void install(const QString &id);
@@ -117,6 +122,8 @@ private:
     QVariantMap m_flatpaks;
     QVariantMap m_flatpakBusy;
     QVariantMap m_flatpakFile;
+    QVariantMap m_failures;
+    void log(const QString &text);
     QString m_flatpakError;
     QList<Job> m_jobs;
     QProcess *m_proc = nullptr;
