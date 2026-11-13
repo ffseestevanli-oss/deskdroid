@@ -33,7 +33,11 @@ clean_env() {
   export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   export XDG_DATA_DIRS=/usr/local/share:/usr/share XDG_CONFIG_DIRS=/etc/xdg SHELL=/bin/bash
   export USER=deskdroid LOGNAME=deskdroid
-  export TMPDIR=/tmp
+  # FEX's x86 system is read-only for new folders: mkdir and most other
+  # changes go to Android's own paths, and Android has no /tmp. Temporary
+  # files go to a folder in the app's files instead.
+  export TMPDIR="$HOME/.cache/deskdroid-x86-tmp"
+  mkdir -p "$TMPDIR"
   # Software OpenGL (llvmpipe): Android's GPU drivers aren't x86 ones.
   export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe
 }
@@ -59,11 +63,11 @@ setup() {
 # Xwayland as one window on the desktop, unless it's already up.
 start_x() {
   export DISPLAY=:$DISPLAY_NUM
-  if [ -S /tmp/.X11-unix/X$DISPLAY_NUM ] && xdpyinfo >/dev/null 2>&1; then
+  # No /tmp/.X11-unix here (see clean_env): Xwayland listens on its abstract
+  # socket, which X clients try first, and keeps no lock file.
+  if xdpyinfo >/dev/null 2>&1; then
     return 0
   fi
-  rm -f /tmp/.X11-unix/X$DISPLAY_NUM /tmp/.X$DISPLAY_NUM-lock
-  mkdir -p /tmp/.X11-unix
   [ -n "${WAYLAND_DISPLAY:-}" ] || export WAYLAND_DISPLAY=wayland-0
   local geometry="1280x800" size
   [ -f "$HOME/.config/deskdroid-steam-geometry" ] && geometry=$(head -n 1 "$HOME/.config/deskdroid-steam-geometry")
@@ -72,11 +76,11 @@ start_x() {
   Xwayland -help 2>&1 | grep -q -- '-decorate' && decorate="-decorate"
   say "starting Xwayland :$DISPLAY_NUM ($geometry)"
   # shellcheck disable=SC2086
-  Xwayland :$DISPLAY_NUM $size $decorate -nolisten tcp &
+  Xwayland :$DISPLAY_NUM $size $decorate -nolisten tcp -nolock &
   XPID=$!
   local i
   for i in $(seq 1 60); do
-    [ -S /tmp/.X11-unix/X$DISPLAY_NUM ] && xdpyinfo >/dev/null 2>&1 && return 0
+    xdpyinfo >/dev/null 2>&1 && return 0
     kill -0 $XPID 2>/dev/null || die "Xwayland exited (see above)"
     sleep 0.5
   done
