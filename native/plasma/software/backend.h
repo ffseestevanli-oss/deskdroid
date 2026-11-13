@@ -73,3 +73,25 @@ private:
     bool m_offline = false;
     int m_counter = 0;
 };
+
+// The crash dialog (`software --crashed <id> <name> <log>`, Crash.qml): the
+// launcher (native/flatpak/adpk-run.sh) opens it when an app fails, with the
+// report it wrote. No catalog, so no Backend.
+class CrashReport : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QString id MEMBER m_id CONSTANT)
+    Q_PROPERTY(QString name MEMBER m_name CONSTANT)
+    Q_PROPERTY(QString log MEMBER m_log CONSTANT)
+public:
+    CrashReport(const QString &id, const QString &name, const QString &log, QObject *parent = nullptr)
+        : QObject(parent), m_id(id), m_name(name), m_log(log) {}
+    // The report's last lines, for a look before saving.
+    Q_INVOKABLE QString tail(int lines) const;
+    // A file name to suggest: <id>-crash-<date>.log.
+    Q_INVOKABLE QString suggestedName() const;
+    // Copies the report to a file the person chose; "" or the error.
+    Q_INVOKABLE QString saveTo(const QString &url) const;
+private:
+    QString m_id, m_name, m_log;
+};

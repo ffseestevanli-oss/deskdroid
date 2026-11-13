@@ -47,10 +47,34 @@ for d in "$S"/runtime-mesa-*; do [ -e "$d/app.txt" ] && MESAPKG="${d##*/}"; done
 LOG="$S/$SID/run.log"
 exec 2>"$LOG"
 
+# When the app fails: crash.log (this launcher's log, with the end of ddmask's
+# journal), and Software's crash dialog ("Uh oh! Something's not right!"),
+# which saves it where the person chooses. DESKDROID_CRASH_DIALOG=0: no dialog.
+crashed() { # <exit status> <what happened>
+  c="$S/$SID/crash.log"
+  {
+    echo "== $SID failed: $2"
+    echo "== $(date) · $(uname -sr) $(uname -m)"
+    echo
+    echo "== run.log"
+    cat "$LOG" 2>/dev/null
+    j="${DDMASK_JOURNAL:-$F/ddmask.log}"
+    [ -s "$j" ] && { echo; echo "== ddmask.log (end)"; tail -n 150 "$j"; }
+    [ -s "$F/glibc/sigsys.log" ] && { echo; echo "== system calls Android blocked"; sort "$F/glibc/sigsys.log" | uniq -c | tail -n 40; }
+  } > "$c" 2>/dev/null
+  [ "${DESKDROID_CRASH_DIALOG:-1}" = 0 ] && return 0
+  [ -n "$WAYLAND_DISPLAY" ] || return 0
+  name="$(sed -n 's/^Name=//p' "$P/files/share/applications/$FPID.desktop" 2>/dev/null | head -n 1)"
+  if [ -x "$F/kwin/bin/software" ] || [ -L "$F/kwin/bin/software" ]; then
+    "$F/kwin/bin/software" --crashed "$SID" "${name:-$SID}" "$c" </dev/null >/dev/null 2>&1 &
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send "$SID" "$2"
+  fi
+}
+
 die() {
   echo "$SID: $*" >&2
-  # Something to see on the desktop too, where there's no terminal.
-  [ -n "$WAYLAND_DISPLAY" ] && command -v notify-send >/dev/null 2>&1 && notify-send "$SID" "$*"
+  crashed 1 "$*"
   exit 1
 }
 
@@ -88,7 +112,8 @@ if [ -n "$missing" ]; then
   else
     req deskdroid:store open
   fi
-  die "needs$missing first: Software is installing it, then open $SID again"
+  echo "$SID: needs$missing first: Software is installing it, then open $SID again" >&2
+  exit 1
 fi
 
 # Links, script execute bits and empty folders, once per package (ddapp.c).
@@ -280,5 +305,17 @@ for d in "$APP" "$APP"/*; do [ -e "$d/chrome-sandbox" ] && electron=1; done
 export PATH=/app/bin:/usr/bin
 echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-no runtime}, $gpu)" >&2
 # The runtime's sh starts the command, so ddflatpak handles it like any
-# program the app starts (a script, zypak, an ELF program).
-exec $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
+# program the app starts (a script, zypak, an ELF program). Not exec'd: the
+# launcher waits, so a failure gets the crash dialog. Closing normally (0) or
+# being told to stop (SIGHUP, SIGINT, SIGTERM: 129, 130, 143) isn't a failure.
+$G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
+st=$?
+case "$st" in
+  0|129|130|143) ;;
+  *) if [ "$st" -gt 128 ]; then what="it was stopped by signal $((st - 128))$(kill -l "$((st - 128))" 2>/dev/null | sed 's/^/ (SIG/;s/$/)/')"
+     else what="it exited with status $st"; fi
+     echo "$SID: $what" >&2
+     export PATH="/system/bin:$PATH"
+     crashed "$st" "$what" ;;
+esac
+exit "$st"
