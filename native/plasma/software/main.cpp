@@ -1,7 +1,9 @@
 // DeskDroid's Software: the app store on the desktop. Finds, installs,
 // updates and removes apps from Software's catalog, and installs .adpk
 // packages (DeskDroid's own package files, like .deb) when one is opened
-// (`software <file.adpk>`, a double-click in Dolphin). Kirigami, in the
+// (`software <file.adpk>`, a double-click in Dolphin). Browses all of Flathub
+// too, and installs from it, or from a .flatpakref / .flatpakrepo / .flatpak
+// file, with the flatpak command (native/flatpak). Kirigami, in the
 // Steam Installation Assistant's party look. The work is the phone app's
 // (Store.kt, through SoftwareBridge.kt); this is its window.
 #include "backend.h"
@@ -49,7 +51,11 @@ static int softwareMain(int argc, char **argv)
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
-    engine.rootContext()->setContextProperty(QStringLiteral("startPackage"), package);
+    // A .flatpakref, .flatpakrepo or .flatpak goes to the Flatpak page, an
+    // .adpk to the package page.
+    const bool flatpakFile = Backend::isFlatpakFile(package);
+    engine.rootContext()->setContextProperty(QStringLiteral("startPackage"), flatpakFile ? QString() : package);
+    engine.rootContext()->setContextProperty(QStringLiteral("startFlatpakFile"), flatpakFile ? package : QString());
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty())
         return 1;

@@ -2,11 +2,11 @@
 Type=Application
 Name=Agora
 GenericName=Software
-Comment=Find, install and update apps for DeskDroid, and install .adpk packages
+Comment=Find, install and update apps for DeskDroid and from Flathub, and install .adpk and Flatpak files
 Exec=software %f
 Icon=org.deskdroid.software
 Terminal=false
 Categories=System;PackageManager;
-Keywords=software;agora;store;app store;install;apps;adpk;package;update;
-MimeType=application/x-deskdroid-adpk;
+Keywords=software;agora;store;app store;install;apps;adpk;package;update;flathub;flatpak;flatpakref;
+MimeType=application/x-deskdroid-adpk;application/vnd.flatpak.ref;application/vnd.flatpak.repo;application/vnd.flatpak;
 StartupWMClass=software

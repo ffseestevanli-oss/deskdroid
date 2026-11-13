@@ -1,5 +1,7 @@
-// Software's window: the catalog (BrowsePage), or an .adpk to install
-// (PackagePage) when Software was opened with one.
+// Software's window: the catalog (BrowsePage), an .adpk to install
+// (PackagePage) when Software was opened with one, or a .flatpakref,
+// .flatpakrepo or .flatpak (FlatpakFilePage). A Flathub app's page
+// (FlathubAppPage) opens over the catalog.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Dialogs
@@ -68,11 +70,29 @@ Kirigami.ApplicationWindow {
 
     Component { id: browsePage; BrowsePage {} }
     Component { id: packagePage; PackagePage {} }
+    Component { id: flathubAppPage; FlathubAppPage {} }
+    Component { id: flatpakFilePage; FlatpakFilePage {} }
 
     function showPackage(path) {
         backend.inspect(path)
         pageStack.clear()
         pageStack.push(packagePage, { path: path })
+    }
+    function showFlatpakFile(path) {
+        backend.inspectFlatpakFile(path)
+        pageStack.clear()
+        pageStack.push(flatpakFilePage, { path: path })
+    }
+    function showFlathubApp(hit) {
+        pageStack.push(flathubAppPage, { hit: hit })
+    }
+    function back() {
+        if (pageStack.depth > 1) pageStack.pop()
+        else showBrowse()
+    }
+    function openFile(path) {
+        if (backend.isFlatpakFile(path)) showFlatpakFile(path)
+        else showPackage(path)
     }
     function showBrowse() {
         if (backend.package.path) backend.dismiss()
@@ -83,11 +103,13 @@ Kirigami.ApplicationWindow {
 
     FileDialog {
         id: fileDialog
-        title: "Choose a DeskDroid package"
-        nameFilters: ["DeskDroid packages (*.adpk)", "All files (*)"]
+        title: "Choose a package"
+        nameFilters: ["Packages (*.adpk *.flatpakref *.flatpakrepo *.flatpak)", "DeskDroid packages (*.adpk)",
+                      "Flatpak files (*.flatpakref *.flatpakrepo *.flatpak)", "All files (*)"]
         currentFolder: "file:///storage/emulated/0/Download"
-        onAccepted: root.showPackage(backend.localPath(selectedFile.toString()))
+        onAccepted: root.openFile(backend.localPath(selectedFile.toString()))
     }
 
-    Component.onCompleted: startPackage ? showPackage(startPackage) : showBrowse()
+    Component.onCompleted: startFlatpakFile ? showFlatpakFile(startFlatpakFile)
+        : startPackage ? showPackage(startPackage) : showBrowse()
 }
