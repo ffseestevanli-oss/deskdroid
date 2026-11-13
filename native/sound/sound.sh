@@ -47,7 +47,10 @@ PA
 export HOME="${HOME:-$F/home}" XDG_RUNTIME_DIR="$R" PULSE_RUNTIME_PATH="$P" PULSE_STATE_PATH="$F/sound-state"
 # ddmask's glibc side in the server too: Android's filter blocks calls
 # PulseAudio makes at start (setresgid to its own ids), which ddmask answers.
-[ -e "$L/libddmask_glibc.so" ] && export DDMASK_GLIBC_LD_PRELOAD="$L/libddmask_glibc.so${DDMASK_GLIBC_LD_PRELOAD:+:$DDMASK_GLIBC_LD_PRELOAD}"
+# ddmask's glibc build: the ddmask module's (native/ddmask/module.sh), else the APK's.
+dmg="$L/libddmask_glibc.so"
+[ -n "${DDMASK_MODULE:-}" ] && [ -e "$DDMASK_MODULE/api-1" ] && [ -e "$DDMASK_MODULE/lib/libddmask_glibc.so" ] && dmg="$DDMASK_MODULE/lib/libddmask_glibc.so"
+[ -e "$dmg" ] && export DDMASK_GLIBC_LD_PRELOAD="$dmg${DDMASK_GLIBC_LD_PRELOAD:+:$DDMASK_GLIBC_LD_PRELOAD}"
 # No realtime or nice changes (Android refuses them), no shared memory files
 # (/dev/shm isn't there; memfd still works), no D-Bus, no idle exit.
 exec $G --library-path "$LP" "$S/usr/bin/pulseaudio" -n -F "$P/deskdroid.pa" --daemonize=no \

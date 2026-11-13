@@ -27,11 +27,21 @@
 # Assistant's x86 setup (X86.kt: files/x86/fex), and its server gets a socket
 # for this app. Tests set DESKDROID_FILES, DESKDROID_LIBS and
 # DESKDROID_FEX (a stand-in) as for adpk-run.sh.
+# The ddmask module (native/ddmask/module.sh), when it's installed: its copy
+# of this script runs instead, and its builds of ddmask's libraries are used
+# (ddlib). DDMASK_MODULE is where it would be (NativeDesk.kt); api-1 says it
+# fits this APK.
+DM="${DDMASK_MODULE:-}"
+[ -n "$DM" ] && [ -e "$DM/api-1" ] || DM=""
+if [ -n "$DM" ] && [ -e "$DM/scripts/fex-run.sh" ]; then
+  case "$0" in "$DM"/*) ;; *) exec "${DESKDROID_SH:-/system/bin/sh}" "$DM/scripts/fex-run.sh" "$@" ;; esac
+fi
+ddlib() { if [ -n "$DM" ] && [ -e "$DM/lib/$1" ]; then echo "$DM/lib/$1"; else echo "$L/$1"; fi; }
 # Android's tools for this script (the caller may have set the app's PATH).
 export PATH="/system/bin:/usr/bin:/bin:$PATH"
 F="${DESKDROID_FILES:-/data/data/io.deskdroid.app/files}"
 self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-L="${DESKDROID_LIBS:-${self%/*}}"
+L="${DESKDROID_LIBS:-${DDMASK_LIBS:-${self%/*}}}"
 ID="${FEXRUN_ID:?FEXRUN_ID is the app id}"
 APP="${FEXRUN_APP:?FEXRUN_APP is the app's files}"
 RT="${FEXRUN_RT:?FEXRUN_RT is the runtime's files}"
@@ -106,7 +116,7 @@ lp="/app/lib:/usr/lib/$TRIPLE:/usr/lib"
 export LD_LIBRARY_PATH="${FEXRUN_LIBPATH:+$FEXRUN_LIBPATH:}$lp"
 # FEX's own process: DeskDroid's glibc and ddmask, without ddflatpak (FEX's
 # guest makes its own system calls; FEX maps its paths itself).
-export DDMASK_GLIBC_LD_PRELOAD="$L/libddmask_glibc.so"
+export DDMASK_GLIBC_LD_PRELOAD="$(ddlib libddmask_glibc.so)"
 export DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib"
 unset DDMASK_GLIBC_LD_AUDIT DDFLATPAK_APP DDFLATPAK_RUNTIME DDFLATPAK_MOUNTS DDFLATPAK_LIBPATH DDFLATPAK_LOADER
 # ddmask starts glibc programs, but only in processes it's preloaded into;

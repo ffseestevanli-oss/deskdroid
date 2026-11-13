@@ -1255,8 +1255,25 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun ddmask(env: MutableMap<String, String>, libs: String) {
-        val lib = File(libs, "libddmask.so")
+        var lib = File(libs, "libddmask.so")
         if (lib.exists() && !File(filesDir, "ddmask-off").exists()) {
+            // The ddmask module (native/ddmask/module.sh): ddmask's libraries and
+            // launch scripts as a package Software installs, so fixes reach the
+            // phone without a new APK. Everything checks for it where it would be
+            // (DDMASK_MODULE, with api-1 when it fits this APK) and otherwise uses
+            // the APK's own copies; DDMASK_LIBS is the APK's folder, for the
+            // loaders, which Android only runs from there.
+            val module = File(filesDir, "store/apps/ddmask/program")
+            env["DDMASK_LIBS"] = libs
+            env["DDMASK_MODULE"] = module.path
+            val modLib = File(module, "lib/libddmask.so")
+            if (File(module, "api-1").exists() && modLib.exists()) {
+                if (preloads(modLib)) {
+                    lib = modLib
+                    env["DDMASK_MODULE_BIONIC"] = "1"
+                    AppLog.i("ddmask: the module's (${File(module.parentFile, "version.txt").takeIf { it.exists() }?.readText()?.trim() ?: "?"})")
+                } else AppLog.i("ddmask: Android's linker won't preload the module's libddmask.so; the APK's for Android programs")
+            }
             env["LD_PRELOAD"] = lib.path
             // Its journal: each program it starts another way, each one that
             // can't start and why, each system call Android blocks. In Settings'
@@ -1266,6 +1283,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             X86.env(this, env) // x86 programs through FEX, once it's installed
         }
     }
+
+    /** Whether Android's linker preloads [lib] into a system program (as into the desktop's apps). */
+    private fun preloads(lib: File): Boolean = try {
+        val p = ProcessBuilder("/system/bin/sh", "-c", "exit 0").redirectErrorStream(true)
+            .also { it.environment()["LD_PRELOAD"] = lib.path }.start()
+        val out = p.inputStream.bufferedReader().readText()
+        p.waitFor() == 0 && !out.contains("linker", ignoreCase = true) && !out.contains("CANNOT", ignoreCase = true)
+    } catch (e: Exception) { false }
 
     /**
      * glibc and musl (native/glibc, native/musl), for the ordinary Linux

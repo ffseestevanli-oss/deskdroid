@@ -16,6 +16,16 @@
 #
 # Tests on a desktop machine set DESKDROID_FILES, DESKDROID_LIBS and
 # DESKDROID_GLIBC_RUN as for flatpak.sh.
+# The ddmask module (native/ddmask/module.sh), when it's installed: its copy
+# of this script runs instead, and its builds of ddmask's libraries are used
+# (ddlib). DDMASK_MODULE is where it would be (NativeDesk.kt); api-1 says it
+# fits this APK.
+DM="${DDMASK_MODULE:-}"
+[ -n "$DM" ] && [ -e "$DM/api-1" ] || DM=""
+if [ -n "$DM" ] && [ -e "$DM/scripts/adpk-run.sh" ]; then
+  case "$0" in "$DM"/*) ;; *) exec "${DESKDROID_SH:-/system/bin/sh}" "$DM/scripts/adpk-run.sh" "$@" ;; esac
+fi
+ddlib() { if [ -n "$DM" ] && [ -e "$DM/lib/$1" ]; then echo "$DM/lib/$1"; else echo "$L/$1"; fi; }
 TRIPLE=aarch64-linux-gnu
 P="${DDAPP_PROGRAM:?DDAPP_PROGRAM is the package's program folder}"
 P="${P%/}"
@@ -89,7 +99,7 @@ die() {
 
 # The APK's library folder: where the app's command links (Store.linkCommand),
 # else the folder of ddmask in LD_PRELOAD.
-L="${DESKDROID_LIBS:-}"
+L="${DESKDROID_LIBS:-${DDMASK_LIBS:-}}"
 if [ -z "$L" ]; then
   l="$(readlink -f "$F/kwin/bin/$SID" 2>/dev/null)"
   L="${l%/*}"
@@ -160,7 +170,7 @@ if [ -z "$G" ]; then
 fi
 
 mkdir -p "$F/flatpak-tmp"
-export DDMASK_GLIBC_LD_PRELOAD="$L/libddflatpak.so:$L/libddmask_glibc.so"
+export DDMASK_GLIBC_LD_PRELOAD="$(ddlib libddflatpak.so):$(ddlib libddmask_glibc.so)"
 export DDFLATPAK_TMP="$F/flatpak-tmp" TMPDIR="$F/flatpak-tmp"
 export DDFLATPAK_APP="$APP" DDFLATPAK_RUNTIME="$RT"
 mounts="/usr/lib/$TRIPLE/GL/default=$GL;/usr/lib/$TRIPLE/GL=$GL;/usr/lib/$TRIPLE/codecs-extra=$CX;/dev/shm=$F/flatpak-tmp"
@@ -179,7 +189,7 @@ printf '<?xml version="1.0"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n</fontc
 mounts="$mounts;/run/host/font-dirs.xml=$F/flatpak-tmp/font-dirs.xml"
 export DDFLATPAK_MOUNTS="$mounts"
 # glibc's loader asks ddflatpak's audit library for /app and /usr in RUNPATHs.
-[ -e "$L/libddflatpak_audit.so" ] && export DDMASK_GLIBC_LD_AUDIT="$L/libddflatpak_audit.so"
+[ -e "$(ddlib libddflatpak_audit.so)" ] && export DDMASK_GLIBC_LD_AUDIT="$(ddlib libddflatpak_audit.so)"
 # Folders the app's and runtime's programs name in their RUNPATH (/app/lib/<x>,
 # /usr/lib/<x>): glibc's loader opens those itself, unmapped.
 rpaths=""

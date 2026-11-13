@@ -20,7 +20,7 @@ jobs:
         run: git submodule update --init --recursive --jobs 8 --depth 1
       # ddmask (native/ddmask), tested on the runner with glibc's loader standing in for Android's.
       - name: Test ddmask
-        run: native/ddmask/test/run.sh && native/ddmask/test/compat.sh && native/ddmask/test/flatpak.sh && native/flatpak/test/adpk-run.sh && native/flatpak/test/fex-run.sh
+        run: native/ddmask/test/run.sh && native/ddmask/test/compat.sh && native/ddmask/test/flatpak.sh && native/flatpak/test/adpk-run.sh && native/flatpak/test/fex-run.sh && native/ddmask/test/module.sh
       # The sound server (native/sound), built from Debian's amd64 packages and run on the runner.
       - name: Test the sound server
         run: native/sound/test.sh
@@ -153,6 +153,14 @@ jobs:
         with:
           name: deskdroid-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+      # The ddmask module (native/ddmask/module.sh): this build's ddmask as a
+      # package Software installs, for phones that keep their APK.
+      - name: Pack the ddmask module
+        run: native/ddmask/module.sh app/build/outputs/apk/debug/*.apk "ddmask-module-${{ github.run_number }}.adpk" "build-${{ github.run_number }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ddmask-module
+          path: ddmask-module-*.adpk
       # Every build of main also goes to the apk-latest release, a plain download link.
       - name: Publish as the apk-latest release
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

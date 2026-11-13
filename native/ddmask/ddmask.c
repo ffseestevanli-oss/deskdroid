@@ -157,6 +157,10 @@ static readlinkat_fn real_readlinkat;
 
 static char self_path[PATH_MAX];   /* libddmask.so */
 static char self_dir[PATH_MAX];    /* its folder */
+/* The APK's library folder (DDMASK_LIBS, else self_dir): the loaders and
+ * runners ddmask execs, which Android only runs from there. ddmask itself may
+ * come from the ddmask module (module.sh) in the app's files instead. */
+static char apk_dir[PATH_MAX];
 static char shims[WORLDS][PATH_MAX]; /* ddmask's builds that are there, by world */
 static char exe_path[PATH_MAX];    /* the program this process really is, when started through a loader */
 
@@ -280,7 +284,7 @@ static int exec_allowed(const char *real, char *const envp[]) {
     if (allow) return in_list(real, allow);
 #ifdef DDMASK_ON_ANDROID
     if (in_list(real, "/system:/vendor:/apex:/product:/odm:/system_ext")) return 1;
-    return self_dir[0] && in_dir(real, self_dir, strlen(self_dir));
+    return apk_dir[0] && in_dir(real, apk_dir, strlen(apk_dir));
 #else
     return 1;
 #endif
@@ -313,8 +317,8 @@ static const char *map_path(const char *path, char *const envp[], char *out, siz
     /* glibc and musl programs: their loader from the APK (native/glibc, native/musl). */
     for (int w = 0; w < WORLDS; w++) {
         const struct world *wd = &worlds[w];
-        if (!wd->interp || strcmp(path, wd->interp) != 0 || !self_dir[0] || (map && strstr(map, wd->interp))) continue;
-        if ((size_t)snprintf(out, outsz, "%s/%s", self_dir, wd->loader) < outsz && access(out, F_OK) == 0) return out;
+        if (!wd->interp || strcmp(path, wd->interp) != 0 || !apk_dir[0] || (map && strstr(map, wd->interp))) continue;
+        if ((size_t)snprintf(out, outsz, "%s/%s", apk_dir, wd->loader) < outsz && access(out, F_OK) == 0) return out;
     }
     const char *lists[2] = { map, defaults };
     size_t plen = strlen(path);
@@ -570,8 +574,8 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
          * libdd_appimage.so; which runs the AppImage itself, to unpack it, with
          * DDMASK_APPIMAGE_RAW=1: then it's just a program. */
         const char *raw = env_get(envp, "DDMASK_APPIMAGE_RAW");
-        if (appimage && !(raw && *raw && *raw != '0') && self_dir[0]) {
-            snprintf(pl->emu, sizeof pl->emu, "%s/libdd_appimage.so", self_dir);
+        if (appimage && !(raw && *raw && *raw != '0') && apk_dir[0]) {
+            snprintf(pl->emu, sizeof pl->emu, "%s/libdd_appimage.so", apk_dir);
             if (access(pl->emu, F_OK) == 0) { runner = pl->emu; keep_argv0 = 1; k = RUN_FALLBACK; HOW("AppImage"); }
         }
         switch (runner ? RUN_FALLBACK : k) {
@@ -602,15 +606,15 @@ static int plan_exec(const char *path, char *const argv[], char *const envp[],
             break;
         case RUN_STATIC:
             /* No loader to start it through: ddmask's own (ddload.c). */
-            if (self_dir[0]) {
-                snprintf(pl->emu, sizeof pl->emu, "%s/libdd_static.so", self_dir);
+            if (apk_dir[0]) {
+                snprintf(pl->emu, sizeof pl->emu, "%s/libdd_static.so", apk_dir);
                 if (access(pl->emu, F_OK) == 0) { runner = pl->emu; keep_argv0 = 1; opaque = 1; HOW("static"); }
             }
             break;
         case RUN_EMULATOR: {
             const char *e = env_get(envp, machine == EM_X86_64 ? "DDMASK_X86_64" : "DDMASK_I386");
-            if (!e && machine == EM_X86_64 && self_dir[0]) {
-                snprintf(pl->emu, sizeof pl->emu, "%s/libbox64.so", self_dir);
+            if (!e && machine == EM_X86_64 && apk_dir[0]) {
+                snprintf(pl->emu, sizeof pl->emu, "%s/libbox64.so", apk_dir);
                 if (access(pl->emu, F_OK) == 0) e = pl->emu;
             }
             runner = e && *e ? e : NULL;
@@ -1226,10 +1230,29 @@ __attribute__((constructor)) static void ddmask_init(int argc, char **argv, char
         char *slash = strrchr(self_dir, '/');
         if (slash) *slash = 0; else self_dir[0] = 0;
     }
-    if (self_dir[0]) {
-        for (int w = 0; w < WORLDS; w++) {
-            if (w == SELF_WORLD) { snprintf(shims[w], PATH_MAX, "%s", self_path); continue; }
-            if ((size_t)snprintf(shims[w], PATH_MAX, "%s/%s", self_dir, worlds[w].shim) >= PATH_MAX
+    const char *libs = getenv("DDMASK_LIBS");
+    snprintf(apk_dir, sizeof apk_dir, "%s", libs && *libs ? libs : self_dir);
+    /* The ddmask module (DDMASK_MODULE, an installed package with api-1):
+     * its builds for the other worlds come first, then the ones next to this
+     * one, then the APK's. */
+    char mod_lib[PATH_MAX] = "";
+    const char *mod = getenv("DDMASK_MODULE");
+    if (mod && *mod) {
+        char api[PATH_MAX];
+        if ((size_t)snprintf(api, sizeof api, "%s/api-1", mod) < sizeof api && access(api, F_OK) == 0)
+            snprintf(mod_lib, sizeof mod_lib, "%s/lib", mod);
+    }
+    for (int w = 0; w < WORLDS; w++) {
+        if (w == SELF_WORLD) { snprintf(shims[w], PATH_MAX, "%s", self_path); continue; }
+        /* Android's (bionic) build from the module only when the desktop
+         * found Android's linker takes it (NativeDesk.kt checks: DDMASK_MODULE_BIONIC). */
+        const char *mb = getenv("DDMASK_MODULE_BIONIC");
+        int mod_ok = w != 0 || (mb && *mb == '1');
+        const char *dirs[3] = { mod_ok ? mod_lib : "", mod_ok ? self_dir : apk_dir, mod_ok ? apk_dir : self_dir };
+        shims[w][0] = 0;
+        for (int d = 0; d < 3 && !shims[w][0]; d++) {
+            if (!dirs[d][0]) continue;
+            if ((size_t)snprintf(shims[w], PATH_MAX, "%s/%s", dirs[d], worlds[w].shim) >= PATH_MAX
                 || access(shims[w], F_OK) != 0) shims[w][0] = 0;
         }
     }
