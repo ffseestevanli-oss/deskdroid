@@ -15,13 +15,13 @@ expect() { # name text regex...
 }
 F="$T/files" S="$T/files/store/apps" L="$T/libs"
 mkdir -p "$F/glibc/lib" "$L" && : > "$F/glibc/lib/libc.so.6" && : > "$L/libdd_ld-glibc.so"
-pkg() { # id metadata [app.json]
+pkg() { # id metadata
   mkdir -p "$S/$1/program/files"; : > "$S/$1/app.txt"; : > "$S/$1/program/.ddsetup-done"
   printf '%s\n' "$2" > "$S/$1/program/metadata"
-  printf '%s\n' "${3:-{\"id\": \"$1\"\}}" > "$S/$1/app.json"
 }
 pkg runtime-kde-6.11 '[Runtime]
 name = org.kde.Platform
+runtime = org.kde.Platform/aarch64/6.11
 
 [Environment]
 QT_PLUGIN_PATH = /app/lib/plugins:/usr/share/runtime/lib/plugins
@@ -29,13 +29,12 @@ KDE_FORK_SLAVES = 1'
 pkg runtime-mesa-25.08 ''
 pkg kid3 '[Application]
 name=org.kde.kid3
+runtime=org.kde.Platform/aarch64/6.11
 command=kid3
 
 [Environment]
 TMPDIR=/var/tmp
-LD_LIBRARY_PATH=/app/lib/extra' '{ "id": "kid3", "needs": [
-  "runtime-kde-6.11",
-  "runtime-mesa-25.08" ] }'
+LD_LIBRARY_PATH=/app/lib/extra'
 cat > "$T/loader" <<'L'
 #!/bin/sh
 echo "args: $*"
@@ -61,6 +60,9 @@ if [ -r /proc/version ]; then
 fi
 rm "$S/runtime-kde-6.11/app.txt"
 run kid3 >/dev/null || true
-expect "a missing runtime says so" "$(cat "$S/kid3/run.log")" "^kid3: needs runtime-kde-6.11.adpk installed first"
-expect "...and opens Software" "$(cat "$F"/open-requests/*.req)" "^deskdroid:store$"
+expect "a missing runtime says so" "$(cat "$S/kid3/run.log")" "^kid3: needs runtime-kde-6.11 first: Software is installing it"
+expect "...and asks Software to install it" "$(cat "$F"/open-requests/*.req)" "^deskdroid:software:install:runtime-kde-6.11$"
+rm -rf "$S/runtime-kde-6.11" "$F/open-requests"
+run kid3 >/dev/null || true
+expect "a runtime that was never installed gets its package name from the metadata" "$(cat "$F"/open-requests/*.req)" "^deskdroid:software:install:runtime-kde-6.11$"
 [ "$fails" -eq 0 ] && echo "all adpk-run tests passed" || { echo "$fails failed"; exit 1; }
