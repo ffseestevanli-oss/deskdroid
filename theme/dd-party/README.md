@@ -64,7 +64,7 @@ has by default. On a very slow GPU the flat variant will feel lighter.
   issue and stock KvArcDark does the same.
 - GTK apps (Firefox, GIMP and others) take the colours but keep Breeze shapes.
 - Window titles can't be forced to uppercase. KDE has no setting for that.
-- The System Settings app icon comes from Breeze, so its own sidebar icons stay correct.
+- System Settings' page icons are Breeze's artwork recoloured onto DD Party tiles (Breeze icons are LGPL).
 - The Kvantum theme is built on KvArcDark and is GPL. The fonts are SIL OFL
   (licences are in `fonts/`).
 
