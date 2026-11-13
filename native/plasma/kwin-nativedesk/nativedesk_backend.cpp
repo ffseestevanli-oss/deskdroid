@@ -287,6 +287,38 @@ static void closeAppletPopupsOnMinimize(Window *w)
 // Plasma hides a plasmoid's popup (Kickoff, the calendar...) when the popup
 // loses focus, which is the cue a press elsewhere gives. That needs the popup
 // to have had focus: give it focus when it opens, and log it.
+QMargins deskdroidSafeMargins(const Output *output);
+
+// Panels dodge the cutouts and rounded corners sideways (deskdroidSafeMargins);
+// Plasma places a plasmoid's popup against the screen's edge regardless
+// (Kickoff at x 0, under the cutout, beside a panel starting further in).
+// Its popups are kept inside the same margins, so they line up with the panel.
+static void keepPopupInsidePanelMargins(Window *w)
+{
+    auto clamp = [w] {
+        if (w->isDeleted() || !w->output()) {
+            return;
+        }
+        const QMargins m = deskdroidSafeMargins(w->output());
+        if (m.isNull()) {
+            return;
+        }
+        const QRectF area = w->output()->geometryF().marginsRemoved(QMarginsF(m));
+        const QRectF g = w->frameGeometry();
+        QPointF p = g.topLeft();
+        if (g.left() < area.left()) {
+            p.setX(area.left());
+        } else if (g.right() > area.right()) {
+            p.setX(std::max(area.left(), area.right() - g.width()));
+        }
+        if (p != g.topLeft()) {
+            w->move(p);
+        }
+    };
+    clamp();
+    QObject::connect(w, &Window::frameGeometryChanged, w, clamp);
+}
+
 static void focusAppletPopupsWhenShown()
 {
     static bool connected = false;
@@ -298,6 +330,7 @@ static void focusAppletPopupsWhenShown()
         qInfo("nativedesk: window opened: %s [type %d]%s", qPrintable(w->resourceClass()), int(w->windowType()),
               isPlasmoidPopup(w) ? " plasmoid popup, focusing it" : "");
         if (isPlasmoidPopup(w)) {
+            keepPopupInsidePanelMargins(w);
             workspace()->activateWindow(w, true);
         } else {
             closeAppletPopupsOnMinimize(w);
@@ -307,6 +340,8 @@ static void focusAppletPopupsWhenShown()
     for (Window *w : windows) {
         if (!isPlasmoidPopup(w)) {
             closeAppletPopupsOnMinimize(w);
+        } else {
+            keepPopupInsidePanelMargins(w);
         }
     }
     QObject::connect(workspace(), &Workspace::windowActivated, workspace(), [](Window *w) {
