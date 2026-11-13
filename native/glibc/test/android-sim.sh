@@ -61,8 +61,14 @@ grep '^nameserver' /etc/resolv.conf > "$F/glibc/etc/resolv.conf" || echo 'namese
 # (ddflatpak maps it), where Android's /system/bin/sh doesn't go.
 mkdir -p /system/bin && rm -f /system/bin/sh && cp /bin/dash /system/bin/sh
 
+# PATH: this machine's tools, from a folder that isn't /usr/bin or /bin, as on
+# the phone, where gpgme found no gpgconf on the desktop's PATH.
+mkdir -p "$F/host-tools"
+for t in sh mkdir sed chmod cat grep mv rm sort head tail tr cut readlink dirname ls cp ln date env uname; do
+  p="$(command -v "$t")" && ln -sf "$p" "$F/host-tools/$t"
+done
 fp() {
-  env -i PATH=/usr/bin:/bin HOME="$F/home" TMPDIR="$F/flatpak-tmp" \
+  env -i PATH=/system/bin:"$F/host-tools" HOME="$F/home" TMPDIR="$F/flatpak-tmp" \
     ${HTTPS_PROXY:+HTTPS_PROXY=$HTTPS_PROXY https_proxy=$HTTPS_PROXY} \
     DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_FLATPAK_ARCH=x86_64 \
     DESKDROID_GLIBC_RUN="$L/android-sim $L/libdd_ld-glibc.so" QT_QPA_PLATFORM=offscreen \
