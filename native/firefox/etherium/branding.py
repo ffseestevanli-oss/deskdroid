@@ -6,7 +6,7 @@ Google (Startpage searches).
     branding.py <firefox source dir>
 
 Creates browser/branding/etherium from the unofficial branding: the names,
-the icons (this folder's rainbow), and default preferences that turn off
+the icons (this folder's wave planet), and default preferences that turn off
 everything Firefox sends to Mozilla or anyone else on its own (prefs.js).
 """
 import json
@@ -30,7 +30,7 @@ for rel in ("configure.sh", "locales/en-US/brand.ftl", "locales/en-US/brand.prop
         s = s.replace("-brand-product-name = Firefox", "-brand-product-name = Etherium")
     p.write_text(s)
 
-# Icons: each square PNG becomes the rainbow at its size (or the nearest
+# Icons: each square PNG becomes the icon at its size (or the nearest
 # larger one, which the page scales down); the logo and wordmark SVGs too.
 sizes = sorted(int(p.stem.split("-")[1]) for p in here.glob("etherium-*.png"))
 icons = 0
