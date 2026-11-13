@@ -1162,6 +1162,18 @@ QMargins deskdroidSafeMargins(const Output *output)
     return QMargins(std::ceil(deskdroidSafePx[0] / s), 0, std::ceil(deskdroidSafePx[2] / s), 0);
 }
 
+// Windows (maximized, placed) keep out of the same margins as the panels,
+// in landscape only: upright, the sides' margins are the rounded corners'
+// radius, too much to lose from a narrow screen for corners alone.
+QMargins deskdroidWindowMargins(const Output *output)
+{
+    if (!output) {
+        return QMargins();
+    }
+    const QSize px = output->pixelSize();
+    return px.width() > px.height() ? deskdroidSafeMargins(output) : QMargins();
+}
+
 void NativeDeskBackend::readMessages()
 {
     ndesk_msg m;
