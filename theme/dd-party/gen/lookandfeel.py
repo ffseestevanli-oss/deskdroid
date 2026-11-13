@@ -52,7 +52,7 @@ tasks.currentConfigGroup = ["General"];
 tasks.writeConfig("launchers", [
     "applications:org.kde.dolphin.desktop",
     "applications:org.kde.konsole.desktop",
-    "applications:org.kde.discover.desktop",
+    "applications:org.deskdroid.software.desktop",
     "applications:systemsettings.desktop"
 ]);
 

@@ -43,8 +43,8 @@ class StoreActivity : Activity() {
     /** Software's tabs (Store.section), as on the desktop: id, label, accent, what it is. */
     private val tabList = listOf(
         Triple("deskdroid", "DeskDroid Repo", Party.CYAN) to "Apps built for DeskDroid: KDE apps, DeskDroid's own, and themes.",
-        Triple("flathub", "Flathub", Party.GREEN) to "Flathub's own ARM64 builds, unchanged. ddmask translates them as they run, so nothing is recompiled. Software installs the runtime each one needs with it.",
-        Triple("dependencies", "Dependencies", Party.PURPLE) to "Runtimes: the shared libraries Flathub apps run on. Software installs them when an app needs them.",
+        Triple("flathub", "Flathub", Party.GREEN) to "Flathub's own ARM64 builds, unchanged. ddmask translates them as they run, so nothing is recompiled. Agora installs the runtime each one needs with it.",
+        Triple("dependencies", "Dependencies", Party.PURPLE) to "Runtimes: the shared libraries Flathub apps run on. Agora installs them when an app needs them.",
         Triple("about", "About", Party.YELLOW) to "",
     )
 
@@ -56,7 +56,7 @@ class StoreActivity : Activity() {
         val content = ui.column(16, dp(20)) {
             addView(ui.row(8) {
                 gravity = Gravity.CENTER_VERTICAL
-                addView(ui.heading("Software", 24f))
+                addView(ui.heading("Agora", 24f))
                 spacer()
                 addView(ui.outlineButton("✕", Party.TEXT) { finish() }, LinearLayout.LayoutParams(dp(40), dp(40)))
             }, LinearLayout.LayoutParams(-1, -2))
@@ -112,7 +112,7 @@ class StoreActivity : Activity() {
             }
             main.post {
                 r.onFailure {
-                    AppLog.i("Software: couldn't open $uri: $it")
+                    AppLog.i("Agora: couldn't open $uri: $it")
                     AlertDialog.Builder(this).setTitle("Can't install this file").setMessage(it.message).setPositiveButton("OK", null).show()
                 }
                 r.onSuccess { (file, pkg) ->
@@ -124,7 +124,7 @@ class StoreActivity : Activity() {
                         .apply { icon?.let { setIcon(android.graphics.drawable.BitmapDrawable(resources, it)) } }
                         .setMessage(listOfNotNull(pkg.summary.ifEmpty { null },
                             pkg.version.ifEmpty { null }?.let { "Version $it" + (have?.let { h -> " (installed: ${h.ifEmpty { "unknown" }})" } ?: "") },
-                            "From a file, not from the Software catalog: install packages only from people you trust.")
+                            "From a file, not from the Agora catalog: install packages only from people you trust.")
                             .joinToString("\n\n"))
                         .setPositiveButton(verb) { _, _ -> installFile(file, pkg) }
                         .setNegativeButton("Cancel") { _, _ -> file.delete() }
@@ -144,7 +144,7 @@ class StoreActivity : Activity() {
                 r.onSuccess { Toast.makeText(this, "${pkg.name} is installed", Toast.LENGTH_LONG).show() }
                 r.onFailure {
                     Toast.makeText(this, "Couldn't install ${pkg.name}: ${it.message}", Toast.LENGTH_LONG).show()
-                    AppLog.i("Software: install of ${pkg.id} from a file failed: $it")
+                    AppLog.i("Agora: install of ${pkg.id} from a file failed: $it")
                 }
                 load()
             }
@@ -158,7 +158,7 @@ class StoreActivity : Activity() {
                 result.onSuccess { catalog = it; show() }.onFailure {
                     status.visibility = View.VISIBLE
                     status.text = "Couldn't load the catalog: ${it.message}"
-                    AppLog.i("Software: catalog failed: $it")
+                    AppLog.i("Agora: catalog failed: $it")
                     show()
                 }
             }
@@ -254,7 +254,7 @@ class StoreActivity : Activity() {
                     main.post {
                         r.onFailure {
                             Toast.makeText(context, "Couldn't install ${app.name}: ${it.message}", Toast.LENGTH_LONG).show()
-                            AppLog.i("Software: install of ${app.id} failed: $it")
+                            AppLog.i("Agora: install of ${app.id} failed: $it")
                         }
                         load()
                     }

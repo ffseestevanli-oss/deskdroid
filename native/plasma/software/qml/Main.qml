@@ -8,7 +8,7 @@ import "."
 
 Kirigami.ApplicationWindow {
     id: root
-    title: "Software"
+    title: "Agora"
     width: 1000
     height: 720
     minimumWidth: 420

@@ -10,7 +10,7 @@ import "."
 
 PartyPage {
     id: page
-    title: "Software"
+    title: "Agora"
     glows: [[0.05, 0.05, tab.accent], [0.95, 0.95, Party.pink]]
     property string filter: ""
     property bool installedOnly: false
@@ -20,9 +20,9 @@ PartyPage {
         { id: "deskdroid", label: "DeskDroid Repo", accent: Party.cyan,
           intro: "Apps built for DeskDroid: KDE apps, DeskDroid's own, and themes. They run at full speed with the phone's GPU." },
         { id: "flathub", label: "Flathub", accent: Party.green,
-          intro: "Flathub's own ARM64 builds, unchanged. ddmask translates them as they run, so nothing is recompiled. Each needs a runtime from Dependencies, which Software installs with it." },
+          intro: "Flathub's own ARM64 builds, unchanged. ddmask translates them as they run, so nothing is recompiled. Each needs a runtime from Dependencies, which Agora installs with it." },
         { id: "dependencies", label: "Dependencies", accent: Party.purple,
-          intro: "Runtimes: the shared libraries Flathub apps run on (KDE, GNOME, Freedesktop, Mesa for graphics). Software installs them when an app needs them; you rarely need to install one yourself." },
+          intro: "Runtimes: the shared libraries Flathub apps run on (KDE, GNOME, Freedesktop, Mesa for graphics). Agora installs them when an app needs them; you rarely need to install one yourself." },
         { id: "about", label: "About", accent: Party.yellow, intro: "" },
     ]
     readonly property var tab: tabs.find(t => t.id === current) || tabs[0]
@@ -60,7 +60,7 @@ PartyPage {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 2
-                RainbowText { heading: "Software"; size: 38; Layout.fillWidth: true }
+                RainbowText { heading: "Agora"; size: 38; Layout.fillWidth: true }
                 Text {
                     text: "Find, install and update apps for DeskDroid."
                     font.family: Party.body; font.pixelSize: 15
@@ -182,9 +182,9 @@ PartyPage {
         Text {
             visible: backend.offline || backend.catalogError !== "" || (backend.loading && backend.apps.length === 0)
             text: backend.offline
-                ? "DeskDroid's app isn't answering. Software needs the DeskDroid app running behind the desktop; try again in a moment."
+                ? "DeskDroid's app isn't answering. Agora needs the DeskDroid app running behind the desktop; try again in a moment."
                 : backend.catalogError !== ""
-                    ? "Couldn't reach the Software catalog (" + backend.catalogError + "). Check the phone's internet connection, then Refresh." + (backend.apps.length ? " Showing what was there last time." : "")
+                    ? "Couldn't reach the Agora catalog (" + backend.catalogError + "). Check the phone's internet connection, then Refresh." + (backend.apps.length ? " Showing what was there last time." : "")
                     : "Loading the catalog…"
             font.family: Party.body; font.pixelSize: 15
             color: backend.offline || backend.catalogError !== "" ? Party.orange : Party.muted
