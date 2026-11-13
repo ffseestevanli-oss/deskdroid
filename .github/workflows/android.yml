@@ -20,7 +20,7 @@ jobs:
         run: git submodule update --init --recursive --jobs 8 --depth 1
       # ddmask (native/ddmask), tested on the runner with glibc's loader standing in for Android's.
       - name: Test ddmask
-        run: native/ddmask/test/run.sh && native/ddmask/test/compat.sh && native/ddmask/test/flatpak.sh && native/flatpak/test/adpk-run.sh
+        run: native/ddmask/test/run.sh && native/ddmask/test/compat.sh && native/ddmask/test/flatpak.sh && native/flatpak/test/adpk-run.sh && native/flatpak/test/fex-run.sh
       # The sound server (native/sound), built from Debian's amd64 packages and run on the runner.
       - name: Test the sound server
         run: native/sound/test.sh

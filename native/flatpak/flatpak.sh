@@ -116,6 +116,9 @@ run() {
   id="$1"; shift
   # The menu entries' file-forwarding markers.
   set -- $(for a in "$@"; do [ "$a" = "@@" ] || [ "$a" = "@@u" ] || printf '%s\n' "$a"; done)
+  # An app installed only for x86-64 (flatpak install --arch=x86_64) runs
+  # through FEX-Emu (fex-run.sh).
+  [ ! -d "$FLATPAK_USER_DIR/app/$id/$ARCH" ] && [ -d "$FLATPAK_USER_DIR/app/$id/x86_64" ] && { ARCH=x86_64; TRIPLE=x86_64-linux-gnu; }
   base="$FLATPAK_USER_DIR/app/$id/$ARCH"
   [ -n "$branch" ] || branch="$(ls "$base" 2>/dev/null | head -1)"
   APP="$(readlink -f "$base/$branch/active/files" 2>/dev/null)"
@@ -176,6 +179,12 @@ run() {
 $envs
 ENVS
   done
+  if [ "$ARCH" = x86_64 ]; then
+    # Its own LD_LIBRARY_PATH entries, as x86 paths (/app/lib/audacity).
+    guest="$(sed -n '/^\[Environment\]/,/^\[/{s/^LD_LIBRARY_PATH *= *//p}' "$meta" | head -1)"
+    export FEXRUN_ID="$id" FEXRUN_APP="$APP" FEXRUN_RT="$RT" FEXRUN_GL="$GL" FEXRUN_LIBPATH="$guest"
+    exec "${DESKDROID_SH:-/system/bin/sh}" "$L/libdd_flatpak_fex.so" "$cmd" "$@"
+  fi
   # The runtime's sh starts the command, so ddflatpak handles it like any
   # program the app starts (a script, zypak, an ELF program).
   exec $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
