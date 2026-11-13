@@ -25,6 +25,17 @@ int main(int argc, char **argv) {
             printf("exec %s failed\n", a + 5);
             return 1;
         }
+        if (!strcmp(a, "clobber-env")) { /* Chromium's process title: variables moved, their old memory overwritten */
+            extern char **environ;
+            int n = 0;
+            while (environ[n]) n++;
+            char **moved = calloc(n + 1, sizeof *moved);
+            for (int k = 0; k < n; k++) moved[k] = strdup(environ[k]);
+            char **old = environ;
+            environ = moved;
+            for (int k = 0; k < n; k++) memset(old[k], 'x', strlen(old[k]));
+            continue;
+        }
         if (!strncmp(a, "temp:", 5)) { /* temp:<template>: Chromium's shared memory, then removed */
             char t[PATH_MAX];
             snprintf(t, sizeof t, "%s", a + 5);
