@@ -42,7 +42,13 @@ object Store {
     data class App(
         val id: String, val name: String, val summary: String, val version: String,
         val size: Long, val sha256: String, val file: String, val icon: String,
+        // Packages it needs installed first (a Flathub app's runtimes), and
+        // "runtime" for those: Software installs them when an app needs them.
+        val needs: List<String> = emptyList(), val kind: String = "",
     )
+
+    private fun ids(a: JSONObject?, key: String): List<String> =
+        a?.optJSONArray(key)?.let { arr -> (0 until arr.length()).map { arr.getString(it) } }.orEmpty()
 
     /**
      * Where the catalog is, in order: the build's own (store-latest, or a pull
@@ -78,7 +84,8 @@ object Store {
             return (0 until apps.length()).map { i ->
                 val a = apps.getJSONObject(i)
                 App(a.getString("id"), a.optString("name", a.getString("id")), a.optString("summary"),
-                    a.optString("version"), a.optLong("size"), a.getString("sha256"), a.getString("file"), a.optString("icon"))
+                    a.optString("version"), a.optLong("size"), a.getString("sha256"), a.getString("file"), a.optString("icon"),
+                    ids(a, "needs"), a.optString("kind"))
             }.sortedBy { it.name.lowercase() }
         }
         throw failure ?: Exception("no catalog")
@@ -88,7 +95,8 @@ object Store {
         File(root(c), "$id/version.txt").takeIf { File(root(c), "$id/app.txt").exists() && it.exists() }?.readText()?.trim()
 
     /** What an .adpk file is, from its app.json (or app.txt and its menu entry, for older packages). */
-    data class Package(val id: String, val name: String, val summary: String, val version: String, val icon: ByteArray?)
+    data class Package(val id: String, val name: String, val summary: String, val version: String, val icon: ByteArray?,
+                       val needs: List<String> = emptyList())
 
     private val ID = Regex("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")
 
@@ -124,12 +132,14 @@ object Store {
         // The icon nearest 128 px, as the catalog's.
         val icon = icons.entries.minByOrNull { kotlin.math.abs(it.key - 128) }?.value
         return Package(pkgId, m?.optString("name")?.ifEmpty { null } ?: entry("Name") ?: pkgId,
-            m?.optString("summary")?.ifEmpty { null } ?: entry("GenericName") ?: entry("Comment") ?: "", version, icon)
+            m?.optString("summary")?.ifEmpty { null } ?: entry("GenericName") ?: entry("Comment") ?: "", version, icon,
+            ids(m, "needs"))
     }
 
     /** Installs an .adpk file (blocking). The file itself is left where it is. */
     fun installFile(c: Context, file: File): Package {
         val pkg = inspect(file)
+        installNeeds(c, pkg.id, pkg.needs, mutableSetOf(pkg.id))
         val copy = File(c.cacheDir, "adpk-${pkg.id}.zip")
         file.inputStream().use { i -> copy.outputStream().use { i.copyTo(it) } }
         installZip(c, App(pkg.id, pkg.name, pkg.summary, pkg.version, copy.length(), "", copy.name, ""), copy)
@@ -139,9 +149,12 @@ object Store {
     fun icon(app: App): ByteArray? = if (app.icon.isEmpty()) null else try { fetch(baseUrl + app.icon) } catch (e: Exception) { null }
 
     /** Downloads, checks and installs an app (blocking). [progress] gets 0..1. */
-    fun install(c: Context, app: App, progress: (Float) -> Unit = {}) {
+    fun install(c: Context, app: App, progress: (Float) -> Unit = {}) = install(c, app, progress, mutableSetOf(app.id))
+
+    private fun install(c: Context, app: App, progress: (Float) -> Unit, seen: MutableSet<String>) {
         val zip = File(c.cacheDir, "store-${app.id}.zip")
         if (!ID.matches(app.id)) throw Exception("bad app id")
+        installNeeds(c, app.id, app.needs, seen, progress)
         download(baseUrl + app.file, zip, app.size, progress)
         if (sha256(zip) != app.sha256) {
             // The store may have been republished since the catalog was read
@@ -154,6 +167,25 @@ object Store {
             return installZip(c, fresh, zip)
         }
         installZip(c, app, zip)
+    }
+
+    /**
+     * The packages [forId] needs (its runtimes), from the catalog, each before
+     * it and only when it isn't installed yet. [seen] stops a loop.
+     */
+    private fun installNeeds(c: Context, forId: String, needs: List<String>, seen: MutableSet<String>,
+                            progress: (Float) -> Unit = {}) {
+        val missing = needs.filter { it !in installed(c) && seen.add(it) }
+        if (missing.isEmpty()) return
+        val cat = try { catalog() } catch (e: Exception) {
+            throw Exception("it needs ${missing.joinToString()} first, and the catalog can't be reached (${e.message})")
+        }
+        for (id in missing) {
+            val dep = cat.firstOrNull { it.id == id }
+                ?: throw Exception("it needs $id, which isn't in the catalog (install $id.adpk from a file first)")
+            AppLog.i("Software: installing ${dep.id} ${dep.version} first, for $forId")
+            install(c, dep, progress, seen)
+        }
     }
 
     private fun sha256(f: File): String = MessageDigest.getInstance("SHA-256").let { md ->
