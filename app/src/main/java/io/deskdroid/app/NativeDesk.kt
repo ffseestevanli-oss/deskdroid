@@ -1838,13 +1838,15 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * virglrenderer's Venus server (native/virgl, VenusServer.kt). Apps use the
      * Venus Vulkan driver shipped as libdd_vulkan_virtio.so, with Zink for
      * OpenGL (native/flatpak/adpk-run.sh), when $XDG_RUNTIME_DIR/venus.sock is
-     * there; otherwise they draw with llvmpipe. Off when Settings' GPU mode is
-     * software.
+     * there; otherwise they draw with llvmpipe. Experimental: only with
+     * Settings' "GPU for Linux apps" on.
      */
     private fun startGpu(libs: String, runtime: File) {
         val socket = File(runtime, "venus.sock").apply { delete() }
-        val mode = Prefs.gpuMode(this)
-        if (mode == "llvmpipe" || mode == "nocomp") { AppLog.i("[venus] GPU mode $mode: Linux programs draw in software"); return }
+        // Off unless Settings' "GPU for Linux apps" is on: on the Pixel 10 Pro the
+        // server can't export the buffers Zink asks for yet (export_blob -22),
+        // and Kdenlive then stops at its splash screen.
+        if (!Prefs.linuxAppsGpu(this)) { AppLog.i("[venus] GPU for Linux apps is off: they draw in software"); return }
         if (!File(libs, "libdd_vulkan_virtio.so").exists()) return
         try {
             val p = VenusServer.startServer(this, Paths(this), socket) { proc ->

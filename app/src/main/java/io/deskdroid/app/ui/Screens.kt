@@ -403,6 +403,10 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.switchRow("OPTIONAL", "Lock my desktop",
             "Fingerprint or PIN to open DeskDroid.", Prefs.lockDesktop(c)) { on -> Prefs.setLockDesktop(c, on) },
             LinearLayout.LayoutParams(-1, -2))
+        addView(ui.switchRow("EXPERIMENTAL", "GPU for Linux apps",
+            "Flathub apps draw with the phone's GPU (Venus) instead of the CPU. Some apps may not open. Applies when the desktop next starts.",
+            Prefs.linuxAppsGpu(c)) { on -> Prefs.setLinuxAppsGpu(c, on) },
+            LinearLayout.LayoutParams(-1, -2))
         spacer()
         if (again) addView(ui.primaryButton("Done") { nav.back() }, LinearLayout.LayoutParams(-1, -2))
         else {
