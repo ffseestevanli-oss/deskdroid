@@ -14,6 +14,7 @@
 #   libdd_adpk_run.so    adpk-run.sh: starts store packages made from Flathub apps
 #   libddflatpak.so      ddflatpak.c built against glibc (aarch64)
 #   libddflatpak_audit.so  ddflatpak-audit.c: its paths for glibc's loader
+#   libdd_vulkan_virtio.so Mesa's Venus Vulkan driver (Debian's), for the GPU
 # The packages are cached in $DESKDROID_FLATPAK_CACHE (default
 # ~/.cache/deskdroid/flatpak), keyed by this folder's contents.
 set -euo pipefail
@@ -76,4 +77,25 @@ install -m 755 "$HERE/nobwrap.sh" "$OUT/libdd_nobwrap.so"
   "$HERE/../ddmask/ddflatpak-audit.c" -Wl,-soname,libddflatpak_audit.so -Wl,--build-id=none -Wl,-z,noexecstack \
   -o "$OUT/libddflatpak_audit.so"
 "${CROSS}strip" --strip-unneeded "$OUT/libddflatpak_audit.so"
+# Mesa's Venus Vulkan driver, for Flathub apps on the GPU (adpk-run.sh): it
+# sends Vulkan to the Venus server in the APK (../virgl), which runs it on
+# Android's driver. Only the driver: its libraries (libdrm, xcb, wayland) are
+# in every Flathub runtime. Not for desktop-machine builds.
+if [ "$DEBARCH" = arm64 ]; then
+  VCACHE="${DESKDROID_FLATPAK_CACHE:-$HOME/.cache/deskdroid/flatpak}/venus-$key"
+  if [ ! -e "$VCACHE/.done" ]; then
+    echo "== Venus driver (Debian $SUITE mesa-vulkan-drivers)"
+    curl -sSfL -o "$WORK/VPackages.xz" "$MIRROR/dists/$SUITE/main/binary-$DEBARCH/Packages.xz"
+    xz -d "$WORK/VPackages.xz"
+    read -r vfile vsum < <(awk '/^Package: mesa-vulkan-drivers$/{p=1} p&&/^Filename:/{f=$2} p&&/^SHA256:/{print f, $2; exit}' "$WORK/VPackages")
+    curl -sSfL --retry 3 -o "$WORK/venus.deb" "$MIRROR/$vfile"
+    echo "$vsum  $WORK/venus.deb" | sha256sum -c --quiet - || { echo "flatpak: $vfile: bad checksum" >&2; exit 1; }
+    dpkg-deb -x "$WORK/venus.deb" "$WORK/venus"
+    rm -rf "$VCACHE" && mkdir -p "$VCACHE"
+    cp "$WORK/venus/usr/lib/aarch64-linux-gnu/libvulkan_virtio.so" "$VCACHE/"
+    echo "${vfile##*/}" > "$VCACHE/package.txt" && touch "$VCACHE/.done"
+  fi
+  install -m 644 "$VCACHE/libvulkan_virtio.so" "$OUT/libdd_vulkan_virtio.so"
+  echo "   Venus driver: $(cat "$VCACHE/package.txt")"
+fi
 echo "   flatpak: $(du -h "$OUT/libdd_flatpakcli.so" | cut -f1) ($(wc -l < "$CACHE/usr/share/deskdroid-flatpak-packages.txt") Debian packages)"

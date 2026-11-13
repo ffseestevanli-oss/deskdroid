@@ -183,6 +183,23 @@ for m in "$S/$RTPKG/program/metadata" "$meta"; do
 $envs
 ENVS
 done
+# The GPU: Android's own driver, through the Venus server the desktop starts
+# (NativeDesk.kt's startGpu, ../virgl). Vulkan goes to Mesa's Venus driver
+# (libdd_vulkan_virtio.so), OpenGL through Zink on top of it; frames reach the
+# desktop through Wayland shared memory (no DRM device behind Venus). Without
+# the server (Settings' GPU mode set to software), Mesa's llvmpipe draws.
+# DESKDROID_GPU=software in the environment turns it off for one app.
+V="${XDG_RUNTIME_DIR:-$F/runtime}/venus.sock"
+if [ "${DESKDROID_GPU:-}" != software ] && [ -S "$V" ] && [ -e "$L/libdd_vulkan_virtio.so" ]; then
+  icd="$F/flatpak-tmp/venus_icd.json"
+  printf '{"file_format_version": "1.0.0", "ICD": {"library_path": "%s", "api_version": "1.3.305"}}\n' \
+    "$L/libdd_vulkan_virtio.so" > "$icd"
+  export VN_DEBUG=vtest VTEST_SOCKET_NAME="$V" VK_DRIVER_FILES="$icd" VK_ICD_FILENAMES="$icd" \
+    MESA_VK_WSI_DEBUG=sw MESA_LOADER_DRIVER_OVERRIDE=zink GALLIUM_DRIVER=zink ZINK_DESCRIPTORS=lazy
+  gpu="GPU (Venus)"
+else
+  gpu="software (llvmpipe)"
+fi
 # Electron and Chromium apps: Wayland, since there's no X server (Flathub
 # builds often ask for X11 only). Newer Electron ignores the hint variable, so
 # apps started through zypak (Flathub's Electron base) or shipping
@@ -194,7 +211,7 @@ grep -qs zypak "$APP/bin/$cmd" && electron=1
 for d in "$APP" "$APP"/*; do [ -e "$d/chrome-sandbox" ] && electron=1; done
 [ -n "$electron" ] && set -- --ozone-platform=wayland --enable-features=UseOzonePlatform,WaylandWindowDecorations --no-sandbox "$@"
 export PATH=/app/bin:/usr/bin
-echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-no runtime})" >&2
+echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-no runtime}, $gpu)" >&2
 # The runtime's sh starts the command, so ddflatpak handles it like any
 # program the app starts (a script, zypak, an ELF program).
 exec $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"

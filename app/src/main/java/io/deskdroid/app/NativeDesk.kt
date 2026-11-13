@@ -953,6 +953,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             watchAndroidApps()
             val bus = startSessionBus(libs, data, runtime)
             startSound(libs, runtime)
+            startGpu(libs, runtime)
             val scale = NativeDesk.desktopScale(this).toDouble()
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
@@ -1808,6 +1809,34 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
             AppLog.i("Native desktop test: couldn't start the sound server: $e")
+        }
+    }
+
+    /**
+     * The GPU for Linux programs (Flathub apps): Android's own driver, through
+     * virglrenderer's Venus server (native/virgl, VenusServer.kt). Apps use the
+     * Venus Vulkan driver shipped as libdd_vulkan_virtio.so, with Zink for
+     * OpenGL (native/flatpak/adpk-run.sh), when $XDG_RUNTIME_DIR/venus.sock is
+     * there; otherwise they draw with llvmpipe. Off when Settings' GPU mode is
+     * software.
+     */
+    private fun startGpu(libs: String, runtime: File) {
+        val socket = File(runtime, "venus.sock").apply { delete() }
+        val mode = Prefs.gpuMode(this)
+        if (mode == "llvmpipe" || mode == "nocomp") { AppLog.i("[venus] GPU mode $mode: Linux programs draw in software"); return }
+        if (!File(libs, "libdd_vulkan_virtio.so").exists()) return
+        try {
+            val p = VenusServer.startServer(this, Paths(this), socket) { proc ->
+                Thread {
+                    proc.inputStream.bufferedReader().outputLines { AppLog.i("[venus] $it") }
+                    AppLog.i("[venus] exited (${proc.waitFor()})")
+                }.apply { isDaemon = true }.start()
+            }
+            if (p == null) { AppLog.i("[venus] no GPU server: Linux programs draw in software"); return }
+            apps += p
+            AppLog.i("[venus] Linux programs draw on the GPU (Venus server on ${socket.path})")
+        } catch (e: Exception) {
+            AppLog.i("[venus] couldn't start the GPU server: $e")
         }
     }
 
