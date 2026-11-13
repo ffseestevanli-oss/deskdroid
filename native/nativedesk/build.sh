@@ -476,7 +476,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
         $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/knotifications6 share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
-        -x 'share/applications/*discover*' 'share/knotifications6/*discover*' \
+        -x 'share/applications/*discover*' 'share/knotifications6/*discover*' 'share/kxmlgui5/plasmadiscover/*' \
            $(for a in "${store_apps[@]}" "${store_programs[@]}"; do echo "share/applications/*$a*"; done))
       # No TryExec in the menu entries: KDE hides an entry whose TryExec
       # isn't on PATH where the app database is built, which here isn't
