@@ -696,6 +696,9 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
     private fun helperLogs(): String {
         val files = c.filesDir
         val logs = listOf("set-wallpaper.log", "ddmask.log", "glibc/exec.log").map { java.io.File(files, it) } +
+            // Steam through FEX (X86.kt, assets/x86): setup, the FEX check, FEX's server, Steam itself.
+            listOf("x86/install.log", "x86/run/fex-check.log", "x86/run/fexserver.log", "x86/steam.log", "x86/apps.log")
+                .map { java.io.File(files, it) }.filter { it.exists() } +
             (java.io.File(files, "store/apps").listFiles()?.sortedBy { it.name }?.map { java.io.File(it, "run.log") }
                 ?.filter { it.exists() } ?: emptyList())
         val blocked = java.io.File(files, "glibc/sigsys.log").takeIf { it.exists() }?.let { f ->

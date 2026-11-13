@@ -279,4 +279,16 @@ if ! ready || ! steam_ready; then
   fi
 fi
 echo "=== $(date) deskdroid-steam: $(uname -srm), FEX $(cat "$X86/fex/share/deskdroid-fex/version" 2>/dev/null)" >>"$LOG"
+start=$(wc -l <"$LOG")
 x86 run "$@" >>"$LOG" 2>&1
+status=$?
+[ $status -eq 0 ] && exit 0
+# Steam didn't start or stopped with an error: show why, instead of nothing.
+if [ -t 1 ]; then
+  tail -n +$((start + 1)) "$LOG" | tail -n 40
+  say "Steam stopped (exit $status). Full log: $LOG"
+elif command -v konsole >/dev/null; then
+  konsole --hide-menubar -p tabtitle="Steam stopped" -e /system/bin/sh -c \
+    "tail -n +$((start + 1)) '$LOG' | tail -n 40; echo; echo 'Steam stopped (exit $status). Full log: $LOG'; echo 'Press Enter to close.'; read x" &
+fi
+exit $status

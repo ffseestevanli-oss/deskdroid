@@ -1092,6 +1092,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
         X86.prepare(this) // Steam (experimental) in the menu, and the x86 system's /etc
         val bin = linkApps(libs, data)
+        // `steam` in a terminal: the same launcher as the menu's Steam (experimental).
+        try {
+            File(bin, "steam").apply {
+                writeText("#!/system/bin/sh\n# Written by DeskDroid at each start: Steam through FEX-Emu.\n" +
+                    "exec ${File(X86.dir(this@NativeDeskActivity), "bin/deskdroid-steam").path} \"\$@\"\n")
+                setExecutable(true, false)
+            }
+        } catch (e: Exception) { AppLog.i("Native desktop test: couldn't add the steam command: $e") }
         try {
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",

@@ -68,7 +68,9 @@ setup() {
 start_x() {
   export DISPLAY=:$DISPLAY_NUM
   # No /tmp/.X11-unix here (see clean_env): Xwayland listens on its abstract
-  # socket, which X clients try first, and keeps no lock file.
+  # socket, which X clients try first, and keeps no lock file. -pn: the X
+  # server stops when one of its sockets fails (the /tmp one always does
+  # here) unless it's told to carry on with the others.
   if xdpyinfo >/dev/null 2>&1; then
     return 0
   fi
@@ -80,7 +82,7 @@ start_x() {
   Xwayland -help 2>&1 | grep -q -- '-decorate' && decorate="-decorate"
   say "starting Xwayland :$DISPLAY_NUM ($geometry)"
   # shellcheck disable=SC2086
-  Xwayland :$DISPLAY_NUM $size $decorate -nolisten tcp -nolock &
+  Xwayland :$DISPLAY_NUM $size $decorate -nolisten tcp -nolock -pn &
   XPID=$!
   local i
   for i in $(seq 1 60); do
