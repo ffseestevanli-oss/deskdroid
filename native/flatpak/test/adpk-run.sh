@@ -42,22 +42,38 @@ env | sort
 L
 chmod +x "$T/loader"
 run() {
-  env -i HOME="$T/home" PATH=/usr/bin:/bin QT_PLUGIN_PATH=/desktop/plugins DDAPP_PROGRAM="$S/$1/program" \
+  env -i HOME="$T/home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$T/run" XDG_CONFIG_HOME="$T/desk-config" \
+    XDG_DATA_DIRS="$T/desk-share" XDG_CONFIG_DIRS="$T/desk-xdg" QT_QPA_PLATFORMTHEME=deskdroid QT_PLUGIN_PATH=/desktop/plugins DDAPP_PROGRAM="$S/$1/program" \
     DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$T/loader" sh "$HERE/../adpk-run.sh" "${@:2}"
 }
 out="$(run kid3 --dd-command=kid3-cli a b)"
 log="$(cat "$S/kid3/run.log")"
 expect "reads the app, its command and its runtime from the package" "$log" \
-  "^kid3: starting /app/bin/kid3-cli a b \(org.kde.kid3, runtime-kde-6.11\)$"
+  "^kid3: starting /app/bin/kid3-cli a b \(org.kde.kid3, runtime-kde-6.11, software \(llvmpipe\)\)$"
 expect "starts it with the runtime's sh, through the loader" "$out" "^args: $S/runtime-kde-6.11/program/files/bin/sh -c exec \"\\\$0\" \"\\\$@\" /app/bin/kid3-cli a b$"
 expect "the runtime's [Environment] replaces the desktop's Qt settings" "$out" \
   "^QT_PLUGIN_PATH=/app/lib/plugins:/usr/share/runtime/lib/plugins$" "^KDE_FORK_SLAVES=1$" "^TMPDIR=/var/tmp$"
 expect "the app's own paths" "$out" "^PATH=/app/bin:/usr/bin$" "^FLATPAK_ID=org.kde.kid3$" "^ELECTRON_OZONE_PLATFORM_HINT=wayland$" \
   "^DDMASK_GLIBC_LD_LIBRARY_PATH=.*$S/kid3/program/files/lib/extra" "^DDFLATPAK_RUNTIME=$S/runtime-kde-6.11/program/files$"
-expect "makes its data folders" "$(ls "$T/home/.var/app/org.kde.kid3")" "^config$" "^data$"
+expect "the home folder as on Linux: the desktop's settings folder, ~/.local/share" "$out" \
+  "^XDG_CONFIG_HOME=$T/desk-config$" "^XDG_DATA_HOME=$T/home/.local/share$" "^XDG_CACHE_HOME=$T/home/.cache$"
+expect "the desktop's theme: KDE's platform theme, its data and settings folders after the runtime's" "$out" \
+  "^QT_QPA_PLATFORMTHEME=kde$" "^XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share:$T/desk-share$" \
+  "^XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg:$T/desk-xdg$"
+expect "Android's fonts beside the runtime's" "$(cat "$F/flatpak-tmp/fonts.conf")" "<include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>" "<dir>/system/fonts</dir>"
+expect "full FFmpeg (codecs-extra) ahead of the runtime's" "$out" "^DDMASK_GLIBC_LD_LIBRARY_PATH=$F/glibc/lib:$S/kid3/program/files/lib:$S/runtime-mesa-25.08/program/codecs-extra/lib:"
 if [ -r /proc/version ]; then
   expect "a readable /proc/version is left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?$"
 fi
+mkdir -p "$T/run" && : > "$L/libdd_vulkan_virtio.so"
+python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$T/run/venus.sock"
+out2="$(run kid3)"
+expect "with the desktop's Venus server, apps draw on the GPU" "$out2" "^VN_DEBUG=vtest$" "^VTEST_SOCKET_NAME=$T/run/venus.sock$" \
+  "^MESA_LOADER_DRIVER_OVERRIDE=zink$" "^VK_DRIVER_FILES=$F/flatpak-tmp/venus_icd.json$"
+expect "...through the APK's Venus driver" "$(cat "$F/flatpak-tmp/venus_icd.json")" "\"library_path\": \"$L/libdd_vulkan_virtio.so\""
+expect "...and say so" "$(cat "$S/kid3/run.log")" "GPU \(Venus\)\)$"
+expect "DESKDROID_GPU=software keeps one app on llvmpipe" "$(env -i HOME="$T/home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$T/run" DESKDROID_GPU=software DDAPP_PROGRAM="$S/kid3/program" DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$T/loader" sh "$HERE/../adpk-run.sh"; cat "$S/kid3/run.log")" "software \(llvmpipe\)\)$"
+rm -f "$T/run/venus.sock"
 expect "a Qt app gets no Electron flags" "$out" "^args: .*/app/bin/kid3-cli a b$"
 mkdir -p "$S/kid3/program/files/main" && : > "$S/kid3/program/files/main/chrome-sandbox"
 expect "an Electron app is asked for Wayland, without Chromium's sandbox" "$(run kid3 x)" \

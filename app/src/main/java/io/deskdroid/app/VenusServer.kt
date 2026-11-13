@@ -52,12 +52,21 @@ object VenusServer {
             AppLog.i("Mesa's Venus driver (virtio_icd) is missing from the system image")
             return null
         }
+        return startServer(c, paths, paths.virglSocket, log)
+    }
+
+    /**
+     * The server alone, listening on [socket]: the native desktop's Linux
+     * programs (Flathub apps, native/flatpak/adpk-run.sh) bring their own Venus
+     * driver (libdd_vulkan_virtio.so) instead of the rootfs's.
+     */
+    fun startServer(c: Context, paths: Paths, socket: File, log: (Process) -> Unit): Process? {
         val mode = memoryMode(c, paths)
         val suffix = if (mode == "ahb") "_ahb" else ""
         val server = File(paths.nativeLibs, "libvirgl_test_server$suffix.so")
         val renderServer = File(paths.nativeLibs, "libvirgl_render_server$suffix.so")
         if (!server.exists()) return null
-        paths.virglSocket.delete()
+        socket.delete()
 
         // The server was built with prefix /proc/self/cwd (native/virgl/build.sh),
         // so it execs the render server from libexec/ under its working directory.
@@ -68,7 +77,7 @@ object VenusServer {
         if (renderServer.exists()) Os.symlink(renderServer.path, link.path)
 
         AppLog.i("Starting Venus server (${describeMemory(mode)} memory)")
-        val p = ProcessBuilder(server.path, "--venus", "--socket-path", paths.virglSocket.path)
+        val p = ProcessBuilder(server.path, "--venus", "--socket-path", socket.path)
             .directory(work).redirectErrorStream(true).also { pb ->
                 pb.environment().apply {
                     remove("LD_PRELOAD"); remove("LD_LIBRARY_PATH")
@@ -79,7 +88,7 @@ object VenusServer {
         log(p)
 
         val end = System.currentTimeMillis() + 5_000
-        while (!paths.virglSocket.exists()) {
+        while (!socket.exists()) {
             if (!p.isAlive || System.currentTimeMillis() > end) {
                 AppLog.i("Venus server did not start (exit ${if (p.isAlive) "timeout" else p.exitValue()})")
                 p.destroy()

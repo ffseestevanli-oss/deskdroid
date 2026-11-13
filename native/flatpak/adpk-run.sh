@@ -156,10 +156,16 @@ done
 for d in $(sed -n '/^\[Environment\]/,/^\[/{s/^LD_LIBRARY_PATH *= *//p}' "$P/metadata" | tr ':' ' '); do
   case "$d" in /app/*) rpaths="$rpaths:$APP/${d#/app/}" ;; /usr/*) rpaths="$rpaths:$RT/${d#/usr/}" ;; esac
 done
-export DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$APP/lib$rpaths:$RT/lib/$TRIPLE:$RT/lib:$GL/lib:$CX/lib"
+# FFmpeg with every codec (Mesa's package's codecs-extra, Flathub's
+# org.freedesktop.Platform.codecs-extra) ahead of the runtime's, which leaves
+# H.264, HEVC and others out: Flatpak puts it first the same way (ld.so.conf).
+export DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$APP/lib:$CX/lib$rpaths:$RT/lib/$TRIPLE:$RT/lib:$GL/lib"
 export DDFLATPAK_LIBPATH="$DDMASK_GLIBC_LD_LIBRARY_PATH"
 # The desktop's own (bionic) Qt and KDE settings would point the app's Qt at
 # the wrong plugins.
+# The desktop's own folders for themes, icons and settings, kept to add after
+# the app's (below).
+desk_data="${XDG_DATA_DIRS:-}" desk_config="${XDG_CONFIG_DIRS:-}"
 unset QT_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH QT_QPA_PLATFORMTHEME QT_STYLE_OVERRIDE \
   QT_QUICK_CONTROLS_STYLE KDEDIRS QTWEBENGINEPROCESS_PATH LD_LIBRARY_PATH
 # What flatpak run sets inside the sandbox; ddflatpak makes these paths real.
@@ -167,9 +173,31 @@ unset QT_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH QT_QPA_PLATFORMTHEME QT_ST
 # not to this script, which needs Android's mkdir and sed until then.)
 export XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share
 export XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg
-h="${HOME:-$F}/.var/app/$FPID"
-export XDG_DATA_HOME="$h/data" XDG_CONFIG_HOME="$h/config" XDG_CACHE_HOME="$h/cache" XDG_STATE_HOME="$h/.local/state"
+# The home folder like an app installed on Linux, not Flatpak's
+# ~/.var/app/<id>: the desktop's settings folder (XDG_CONFIG_HOME, kept), so
+# apps follow its colours, icons, fonts and GTK theme (DD Party), its user
+# folders (user-dirs.dirs: Documents, Downloads... on the phone's storage),
+# Dolphin's places and recent files; ~/.local/share and ~/.cache for the rest.
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME:-$F}/.config}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-${HOME:-$F}/.local/share}" XDG_CACHE_HOME="${XDG_CACHE_HOME:-${HOME:-$F}/.cache}" \
+  XDG_STATE_HOME="${XDG_STATE_HOME:-${HOME:-$F}/.local/state}"
 mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
+# KDE's look (kdeglobals: Breeze style, DD Party colours and icons) through
+# the runtime's Plasma integration.
+export QT_QPA_PLATFORMTHEME=kde
+# Fonts: the runtime's, and Android's (Roboto, which the desktop's settings name).
+mkdir -p "$F/flatpak-tmp/fontconfig"
+cat > "$F/flatpak-tmp/fonts.conf" <<FONTS
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>
+  <dir>/system/fonts</dir>
+  <dir>${HOME:-$F}/.local/share/fonts</dir>
+  <cachedir>$F/flatpak-tmp/fontconfig</cachedir>
+</fontconfig>
+FONTS
+export FONTCONFIG_FILE="$F/flatpak-tmp/fonts.conf"
 export FLATPAK_ID="$FPID" LOCPATH="$RT/lib/locale" LANG="${LANG:-C.UTF-8}"
 export GST_PLUGIN_SYSTEM_PATH=/app/lib/gstreamer-1.0:/usr/lib/extensions/gstreamer-1.0:/usr/lib/$TRIPLE/gstreamer-1.0
 # [Environment] from the runtime's metadata (QT_PLUGIN_PATH=/app/lib/plugins...),
@@ -183,6 +211,28 @@ for m in "$S/$RTPKG/program/metadata" "$meta"; do
 $envs
 ENVS
 done
+# The GPU: Android's own driver, through the Venus server the desktop starts
+# (NativeDesk.kt's startGpu, ../virgl). Vulkan goes to Mesa's Venus driver
+# (libdd_vulkan_virtio.so), OpenGL through Zink on top of it; frames reach the
+# desktop through Wayland shared memory (no DRM device behind Venus). Without
+# the server (Settings' GPU mode set to software), Mesa's llvmpipe draws.
+# DESKDROID_GPU=software in the environment turns it off for one app.
+V="${XDG_RUNTIME_DIR:-$F/runtime}/venus.sock"
+if [ "${DESKDROID_GPU:-}" != software ] && [ -S "$V" ] && [ -e "$L/libdd_vulkan_virtio.so" ]; then
+  icd="$F/flatpak-tmp/venus_icd.json"
+  printf '{"file_format_version": "1.0.0", "ICD": {"library_path": "%s", "api_version": "1.3.305"}}\n' \
+    "$L/libdd_vulkan_virtio.so" > "$icd"
+  export VN_DEBUG=vtest VTEST_SOCKET_NAME="$V" VK_DRIVER_FILES="$icd" VK_ICD_FILENAMES="$icd" \
+    MESA_VK_WSI_DEBUG=sw MESA_LOADER_DRIVER_OVERRIDE=zink GALLIUM_DRIVER=zink ZINK_DESCRIPTORS=lazy
+  gpu="GPU (Venus)"
+else
+  gpu="software (llvmpipe)"
+fi
+# The desktop's data and settings folders after the app's and runtime's
+# (which the [Environment] above may have set): DD Party's colour scheme,
+# icons and GTK theme, KDE's defaults from the desktop's Global Theme.
+[ -n "$desk_data" ] && export XDG_DATA_DIRS="$XDG_DATA_DIRS:$desk_data"
+[ -n "$desk_config" ] && export XDG_CONFIG_DIRS="$XDG_CONFIG_DIRS:$desk_config"
 # Electron and Chromium apps: Wayland, since there's no X server (Flathub
 # builds often ask for X11 only). Newer Electron ignores the hint variable, so
 # apps started through zypak (Flathub's Electron base) or shipping
@@ -194,7 +244,7 @@ grep -qs zypak "$APP/bin/$cmd" && electron=1
 for d in "$APP" "$APP"/*; do [ -e "$d/chrome-sandbox" ] && electron=1; done
 [ -n "$electron" ] && set -- --ozone-platform=wayland --enable-features=UseOzonePlatform,WaylandWindowDecorations --no-sandbox "$@"
 export PATH=/app/bin:/usr/bin
-echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-no runtime})" >&2
+echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-no runtime}, $gpu)" >&2
 # The runtime's sh starts the command, so ddflatpak handles it like any
 # program the app starts (a script, zypak, an ELF program).
 exec $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
