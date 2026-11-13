@@ -18,13 +18,21 @@ import java.util.concurrent.Executors
  *   remove:<id>         remove an installed app
  *   inspect:<path>      what the .adpk at <path> is: state.json's "package"
  *   adpk:<path>         install the .adpk at <path>
+ *   flathub:<category>:<page>:<query>
+ *                       a page of all of Flathub (FlathubCatalog): state.json's
+ *                       "flathub". No category and no query: the popular list.
+ *                       Installing those is the desktop's flatpak command, which
+ *                       Agora runs itself (backend.cpp), so nothing else here.
  *
  * state.json: {"apps": [{id, name, summary, version, size, installed, icon, open,
  * section ("deskdroid" | "flathub" | "dependencies", Software's tabs), kind,
  * needs, neededBy, neededByInstalled (names of the apps that need it)}],
  * "busy": {id: progress 0..1 or -1}, "error": "...", "catalogError": "...",
  * "package": {path, id, name, summary, version, installed, icon} or absent,
- * "serial": n}. Icons are files in $HOME/software/icons.
+ * "flathub": {category, query, page, total, loading, error, results: [{id, name,
+ * summary, description, icon (a file, or ""), arches, developer, verified,
+ * license, installs, category}]}, "serial": n}. Icons are files in
+ * $HOME/software/icons (Flathub's in icons/flathub).
  */
 object SoftwareBridge {
     private val worker = Executors.newSingleThreadExecutor()
@@ -36,6 +44,13 @@ object SoftwareBridge {
     private var pkg: JSONObject? = null
     private var serial = 0L
     private var lastWrite = 0L
+
+    // All of Flathub (FlathubCatalog), on threads of its own: a search never
+    // waits behind an install. Only the latest search's answer is kept.
+    private val flathubWorker = Executors.newSingleThreadExecutor()
+    private val iconWorkers = Executors.newFixedThreadPool(4)
+    private var flathub = JSONObject().put("results", JSONArray()).put("loading", false)
+    private var flathubAsk = 0L
 
     private fun dir(c: Context) = File(c.filesDir, "software").apply { mkdirs() }
     private fun icons(c: Context) = File(dir(c), "icons").apply { mkdirs() }
@@ -55,6 +70,11 @@ object SoftwareBridge {
             "inspect" -> worker.execute { inspect(app, arg) }
             "adpk" -> { setBusy(app, "file:$arg", -1f); worker.execute { installFile(app, arg) } }
             "dismiss" -> synchronized(lock) { pkg = null; error = "" }.also { write(app) }
+            "flathub" -> {
+                // <category>:<page>:<query>, the query last: it may hold colons.
+                val parts = arg.split(':', limit = 3)
+                flathub(app, parts.getOrElse(0) { "" }, parts.getOrElse(2) { "" }, parts.getOrElse(1) { "1" }.toIntOrNull() ?: 1)
+            }
             else -> AppLog.i("Agora: unknown request $req")
         }
         return true
@@ -124,6 +144,49 @@ object SoftwareBridge {
         finish(c, "file:$path", r.exceptionOrNull()?.let { "Couldn't install ${File(path).name}: ${it.message}" })
     }
 
+    private fun flathub(c: Context, category: String, query: String, page: Int) {
+        val ask = synchronized(lock) {
+            flathubAsk++
+            flathub.put("category", category).put("query", query).put("page", page).put("loading", true).put("error", "")
+            flathubAsk
+        }
+        write(c)
+        flathubWorker.execute {
+            if (synchronized(lock) { ask != flathubAsk }) return@execute // a newer search came in
+            val r = runCatching { FlathubCatalog.search(query, category, page) }
+            val dir = File(icons(c), "flathub").apply { mkdirs() }
+            synchronized(lock) {
+                if (ask != flathubAsk) return@execute
+                r.onSuccess { p ->
+                    // A later page adds to what's shown.
+                    val results = if (page > 1) flathub.optJSONArray("results") ?: JSONArray() else JSONArray()
+                    for (h in p.hits) results.put(h.json(File(dir, "${h.id}.png").takeIf { it.length() > 0 }?.path ?: ""))
+                    flathub.put("results", results).put("total", p.total).put("loading", false).put("error", "")
+                }
+                r.onFailure {
+                    flathub.put("loading", false).put("error", it.message ?: it.toString())
+                    AppLog.i("Agora: Flathub search failed: $it")
+                }
+            }
+            write(c)
+            // The icons, then the state again with them.
+            val hits = r.getOrNull()?.hits.orEmpty().filter { !File(dir, "${it.id}.png").exists() }
+            if (hits.isEmpty()) return@execute
+            val left = java.util.concurrent.atomic.AtomicInteger(hits.size)
+            for (h in hits) iconWorkers.execute {
+                val f = FlathubCatalog.icon(h, dir)
+                synchronized(lock) {
+                    val results = flathub.optJSONArray("results") ?: JSONArray()
+                    if (f != null) for (i in 0 until results.length()) results.optJSONObject(i)?.let { o ->
+                        if (o.optString("id") == h.id) o.put("icon", f.path)
+                    }
+                }
+                // At most a few writes a second, and one at the end.
+                if (left.decrementAndGet() == 0 || System.currentTimeMillis() - lastWrite > 300) write(c)
+            }
+        }
+    }
+
     private fun setBusy(c: Context, id: String, p: Float) {
         synchronized(lock) { busy[id] = p }
         write(c)
@@ -166,7 +229,7 @@ object SoftwareBridge {
             busy.forEach { (k, v) -> b.put(k, v.toDouble()) }
             serial++
             JSONObject().put("apps", apps).put("busy", b).put("error", error).put("catalogError", catalogError)
-                .put("source", Store.baseUrl).put("serial", serial).apply { pkg?.let { put("package", it) } }.toString()
+                .put("source", Store.baseUrl).put("flathub", JSONObject(flathub.toString())).put("serial", serial).apply { pkg?.let { put("package", it) } }.toString()
         }
         lastWrite = System.currentTimeMillis()
         try {
