@@ -45,6 +45,9 @@ load-module module-native-protocol-unix auth-anonymous=1 socket=$P/native
 load-module module-always-sink
 PA
 export HOME="${HOME:-$F/home}" XDG_RUNTIME_DIR="$R" PULSE_RUNTIME_PATH="$P" PULSE_STATE_PATH="$F/sound-state"
+# ddmask's glibc side in the server too: Android's filter blocks calls
+# PulseAudio makes at start (setresgid to its own ids), which ddmask answers.
+[ -e "$L/libddmask_glibc.so" ] && export DDMASK_GLIBC_LD_PRELOAD="$L/libddmask_glibc.so${DDMASK_GLIBC_LD_PRELOAD:+:$DDMASK_GLIBC_LD_PRELOAD}"
 # No realtime or nice changes (Android refuses them), no shared memory files
 # (/dev/shm isn't there; memfd still works), no D-Bus, no idle exit.
 exec $G --library-path "$LP" "$S/usr/bin/pulseaudio" -n -F "$P/deskdroid.pa" --daemonize=no \
