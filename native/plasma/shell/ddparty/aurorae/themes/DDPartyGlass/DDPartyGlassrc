@@ -3,7 +3,7 @@ ActiveTextColor=242,242,247
 InactiveTextColor=138,138,166
 TitleAlignment=Left
 TitleVerticalAlignment=Center
-Animation=150
+Animation=0
 UseTextShadow=false
 Shadow=true
 

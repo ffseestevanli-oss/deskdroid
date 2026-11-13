@@ -56,7 +56,10 @@ def decoration_svg():
         # The window border's shape, which KWin blurs behind (Aurorae's "mask").
         m = Frame((P + CUT, PT + 16, P + CUT, PB + 12), cuts=(CUT, 0, 0, 0), inset=(P, PT, P, PB))
         m.add(m.outline(), "#000000")
-        parts.append(m.render("mask", 0, y))
+        # The filler each piece gets (it keeps a piece's full size) fully clear
+        # here: a mask is made from every pixel with any alpha, so the usual
+        # near-invisible filler made the blur square at the cut corner.
+        parts.append(m.render("mask", 0, y).replace('fill-opacity="0.004"', 'fill-opacity="0"'))
         y += m.H + 8
     for active in (True, False):
         s, h = maximized(active, y)
@@ -118,7 +121,7 @@ ActiveTextColor=242,242,247
 InactiveTextColor=138,138,166
 TitleAlignment=Left
 TitleVerticalAlignment=Center
-Animation=150
+Animation=%d
 UseTextShadow=false
 Shadow=true
 
@@ -147,7 +150,12 @@ PaddingTop=%d
 PaddingBottom=%d
 PaddingLeft=%d
 PaddingRight=%d
-""" % (PT, PB, P, P)
+""" % (
+    # DeskDroid's native Plasma: no fades. Aurorae's state fades (focused /
+    # unfocused frame and buttons) can stop at the start there, leaving the
+    # focused window's title bar without its frame and buttons; with 0 the
+    # new state shows at once.
+    0 if os.environ.get("DDP_NATIVE") else 150, PT, PB, P, P)
 
 
 if __name__ == "__main__":

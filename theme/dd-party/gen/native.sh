@@ -26,14 +26,14 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 python3 colors.py "$TMP"
 python3 plasma.py "$TMP"
 python3 editor.py "$TMP"
-python3 aurorae.py "$TMP"
+DDP_NATIVE=1 python3 aurorae.py "$TMP"
 python3 icons.py "$TMP" ../assets/deskdroid-logo-256.png
 DDP_NATIVE=1 python3 lookandfeel.py "$TMP" ../assets/deskdroid-logo.png
 python3 wallpaper.py "$TMP"
 export DDP_VARIANT=glass
 python3 colors.py "$TMP"
 python3 plasma.py "$TMP"
-python3 aurorae.py "$TMP"
+DDP_NATIVE=1 python3 aurorae.py "$TMP"
 DDP_NATIVE=1 python3 lookandfeel.py "$TMP" ../assets/deskdroid-logo.png
 python3 wallpaper.py "$TMP"
 
