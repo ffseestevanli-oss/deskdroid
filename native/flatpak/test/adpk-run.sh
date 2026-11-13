@@ -87,6 +87,30 @@ expect "...through the APK's Venus driver" "$(cat "$F/flatpak-tmp/venus_icd.json
 expect "...and say so" "$(cat "$S/kid3/run.log")" "GPU \(Venus\)\)$"
 expect "a Venus server instead: Vulkan to Android's Vulkan driver" "$out2" "^VN_DEBUG=vtest$"
 expect "DESKDROID_GPU=software keeps one app on llvmpipe" "$(env -i HOME="$T/home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$T/run" DESKDROID_GPU=software DDAPP_PROGRAM="$S/kid3/program" DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$T/loader" sh "$HERE/../adpk-run.sh"; cat "$S/kid3/run.log")" "software \(llvmpipe\)\)$"
+
+# A failed app: crash.log and Software's crash dialog (a stand-in that notes its arguments).
+mkdir -p "$F/kwin/bin" "$S/kid3/program/files/share/applications"
+printf '#!/bin/sh\necho "$@" > "%s/dialog"\n' "$T" > "$F/kwin/bin/software"; chmod +x "$F/kwin/bin/software"
+printf '[Desktop Entry]\nName=Kid3 Tag Editor\n' > "$S/kid3/program/files/share/applications/org.kde.kid3.desktop"
+printf '#!/bin/sh\necho "segfaulting now" >&2\nexit "${EXIT:-0}"\n' > "$T/exiter"; chmod +x "$T/exiter"
+crash() { # <exit status>
+  rm -f "$T/dialog" "$S/kid3/crash.log"
+  env -i HOME="$T/home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$T/run" WAYLAND_DISPLAY=wayland-0 EXIT="$1" DDAPP_PROGRAM="$S/kid3/program" \
+    DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$T/exiter" sh "$HERE/../adpk-run.sh"
+  echo "status=$?"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do [ -e "$T/dialog" ] && break; sleep 0.1; done
+}
+c_out="$(crash 139)"
+expect "an app killed by a signal keeps its exit status" "$c_out" "^status=139$"
+expect "...writes crash.log with its log" "$(cat "$S/kid3/crash.log")" "^== kid3 failed: it was stopped by signal 11" "^== run.log$" "^segfaulting now$"
+expect "...and opens the crash dialog with its name" "$(cat "$T/dialog" 2>/dev/null)" "^--crashed kid3 Kid3 Tag Editor $S/kid3/crash.log$"
+c_out="$(crash 0)"
+expect "an app that closes normally gets no dialog" "$c_out|$(cat "$T/dialog" 2>/dev/null)" "^status=0\|$"
+c_out="$(crash 143)"
+expect "...nor one that was told to stop (SIGTERM)" "$c_out|$(cat "$T/dialog" 2>/dev/null)" "^status=143\|$"
+c_out="$(crash 2)"
+expect "an error exit gets the dialog too" "$(cat "$T/dialog" 2>/dev/null)|$(head -n 1 "$S/kid3/crash.log")" "^--crashed kid3 .*\|== kid3 failed: it exited with status 2$"
+rm -f "$F/kwin/bin/software"
 rm -f "$T/run/venus.sock"
 expect "a Qt app gets no Electron flags" "$out" "^args: .*/app/bin/kid3-cli a b$"
 mkdir -p "$S/kid3/program/files/main" && : > "$S/kid3/program/files/main/chrome-sandbox"

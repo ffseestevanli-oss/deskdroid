@@ -158,3 +158,33 @@ void Backend::read()
     if (m_busy.isEmpty()) m_poll.stop();
     Q_EMIT changed();
 }
+
+QString CrashReport::tail(int lines) const
+{
+    QFile f(m_log);
+    if (!f.open(QIODevice::ReadOnly))
+        return QStringLiteral("(no log at %1)").arg(m_log);
+    if (f.size() > 64 * 1024)
+        f.seek(f.size() - 64 * 1024);
+    QStringList all = QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'));
+    while (!all.isEmpty() && all.last().trimmed().isEmpty())
+        all.removeLast();
+    return all.mid(std::max<qsizetype>(0, all.size() - lines)).join(QLatin1Char('\n'));
+}
+
+QString CrashReport::suggestedName() const
+{
+    return QStringLiteral("%1-crash-%2.log").arg(m_id, QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd-HHmm")));
+}
+
+QString CrashReport::saveTo(const QString &url) const
+{
+    const QUrl u(url);
+    const QString to = u.isLocalFile() ? u.toLocalFile() : url;
+    if (QFile::exists(to))
+        QFile::remove(to);
+    QFile from(m_log);
+    if (!from.copy(to))
+        return from.errorString();
+    return QString();
+}

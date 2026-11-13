@@ -25,6 +25,21 @@ static int softwareMain(int argc, char **argv)
     for (const char *font : {":/fonts/Orbitron.ttf", ":/fonts/ChakraPetch-Regular.ttf", ":/fonts/ChakraPetch-SemiBold.ttf", ":/fonts/ChakraPetch-Bold.ttf"})
         QFontDatabase::addApplicationFont(QString::fromLatin1(font));
 
+    // The crash dialog: --crashed <id> <name> <log> (adpk-run.sh).
+    const QStringList all = app.arguments();
+    const int crashed = all.indexOf(QStringLiteral("--crashed"));
+    if (crashed > 0 && all.size() > crashed + 3) {
+        CrashReport report(all[crashed + 1], all[crashed + 2], all[crashed + 3]);
+        QApplication::setApplicationDisplayName(QStringLiteral("Something's not right"));
+        QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("dialog-error"), QIcon(QStringLiteral(":/icon.svg"))));
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("report"), &report);
+        engine.load(QUrl(QStringLiteral("qrc:/qml/Crash.qml")));
+        if (engine.rootObjects().isEmpty())
+            return 1;
+        return app.exec();
+    }
+
     Backend backend;
     // A package to install: the first argument that isn't an option.
     QString package;
