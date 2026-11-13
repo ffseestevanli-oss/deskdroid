@@ -1035,8 +1035,9 @@ f = pathlib.Path(sys.argv[1]); d = json.loads(f.read_text())
 d.setdefault("KPlugin", {})["Id"] = "ffmpegthumbs"
 f.write_text(json.dumps(d, indent=4) + "\n")
 PY
-  # FFmpeg's static libraries need zlib and libm after them.
-  echo 'target_link_libraries(ffmpegthumbs z m)' >> "$s/CMakeLists.txt"
+  # FFmpeg's static libraries need what they use after them: libavcodec's
+  # Opus decoder uses libswresample, and all of them libavutil, zlib and libm.
+  echo "target_link_libraries(ffmpegthumbs $PREFIX/ffmpeg/lib/libswresample.a $PREFIX/ffmpeg/lib/libavutil.a z m)" >> "$s/CMakeLists.txt"
   unandroid "$s"
   # FindFFmpeg falls back to find_path/find_library: FFmpeg's own prefix first.
   kde_cmake "$s" -DCMAKE_PREFIX_PATH="$PREFIX/ffmpeg;$PREFIX"
