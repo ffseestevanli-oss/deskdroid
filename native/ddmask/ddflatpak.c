@@ -191,6 +191,46 @@ int linkat(int od, const char *o, int nd, const char *n, int fl)
     return r;
 }
 int link(const char *o, const char *n) { return linkat(AT_FDCWD, o, AT_FDCWD, n, 0); }
+
+/* Creating, renaming and removing names, so that a file made at a mapped
+ * path (Chromium's shared memory under /dev/shm, a temporary file under /tmp)
+ * can also be removed or renamed there. */
+int unlink(const char *p) { char b[PATH_MAX]; REAL(unlink); return real_unlink(map(p, b)); }
+int unlinkat(int d, const char *p, int f) { char b[PATH_MAX]; REAL(unlinkat); return real_unlinkat(d, map(p, b), f); }
+int rmdir(const char *p) { char b[PATH_MAX]; REAL(rmdir); return real_rmdir(map(p, b)); }
+int mkdir(const char *p, mode_t m) { char b[PATH_MAX]; REAL(mkdir); return real_mkdir(map(p, b), m); }
+int mkdirat(int d, const char *p, mode_t m) { char b[PATH_MAX]; REAL(mkdirat); return real_mkdirat(d, map(p, b), m); }
+int rename(const char *o, const char *n) { char b1[PATH_MAX], b2[PATH_MAX]; REAL(rename); return real_rename(map(o, b1), map(n, b2)); }
+int renameat(int od, const char *o, int nd, const char *n) { char b1[PATH_MAX], b2[PATH_MAX]; REAL(renameat); return real_renameat(od, map(o, b1), nd, map(n, b2)); }
+
+/* mkstemp and the like open the file inside glibc, where open() above
+ * doesn't see it: make the name at the mapped path, then copy the random
+ * letters back into the caller's template, which keeps its own path. */
+static void copy_back(char *tmpl, const char *made, int suffix) {
+    size_t lt = strlen(tmpl), lm = strlen(made);
+    if (made == tmpl || lt < (size_t)suffix + 6 || lm < (size_t)suffix + 6) return;
+    memcpy(tmpl + lt - suffix - 6, made + lm - suffix - 6, 6);
+}
+#define TEMP_WRAP(name, ...) { char b[PATH_MAX]; REAL(name); const char *m = map(t, b); \
+    if (m != t && m != b) { snprintf(b, sizeof b, "%s", m); m = b; } \
+    int fd = real_##name((char *)m, ##__VA_ARGS__); if (fd >= 0) copy_back(t, m, sfx); return fd; }
+int mkstemp(char *t) { int sfx = 0; TEMP_WRAP(mkstemp) }
+int mkstemp64(char *t) { int sfx = 0; TEMP_WRAP(mkstemp64) }
+int mkostemp(char *t, int f) { int sfx = 0; TEMP_WRAP(mkostemp, f) }
+int mkostemp64(char *t, int f) { int sfx = 0; TEMP_WRAP(mkostemp64, f) }
+int mkstemps(char *t, int sfx) { TEMP_WRAP(mkstemps, sfx) }
+int mkstemps64(char *t, int sfx) { TEMP_WRAP(mkstemps64, sfx) }
+int mkostemps(char *t, int sfx, int f) { TEMP_WRAP(mkostemps, sfx, f) }
+int mkostemps64(char *t, int sfx, int f) { TEMP_WRAP(mkostemps64, sfx, f) }
+char *mkdtemp(char *t) {
+    char b[PATH_MAX]; REAL(mkdtemp);
+    const char *m = map(t, b);
+    if (m == t) return real_mkdtemp(t);
+    if (m != b) { snprintf(b, sizeof b, "%s", m); }
+    if (!real_mkdtemp(b)) return NULL;
+    copy_back(t, b, 0);
+    return t;
+}
 ssize_t readlinkat(int d, const char *p, char *o, size_t n) { ssize_t r = self_link(p, o, n); if (r != -2) return r; char b[PATH_MAX]; REAL(readlinkat); return real_readlinkat(d, map(p, b), o, n); }
 char *realpath(const char *p, char *o) { char b[PATH_MAX]; REAL(realpath); return real_realpath(map(p, b), o); }
 char *canonicalize_file_name(const char *p) { char b[PATH_MAX]; REAL(canonicalize_file_name); return real_canonicalize_file_name(map(p, b)); }
