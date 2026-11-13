@@ -65,7 +65,13 @@ object X86 {
         env["FEX_ROOTFS"] = rootfs(c).path
     }
 
-    /** At each desktop start: the launchers, the menu entry, and the x86 system's /etc for this phone. */
+    /**
+     * At each desktop start: the launchers, steam:// link handling, and the x86
+     * system's /etc for this phone. The handler is hidden from the menu
+     * (NoDisplay): the Steam Installation Assistant is the menu's one Steam entry,
+     * and rewriting the file each start takes the old "Steam (experimental)"
+     * entry off existing installs too.
+     */
     fun prepare(c: Context) {
         try {
             val bin = File(dir(c), "bin").apply { mkdirs() }
@@ -77,7 +83,7 @@ object X86 {
             File(c.filesDir, ".local/share/applications").apply { mkdirs() }
                 .resolve("deskdroid-steam.desktop").writeText(
                     "[Desktop Entry]\n# Written by DeskDroid (X86.kt) at each start.\nType=Application\n" +
-                    "Name=Steam (experimental)\nComment=Valve's x86 Steam client through FEX-Emu\n" +
+                    "Name=Steam\nComment=Valve's x86 Steam client through FEX-Emu\nNoDisplay=true\n" +
                     "Exec=${File(bin, "deskdroid-steam").path} %U\nIcon=applications-games\nTerminal=false\n" +
                     "Categories=Game;\nMimeType=x-scheme-handler/steam;x-scheme-handler/steamlink;\n" +
                     "StartupWMClass=Xwayland\nKeywords=games;x86;FEX;\n")

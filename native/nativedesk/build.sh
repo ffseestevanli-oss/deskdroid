@@ -97,7 +97,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     # Etherium (Firefox, native/firefox, published by firefox.yml) is in the
     # store too, run through ddmask like GIMP.
     [ -n "${DESKDROID_FIREFOX:-}" ] && [ -e "$DESKDROID_FIREFOX" ] && store_programs+=(firefox)
-    for app in dolphin kioworker konsole ksmserver-logout-greeter kwrite systemsettings kcolorschemeeditor plasma-discover steam-assistant software; do
+    for app in dolphin kioworker konsole ksmserver-logout-greeter kwrite systemsettings kcolorschemeeditor steam-assistant software; do
       [ -e "$DESKDROID_QT_ANDROID/lib/lib$app.so" ] || continue
       install -m 755 "$DESKDROID_QT_ANDROID/lib/lib$app.so" "$OUT/libdd_$app.so"
       bundled+=("$OUT/libdd_$app.so"); apps+=("$app")
@@ -161,6 +161,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
           done
         fi
         case "$rel" in platforms/*) case "$base" in *wayland*) ;; *) continue ;; esac ;; esac
+        # Discover was removed (Agora is the app store); a cached prefix may still have its plugins.
+        case "$rel" in discover/*|*discover*) continue ;; esac
         install -m 644 "$DESKDROID_QT_ANDROID/plugins/$rel" "$OUT/$name"
         bundled+=("$OUT/$name"); plugins=$((plugins + 1))
         printf '%s\t%s\n' "$name" "$linkrel" >> "$WORK/plugins.txt"
@@ -184,7 +186,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
           install -m 644 "$root/qml/$rel" "$OUT/$name"
           bundled+=("$OUT/$name"); qmlplugins=$((qmlplugins + 1))
           printf '%s\t%s\n' "$name" "$rel" >> "$WORK/qml.txt"
-        done < <(cd "$root/qml" && find . -name '*.so' | sed 's|^\./||' | grep -Ev "$qmlskip" | sort)
+        done < <(cd "$root/qml" && find . -name '*.so' | sed 's|^\./||' | grep -Ev "$qmlskip" | grep -v '^org/kde/discover' | sort)
       done
       echo "   $qmlplugins QML plugins"
     fi
@@ -473,8 +475,9 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       [ -d "$WORK/gtkshare" ] && (cd "$WORK/gtkshare" && zip -qr -X "$OUT/libkwin_data.so" share)
       # The apps' menu entries, window layouts (kxmlgui) and own data.
       (cd "$DESKDROID_QT_ANDROID" && zip -qr -X "$OUT/libkwin_data.so" \
-        $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/knotifications6 share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor share/libdiscover $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
-        -x $(for a in "${store_apps[@]}" "${store_programs[@]}"; do echo "share/applications/*$a*"; done))
+        $(ls -d share/applications share/kxmlgui5 share/config.kcfg share/knotifications6 share/themes share/icons/breeze share/icons/breeze-dark share/icons/hicolor $(for a in $(cat "$WORK/apps.txt"); do echo "share/$a"; done) 2>/dev/null) \
+        -x 'share/applications/*discover*' 'share/knotifications6/*discover*' \
+           $(for a in "${store_apps[@]}" "${store_programs[@]}"; do echo "share/applications/*$a*"; done))
       # No TryExec in the menu entries: KDE hides an entry whose TryExec
       # isn't on PATH where the app database is built, which here isn't
       # where bin/<app> lives (Konsole's entry has one, so Konsole was missing).

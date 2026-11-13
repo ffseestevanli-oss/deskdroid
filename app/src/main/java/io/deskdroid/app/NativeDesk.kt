@@ -1090,9 +1090,16 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             File(config, "plasmashellrc").delete()
             stamp.writeText(layoutVersion)
         }
-        X86.prepare(this) // Steam (experimental) in the menu, and the x86 system's /etc
+        // Discover is gone from the APK: a panel that still pins it pins Agora instead.
+        for (name in listOf("plasma-org.deskdroid.desktop-appletsrc", "plasma-org.kde.plasma.desktop-appletsrc"))
+            File(config, name).takeIf { it.exists() }?.let { f ->
+                val t = f.readText()
+                val n = t.replace("org.kde.discover.desktop", "org.deskdroid.software.desktop")
+                if (n != t) { f.writeText(n); AppLog.i("Native desktop test: $name pins Agora instead of Discover") }
+            }
+        X86.prepare(this) // steam:// links (no menu entry), and the x86 system's /etc
         val bin = linkApps(libs, data)
-        // `steam` in a terminal: the same launcher as the menu's Steam (experimental).
+        // `steam` in a terminal: Steam through FEX-Emu (deskdroid-steam).
         try {
             File(bin, "steam").apply {
                 writeText("#!/system/bin/sh\n# Written by DeskDroid at each start: Steam through FEX-Emu.\n" +
