@@ -169,6 +169,8 @@ fi
 
 cmd="$CMD"
 case "$1" in --dd-command=*) cmd="${1#--dd-command=}"; shift ;; esac
+# A command is a name in /app/bin or a path (Flathub's VLC: command=/app/bin/vlc).
+case "$cmd" in /*) prog="$cmd" ;; *) prog="/app/bin/$cmd" ;; esac
 
 APP="$P/files"
 if [ -n "${DDAPP_RUNTIME:-}" ]; then
@@ -408,7 +410,7 @@ export QT_LOGGING_RULES="${QT_LOGGING_RULES:+$QT_LOGGING_RULES;}qt.qpa.theme=tru
 # which isn't here.
 export ELECTRON_OZONE_PLATFORM_HINT="${ELECTRON_OZONE_PLATFORM_HINT:-wayland}" XDG_SESSION_TYPE=wayland
 electron=""
-grep -qs zypak "$APP/bin/$cmd" && electron=1
+grep -qs zypak "$APP/bin/${prog#/app/bin/}" && electron=1
 for d in "$APP" "$APP"/*; do [ -e "$d/chrome-sandbox" ] && electron=1; done
 [ -n "$electron" ] && set -- --ozone-platform=wayland --enable-features=UseOzonePlatform,WaylandWindowDecorations --no-sandbox "$@"
 # Apps that only draw through X11 (Flatpak's sockets=x11 without wayland:
@@ -453,9 +455,12 @@ start_x() {
       DDFLATPAK_MOUNTS="/bin/sh=$CLI/usr/bin/dash;/var/lib/xkb=$XT/xkb" \
       DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" \
       DDFLATPAK_LIBPATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" PATH="/system/bin:$PATH"
+    # Drawing on the CPU: no GL for its glamor here (no libEGL in flatpak-cli),
+    # and its windows' contents go to the desktop in shared memory (-shm).
+    export XWAYLAND_NO_GLAMOR=1
     unset DDFLATPAK_LOADER DDMASK_GLIBC_LD_AUDIT
     # shellcheck disable=SC2086
-    setsid $G "$XW" ":$XN" $size $decorate -nolisten tcp -pn -terminate 10 -displayfd 3 \
+    setsid $G "$XW" ":$XN" $size $decorate -shm -nolisten tcp -pn -terminate 10 -displayfd 3 \
       </dev/null >>"$D/xwayland.log" 2>&1 3>"$XR" &
     echo $! > "$XP"
   )
@@ -478,7 +483,7 @@ case ";$xsockets;" in
   *";x11;"*) case ";$xsockets;" in *";wayland;"*|*";fallback-x11;"*) ;; *) start_x ;; esac ;;
 esac
 export PATH=/app/bin:/usr/bin
-echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-${RT:-no runtime}}, $gpu)" >&2
+echo "$SID: starting $prog $* (${FPID:-?}, ${RTPKG:-${RT:-no runtime}}, $gpu)" >&2
 # The runtime's sh starts the command, so ddflatpak handles it like any
 # program the app starts (a script, zypak, an ELF program). Not exec'd: the
 # launcher waits, so a failure gets the crash dialog. Closing normally (0) or
@@ -486,9 +491,9 @@ echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-${RT:-no runtime}}, 
 if [ "$ARCH" = x86_64 ]; then
   guest="$(sed -n '/^\[Environment\]/,/^\[/{s/^LD_LIBRARY_PATH *= *//p}' "$meta" | head -n 1)"
   FEXRUN_ID="$SID" FEXRUN_APP="$APP" FEXRUN_RT="$RT" FEXRUN_GL="$GL" FEXRUN_LIBPATH="$guest" \
-    "${DESKDROID_SH:-/system/bin/sh}" "$L/libdd_flatpak_fex.so" "$cmd" "$@"
+    "${DESKDROID_SH:-/system/bin/sh}" "$L/libdd_flatpak_fex.so" "$prog" "$@"
 else
-  $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
+  $G "$RT/bin/sh" -c 'exec "$0" "$@"' "$prog" "$@"
 fi
 st=$?
 # Android's tools again (the app's PATH has no sed or mkdir here).
