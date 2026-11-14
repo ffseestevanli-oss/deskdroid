@@ -415,6 +415,30 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
         '{id, name, summary, version, size: $size, sha256: $sha, file: $file, icon: $icon}' "$t/app.json")")
       echo "   store: $app ($(du -h "$STORE_OUT/$app.zip" | cut -f1), theme)"
     done
+    # Ready-made packages (native/store/prebuilt.txt): .adpk files from
+    # $DESKDROID_STORE_PREBUILT, published as they are, with their app.json's
+    # "needs" in the catalog so Software installs a Flathub app's runtimes first.
+    if [ -n "${DESKDROID_STORE_PREBUILT:-}" ] && [ -d "$DESKDROID_STORE_PREBUILT" ]; then
+      while read -r f; do
+        case "$f" in ''|'#'*) continue ;; esac
+        src="$DESKDROID_STORE_PREBUILT/$f"
+        [ -f "$src" ] || { echo "   ? store: $f (not in $DESKDROID_STORE_PREBUILT)"; continue; }
+        meta="$(unzip -p "$src" app.json)" || { echo "   ? store: $f has no app.json"; continue; }
+        app="$(jq -r .id <<<"$meta")"
+        cp "$src" "$STORE_OUT/$app.zip"
+        size="$(stat -c %s "$STORE_OUT/$app.zip")"; sha="$(sha256sum "$STORE_OUT/$app.zip" | cut -d' ' -f1)"
+        icon=""
+        png="$(unzip -Z1 "$src" 'share/icons/hicolor/128x128/apps/*.png' 2>/dev/null | head -1)"
+        [ -n "$png" ] && unzip -p "$src" "$png" > "$STORE_OUT/$app.png" && icon="$app.png"
+        kind=""; case "$app" in runtime-*) kind=runtime ;; esac
+        source=""; [ "$(jq -r '.flatpak // empty' <<<"$meta")" != "" ] && source=flathub
+        store_entries+=("$(jq -c --argjson size "$size" --arg sha "$sha" --arg file "$app.zip" --arg icon "$icon" \
+          --arg kind "$kind" --arg source "$source" \
+          '{id, name, summary, version, size: $size, sha256: $sha, file: $file, icon: $icon,
+            needs: (.needs // []), kind: $kind, source: $source}' <<<"$meta")")
+        echo "   store: $app ($(du -h "$STORE_OUT/$app.zip" | cut -f1), ready-made${kind:+, $kind})"
+      done < "$HERE/../store/prebuilt.txt"
+    fi
     (IFS=,; echo "{\"version\":1,\"apps\":[${store_entries[*]}]}") > "$STORE_OUT/index.json"
     # Data KWin reads at run time (keyboard layouts, its own files), as a zip
     # named like a library so it ships the same way; the app unpacks it.

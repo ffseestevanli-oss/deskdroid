@@ -49,3 +49,12 @@ into `~/.local/share`), `app.json` (id, name, summary, version) and
 Software's Open button opens Global Theme instead of running a program.
 `themes/dd-party/` is the flat DD Party, made by `theme/dd-party/gen/native.sh`
 (DeskDroid's default is DD Party Glass, in the APK).
+
+## Ready-made packages
+
+`prebuilt.txt` lists .adpk files that go into the catalog as they are
+(Flathub apps from `tools/flathub-adpk` and their runtimes). Set
+`DESKDROID_STORE_PREBUILT` to the folder that holds them when building
+(`native/nativedesk/build.sh`); each gets an entry with its app.json's
+`needs`, so installing EasyEffects from Agora installs the KDE and Mesa
+runtimes first. Without the folder they're left out.

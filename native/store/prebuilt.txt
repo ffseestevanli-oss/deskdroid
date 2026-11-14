@@ -1,0 +1,8 @@
+# Ready-made store packages (.adpk) listed in Agora's catalog as they are:
+# Flathub apps packaged by tools/flathub-adpk, and the runtimes they need
+# (app.json "needs", which Software installs first). One file name per line,
+# looked up in $DESKDROID_STORE_PREBUILT (native/nativedesk/build.sh); without
+# that folder they're left out of the catalog.
+runtime-mesa-25.08.adpk
+runtime-kde-6.11.adpk
+easyeffects.adpk
