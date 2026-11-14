@@ -370,6 +370,11 @@ elif [ -S "$R/venus.sock" ] && [ -e "$L/libdd_vulkan_virtio.so" ]; then
 else
   gpu="software (llvmpipe)"
 fi
+# Apps that only speak PipeWire (EasyEffects: xdg-run/pipewire-0 in their
+# permissions) abort without its socket; say why instead of vanishing.
+if grep -q 'xdg-run/pipewire-0' "$meta" 2>/dev/null && [ ! -S "${PIPEWIRE_RUNTIME_DIR:-$R}/pipewire-0" ]; then
+  die "needs DeskDroid's PipeWire sound server, which this DeskDroid build doesn't have yet: update DeskDroid, then open it again"
+fi
 # The desktop's data and settings folders after the app's and runtime's
 # (which the [Environment] above may have set): DD Party's colour scheme,
 # icons and GTK theme, KDE's defaults from the desktop's Global Theme.
