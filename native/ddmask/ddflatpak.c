@@ -455,6 +455,29 @@ int execvpe(const char *f, char *const argv[], char *const envp[]) {
     return execve(p, argv, envp);
 }
 int execvp(const char *f, char *const argv[]) { extern char **environ; return execvpe(f, argv, environ); }
+/* The list forms too (an X server runs xkbcomp with execl("/bin/sh", ...)):
+ * otherwise they'd reach ddmask's, past these paths. */
+#define LIST_ARGS(first, last)                                              \
+    va_list ap; int n = 1;                                                  \
+    va_start(ap, last); while (va_arg(ap, char *)) n++; va_end(ap);         \
+    char *argv[n + 1]; argv[0] = (char *)(first);                           \
+    va_start(ap, last); for (int i = 1; i <= n; i++) argv[i] = va_arg(ap, char *);
+int execl(const char *p, const char *arg0, ...) {
+    extern char **environ;
+    LIST_ARGS(arg0, arg0); va_end(ap);
+    return execve(p, argv, environ);
+}
+int execlp(const char *f, const char *arg0, ...) {
+    extern char **environ;
+    LIST_ARGS(arg0, arg0); va_end(ap);
+    return execvpe(f, argv, environ);
+}
+int execle(const char *p, const char *arg0, ...) {
+    LIST_ARGS(arg0, arg0);
+    char **envp = va_arg(ap, char **); va_end(ap);
+    return execve(p, argv, envp);
+}
+#undef LIST_ARGS
 
 static int spawn(pid_t *pid, const char *p, const posix_spawn_file_actions_t *fa,
                  const posix_spawnattr_t *at, char *const argv[], char *const envp[]) {
