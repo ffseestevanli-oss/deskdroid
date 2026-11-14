@@ -411,6 +411,58 @@ electron=""
 grep -qs zypak "$APP/bin/$cmd" && electron=1
 for d in "$APP" "$APP"/*; do [ -e "$d/chrome-sandbox" ] && electron=1; done
 [ -n "$electron" ] && set -- --ozone-platform=wayland --enable-features=UseOzonePlatform,WaylandWindowDecorations --no-sandbox "$@"
+# Apps that only draw through X11 (Flatpak's sockets=x11 without wayland:
+# Flathub's VLC, whose Qt interface needs an X server and otherwise falls
+# back to its command line and quits): an X server, Xwayland (Debian's, in
+# files/flatpak-cli), as one window on the desktop, shared by those apps and
+# stopping 10 s after the last one closes. It runs with ddflatpak over the
+# flatpak tools' folders, so /tmp and /bin/sh (dash, for xkbcomp, its
+# keyboard maps) are where it looks. DESKDROID_X_GEOMETRY:
+# its size (WIDTHxHEIGHT, or fullscreen).
+start_x() {
+  CLI="${DESKDROID_FLATPAK_CLI:-$F/flatpak-cli}"
+  XW="${DESKDROID_XWAYLAND:-$CLI/usr/bin/Xwayland}"
+  XN="${DESKDROID_X_DISPLAY:-8}"
+  XT="$F/flatpak-tmp"
+  # Its pid and, once it is listening, its display number (-displayfd).
+  XP="$XT/.X$XN-pid" XR="$XT/.X$XN-ready"
+  export DISPLAY=":$XN"
+  xpid="$( { tr -cd '0-9' < "$XP"; } 2>/dev/null)"
+  if [ -n "$xpid" ] && [ -s "$XR" ] && kill -0 "$xpid" 2>/dev/null; then
+    echo "$SID: X11 only: using the X server on :$XN" >&2
+    return 0
+  fi
+  if [ ! -f "$XW" ]; then
+    echo "$SID: X11 only, and this DeskDroid build has no X server (Xwayland)" >&2
+    return 1
+  fi
+  rm -f "$XP" "$XR"
+  mkdir -p "$XT/.X11-unix" "$XT/xkb"
+  geo="${DESKDROID_X_GEOMETRY:-1280x800}"
+  if [ "$geo" = fullscreen ]; then size="-fullscreen"; else size="-geometry $geo"; fi
+  decorate=""
+  grep -qs -- '-decorate' "$XW" && decorate="-decorate"
+  echo "$SID: X11 only: starting an X server (Xwayland :$XN, $geo)" >&2
+  ( export DDFLATPAK_RUNTIME="$CLI/usr" DDFLATPAK_APP="$CLI/nothing" DDFLATPAK_TMP="$XT" \
+      DDFLATPAK_MOUNTS="/bin/sh=$CLI/usr/bin/dash;/var/lib/xkb=$XT/xkb" \
+      DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" \
+      DDFLATPAK_LIBPATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" PATH="/system/bin:$PATH"
+    unset DDFLATPAK_LOADER DDMASK_GLIBC_LD_AUDIT
+    # shellcheck disable=SC2086
+    setsid $G "$XW" ":$XN" $size $decorate -nolisten tcp -pn -terminate 10 -displayfd 3 \
+      </dev/null >>"$D/xwayland.log" 2>&1 3>"$XR" &
+    echo $! > "$XP"
+  )
+  # Ready once it names its display (-displayfd). Android keeps apps out of
+  # /proc/net/unix and the /tmp socket fails here (-pn: it carries on with
+  # its abstract one, which X clients try first).
+  i=0; while [ $i -lt 80 ] && [ ! -s "$XR" ]; do sleep 0.25; i=$((i + 1)); done
+  [ -s "$XR" ] || { echo "$SID: the X server didn't start (see xwayland.log): $(tail -n 3 "$D/xwayland.log" 2>/dev/null | tr '\n' ' ')" >&2; return 1; }
+}
+xsockets="$(sed -n '/^\[Context\]/,/^\[/{s/^sockets *= *//p}' "$meta" | head -n 1)"
+case ";$xsockets;" in
+  *";x11;"*) case ";$xsockets;" in *";wayland;"*|*";fallback-x11;"*) ;; *) start_x ;; esac ;;
+esac
 export PATH=/app/bin:/usr/bin
 echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-${RT:-no runtime}}, $gpu)" >&2
 # The runtime's sh starts the command, so ddflatpak handles it like any
