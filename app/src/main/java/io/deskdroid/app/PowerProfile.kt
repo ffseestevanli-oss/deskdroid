@@ -33,7 +33,7 @@ import java.io.File
  *    CPU is paused and resumed in short slices so it averages that share
  *    (SIGSTOP/SIGCONT, like cpulimit). Light work (music, downloads, a text
  *    editor) never reaches the cap and runs untouched. KWin, Plasma, the
- *    sound server, D-Bus, the GPU server, terminal programs and anything
+ *    sound server and sound effects (ViPER FX, EasyEffects), D-Bus, the GPU server, terminal programs and anything
  *    being debugged are never paused.
  *
  *                     frames/s   cores                     app CPU cap
@@ -367,7 +367,9 @@ object PowerProfile {
         /** Never paused: the desktop itself, its services, and what a person is driving by hand. */
         private val EXEMPT = listOf(
             "libkwin_wayland.so", "libplasmashell.so", "pipewire", "wireplumber",
-            "dbus-daemon", "virgl", "/system/bin/sh", "ksmserver", "kded"
+            "dbus-daemon", "virgl", "/system/bin/sh", "ksmserver", "kded",
+            // Sound effects run in the sound server's cycle: pausing one stops all sound.
+            "viperfx", "easyeffects"
         )
 
         fun setCap(c: Double, asleep: Boolean) {

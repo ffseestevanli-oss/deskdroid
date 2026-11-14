@@ -25,6 +25,12 @@ export SPA_PLUGIN_DIR="$U/spa-0.2" PIPEWIRE_MODULE_DIR="$U/pipewire-0.3" PIPEWIR
 export WIREPLUMBER_MODULE_DIR="$U/wireplumber-0.5" WIREPLUMBER_DATA_DIR="$S/usr/share/wireplumber"
 export PIPEWIRE_LOG_SYSTEMD=false DISABLE_RTKIT=1
 
+# ddmask's glibc side in the server and its tools: Android's filter blocks
+# calls Linux daemons make at start, which ddmask answers.
+# ddmask's glibc build: the ddmask module's (native/ddmask/module.sh), else the APK's.
+dmg="$L/libddmask_glibc.so"
+[ -n "${DDMASK_MODULE:-}" ] && [ -e "$DDMASK_MODULE/api-1" ] && [ -e "$DDMASK_MODULE/lib/libddmask_glibc.so" ] && dmg="$DDMASK_MODULE/lib/libddmask_glibc.so"
+[ -e "$dmg" ] && export DDMASK_GLIBC_LD_PRELOAD="$dmg${DDMASK_GLIBC_LD_PRELOAD:+:$DDMASK_GLIBC_LD_PRELOAD}"
 case "$1" in
   pactl|pacat|paplay|parec|wpctl|pw-cli|pw-dump|pw-top|pw-link|pw-metadata|pw-cat|pw-play|pw-record)
     tool="$1"; shift
@@ -61,6 +67,8 @@ context.properties = {
     default.clock.allowed-rates = [ 48000 ]
     default.clock.quantum = 1024
     default.clock.min-quantum = 256
+    # Asleep the app forces 8192 (SleepMode: clock.force-quantum), ~6 cycles a second.
+    default.clock.max-quantum = 8192
     module.x11.bell = false
 }
 context.spa-libs = {
@@ -115,12 +123,6 @@ wireplumber.profiles = {
   }
 }
 CONF
-# ddmask's glibc side in the server too: Android's filter blocks calls
-# Linux daemons make at start, which ddmask answers.
-# ddmask's glibc build: the ddmask module's (native/ddmask/module.sh), else the APK's.
-dmg="$L/libddmask_glibc.so"
-[ -n "${DDMASK_MODULE:-}" ] && [ -e "$DDMASK_MODULE/api-1" ] && [ -e "$DDMASK_MODULE/lib/libddmask_glibc.so" ] && dmg="$DDMASK_MODULE/lib/libddmask_glibc.so"
-[ -e "$dmg" ] && export DDMASK_GLIBC_LD_PRELOAD="$dmg${DDMASK_GLIBC_LD_PRELOAD:+:$DDMASK_GLIBC_LD_PRELOAD}"
 # No realtime scheduling (Android refuses it: module-rt isn't loaded), no
 # mlock, no D-Bus; memfd for shared memory (/dev/shm isn't there).
 exec $G --library-path "$LP" "$S/usr/bin/pipewire" -c "$P/deskdroid.conf"
