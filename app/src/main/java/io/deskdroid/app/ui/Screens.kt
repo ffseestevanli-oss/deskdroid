@@ -813,6 +813,8 @@ class GpuReportScreen(a: Activity, n: Navigator) : Screen(a, n) {
         val mode = Prefs.gpuMode(c)
         sb.appendLine("Graphics setting: $mode -> ${GpuProfile.resolve(mode, paths)}, Venus memory " +
             "${Prefs.venusMemory(c)} -> ${VenusServer.memoryMode(c, paths)}, desktop on GPU: ${Prefs.gpuDesktop(c)}")
+        sb.appendLine("Desktop compositing (KWin): " + io.deskdroid.app.NativeDesk.kwinGraphics.ifEmpty {
+            if (io.deskdroid.app.NativeDesk.running) "no GPU messages from KWin" else "start the desktop, then open this report again" })
         sb.appendLine()
         sb.append(run(listOf(paths.gpuReport.path)))
         if (angle != null) sb.append(run(listOf(paths.gpuReport.path, "--angle", angle.path)))

@@ -816,6 +816,9 @@ void NativeDeskEglBackend::init()
         return;
     }
     setEglDisplay(display);
+    // What the phone's driver is, in the log: when the GPU is turned down,
+    // a line after this says why (and the GPU report has the full lists).
+    qInfo("nativedesk: EGL %s, vendor %s", eglQueryString(display->handle(), EGL_VERSION), eglQueryString(display->handle(), EGL_VENDOR));
     for (const QByteArray &ext : {QByteArrayLiteral("EGL_ANDROID_get_native_client_buffer"), QByteArrayLiteral("EGL_ANDROID_image_native_buffer"), QByteArrayLiteral("EGL_KHR_image_base")}) {
         if (!hasExtension(ext)) {
             setFailed(QStringLiteral("nativedesk: EGL lacks ") + QString::fromLatin1(ext));
@@ -826,7 +829,22 @@ void NativeDeskEglBackend::init()
         setFailed(QStringLiteral("nativedesk: no eglGetNativeClientBufferANDROID"));
         return;
     }
-    if (!createContext(EGL_NO_CONFIG_KHR) || !openglContext()->makeCurrent()) {
+    // Without EGL_KHR_no_config_context (some Adreno drivers) the context needs
+    // a config: any RGBA8888 one that does OpenGL ES 3. It only ever draws
+    // into the AHardwareBuffers' framebuffers, never into an EGL surface.
+    EGLConfig config = EGL_NO_CONFIG_KHR;
+    if (!hasExtension(QByteArrayLiteral("EGL_KHR_no_config_context"))) {
+        const EGLint want[] = {
+            EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_NONE};
+        EGLint count = 0;
+        if (!eglChooseConfig(display->handle(), want, &config, 1, &count) || count < 1) {
+            setFailed(QStringLiteral("nativedesk: no EGL_KHR_no_config_context and no RGBA8888 GLES 3 config"));
+            return;
+        }
+        qInfo("nativedesk: no EGL_KHR_no_config_context; using a GLES 3 config");
+    }
+    if (!createContext(config) || !openglContext()->makeCurrent()) {
         setFailed(QStringLiteral("nativedesk: can't make an OpenGL ES context"));
         return;
     }
