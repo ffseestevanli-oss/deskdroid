@@ -5,7 +5,7 @@ debs.py <Packages file> <mirror> <package>...
 
 Follows Depends and Pre-Depends from the named packages, minus what
 DeskDroid gives Flatpak apps itself or what can't work on Android anyway
-(SKIP): glibc (native/glibc), the sandbox (bubblewrap, xdg-dbus-proxy:
+(SKIP): glibc (native/glibc), Mesa's drivers, the sandbox (bubblewrap, xdg-dbus-proxy:
 ddflatpak runs apps without it), system services and package scripts.
 Prints "<url> <sha256>" per package.
 """
@@ -20,6 +20,10 @@ SKIP = {
     "login", "passwd", "libpam-modules", "libpam-runtime", "lsb-base", "sysvinit-utils",
     "tzdata", "media-types", "netbase", "readline-common", "dconf-service", "gpg-agent", "pinentry-curses",
     "dirmngr", "gnupg-l10n", "gpg-wks-client", "gpgsm",
+    # Mesa's drivers, which Xwayland's libgbm and GLX would pull in (LLVM:
+    # 180 MB): Xwayland draws without them (no glamor), in shared memory.
+    "mesa-libgallium", "libgl1-mesa-dri", "libglx-mesa0", "libllvm19", "libz3-4", "libvulkan1",
+    "libsensors5", "libsensors-config", "mesa-vulkan-drivers",
 }
 
 

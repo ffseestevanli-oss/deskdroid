@@ -5,7 +5,7 @@
 #   native/flatpak/build.sh <outdir>
 #
 # Installs into <outdir>:
-#   libdd_flatpakcli.so  a zip of flatpak, OSTree, gpg and their libraries
+#   libdd_flatpakcli.so  a zip of flatpak, OSTree, gpg, Xwayland and their libraries
 #                        (Debian trixie, arm64), which the app unpacks into
 #                        files/flatpak-cli; they run on DeskDroid's glibc
 #   libdd_flatpak.so     the flatpak command (flatpak.sh): installs and
@@ -24,7 +24,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$(mkdir -p "$1" && cd "$1" && pwd)"
 MIRROR=https://deb.debian.org/debian
 SUITE=trixie
-ROOTS="flatpak gpg gpgconf libgcc-s1 libstdc++6 ca-certificates"
+# xwayland: the X server for apps that only draw through X11 (Flathub's VLC),
+# started by adpk-run.sh as a window on the desktop; dash, the /bin/sh it
+# runs xkbcomp (its keyboard maps) with.
+ROOTS="flatpak gpg gpgconf libgcc-s1 libstdc++6 ca-certificates xwayland dash"
 # DESKDROID_FLATPAK_DEBARCH=amd64 (with CROSS=) builds it for a desktop
 # machine, for ../glibc/test/android-sim.sh.
 DEBARCH="${DESKDROID_FLATPAK_DEBARCH:-arm64}"

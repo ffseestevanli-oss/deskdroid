@@ -43,6 +43,17 @@ Electron apps start through `zypak-wrapper`, which needs Flatpak's portal:
 ddflatpak starts them directly with `--no-sandbox`, and on Wayland with
 `--ozone-platform-hint=auto` (`../ddmask/ddflatpak.c`).
 
+Apps that only draw through X11 (`sockets=x11` without `wayland` or
+`fallback-x11`, like Flathub's VLC) get an X server: `adpk-run.sh` starts
+Xwayland (Debian's, in `files/flatpak-cli`) as one window on the desktop,
+with ddflatpak over the flatpak tools' folders so `/tmp` and `/bin/sh` (dash,
+which runs xkbcomp for its keyboard maps) are where it looks. Those apps
+share it on `:8`, and it stops 10 s after the last one closes. It listens on
+the abstract socket (`@/tmp/.X11-unix/X8`), which X clients try first; the
+socket file fails on Android and is skipped (`-pn`). `DESKDROID_X_GEOMETRY`
+sets its size (`WIDTHxHEIGHT`, default `1280x800`, or `fullscreen`); its
+output goes to `xwayland.log` beside the app's `run.log`.
+
 ## Use
 
 In Konsole:
@@ -91,5 +102,7 @@ What Android changes, and how it's handled:
   (llvmpipe, or SwiftShader in Electron) for now.
 - Without hard links, each app and runtime is stored twice (OSTree's repo
   and the checkout): KCalc with its KDE runtime takes about 6 GB.
+- X11-only apps draw inside one fixed-size Xwayland window, not as windows
+  of their own.
 - Portals (file chooser, notifications through Flatpak) aren't there; apps
   fall back to their own dialogs.

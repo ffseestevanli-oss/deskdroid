@@ -41,6 +41,7 @@ TMPDIR=/var/tmp
 LD_LIBRARY_PATH=/app/lib/extra'
 cat > "$T/loader" <<'L'
 #!/bin/sh
+case "$1" in */Xwayland) exec "$@" ;; esac
 echo "args: $*"
 env | sort
 L
@@ -68,6 +69,40 @@ expect "GTK apps get the desktop's GTK theme" "$out" "^GTK_THEME=DD-Party$" "^GS
 expect "...in GSettings too, only those keys" "$(cat "$T/desk-config/glib-2.0/settings/keyfile")" "^other='kept'$" \
   "^\[org/gnome/desktop/interface\]$" "^color-scheme='prefer-dark'$" "^gtk-theme='DD-Party'$" "^icon-theme='DD-Party'$"
 run kid3 >/dev/null
+# X11-only apps: a stand-in Xwayland that says it is ready (-displayfd) and stays a while.
+pkg vlc '[Application]
+name=org.videolan.VLC
+runtime=org.kde.Platform/aarch64/6.11
+command=vlc
+
+[Context]
+sockets=pulseaudio;x11;'
+mkdir -p "$T/cli/usr/bin"
+cat > "$T/cli/usr/bin/Xwayland" <<X
+#!/bin/sh
+{ echo "xargs: \$*"; env | grep -E '^DDFLATPAK_(MOUNTS|TMP|RUNTIME)='; } >> "$T/xwayland.txt"
+echo 8 >&3
+exec sleep 3
+X
+chmod +x "$T/cli/usr/bin/Xwayland"
+xrun() { # flatpak-cli folder
+  env -i HOME="$T/home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$T/run" DDAPP_PROGRAM="$S/vlc/program" DESKDROID_FLATPAK_CLI="$1" \
+    DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$T/loader" sh "$HERE/../adpk-run.sh" 2>&1 | grep -E '^(DISPLAY=|args:)'
+  cat "$S/vlc/run.log"
+}
+xout="$(xrun "$T/cli")"
+expect "an X11-only app gets an X server (Xwayland) and DISPLAY" "$xout" "^DISPLAY=:8$" "^vlc: X11 only: starting an X server \(Xwayland :8, 1280x800\)$" \
+  "^vlc: starting /app/bin/vlc"
+expect "...as a window, keyboard maps through dash, /tmp in flatpak-tmp" "$(cat "$T/xwayland.txt")" \
+  "^xargs: :8 -geometry 1280x800 -nolisten tcp -pn -terminate 10 -displayfd 3$" "^DDFLATPAK_MOUNTS=/bin/sh=$T/cli/usr/bin/dash;" \
+  "^DDFLATPAK_TMP=$F/flatpak-tmp$" "^DDFLATPAK_RUNTIME=$T/cli/usr$"
+xout="$(xrun "$T/cli")"
+expect "...the next X11-only app shares it" "$xout" "^DISPLAY=:8$" "^vlc: X11 only: using the X server on :8$"
+expect "...started once" "$(grep -c xargs "$T/xwayland.txt")" "^1$"
+kill "$(cat "$F/flatpak-tmp/.X8-pid")" 2>/dev/null || true; rm -f "$F/flatpak-tmp/.X8-pid"
+xout="$(xrun "$T/none")"
+expect "...says so when the build has no Xwayland" "$xout" "^vlc: X11 only, and this DeskDroid build has no X server \(Xwayland\)$" "^vlc: starting /app/bin/vlc"
+expect "apps that draw through Wayland get no X server" "$(run kid3 2>&1 | grep -c '^DISPLAY=' || true)" "^0$"
 expect "...the same each start" "$(grep -c "^gtk-theme=" "$T/desk-config/glib-2.0/settings/keyfile")" "^1$"
 expect "Android's fonts beside the runtime's" "$(cat "$F/flatpak-tmp/fonts.conf")" "<include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>" "<dir>/system/fonts</dir>"
 expect "full FFmpeg (codecs-extra) ahead of the runtime's" "$out" "^DDMASK_GLIBC_LD_LIBRARY_PATH=$F/glibc/lib:$S/kid3/program/files/lib:$S/runtime-mesa-25.08/program/codecs-extra/lib:"
