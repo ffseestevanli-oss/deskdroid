@@ -702,6 +702,10 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             // Steam through FEX (X86.kt, assets/x86): setup, the FEX check, FEX's server, Steam itself.
             listOf("x86/install.log", "x86/run/fex-check.log", "x86/run/fexserver.log", "x86/steam.log", "x86/apps.log")
                 .map { java.io.File(files, it) }.filter { it.exists() } +
+            // Steam's own logs ($HOME/.local/share/Steam/logs): why its client stopped
+            // (bootstrap = the updater and starter, console = the client, webhelper = its UI).
+            listOf("bootstrap_log.txt", "console_log.txt", "stderr.txt", "webhelper.txt", "cef_log.txt")
+                .map { java.io.File(files, ".local/share/Steam/logs/$it") }.filter { it.exists() } +
             (java.io.File(files, "store/apps").listFiles()?.sortedBy { it.name }
                 ?.flatMap { listOf(java.io.File(it, "run.log"), java.io.File(it, "xwayland.log")) }
                 ?.filter { it.exists() } ?: emptyList()) +
