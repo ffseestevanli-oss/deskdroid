@@ -67,6 +67,12 @@ out="$(run "$APP/bin/probe" "exec:/app/bin/script" /usr/share/probe/data)"
 expect "a #!/bin/sh script runs with the runtime's sh" "$out" "argv0=/app/bin/probe exe=$APP/bin/probe" \
   "/usr/share/probe/data fopen=runtime-data"
 
+# A script for an interpreter of the system's (Android's /system/bin/sh, which
+# has no ddflatpak), mounted at a runtime path: adpk-run.sh's bwrap.
+mkdir -p "$T/system"; cp "$(readlink -f /bin/sh)" "$T/system/sh"
+printf '#!%s\necho "script=$0"\nexit 1\n' "$T/system/sh" > "$T/bwrap"; chmod 755 "$T/bwrap"
+out="$(DDFLATPAK_MOUNTS="/usr/bin/bwrap=$T/bwrap" run "$APP/bin/probe" "exec:/usr/bin/bwrap" 2>&1 || true)"
+expect "a system interpreter gets the script's real path" "$out" "^script=$T/bwrap$"
 out="$(run "$APP/bin/probe" "exec:/app/bin/zypak-wrapper.sh" /app/bin/probe /app/share/probe/data)"
 expect "zypak-wrapper starts the program itself with --no-sandbox" "$out" \
   "argv0=/app/bin/probe exe=$APP/bin/probe" "--no-sandbox fopen=no" "/app/share/probe/data fopen=app-data"
