@@ -404,12 +404,13 @@ else
   $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
 fi
 st=$?
+# Android's tools again (the app's PATH has no sed or mkdir here).
+export PATH="/system/bin:$PATH"
 case "$st" in
   0|129|130|143) ;;
   *) if [ "$st" -gt 128 ]; then what="it was stopped by signal $((st - 128))$(kill -l "$((st - 128))" 2>/dev/null | sed 's/^/ (SIG/;s/$/)/')"
      else what="it exited with status $st"; fi
      echo "$SID: $what" >&2
-     export PATH="/system/bin:$PATH"
      crashed "$st" "$what" ;;
 esac
 exit "$st"
