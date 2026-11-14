@@ -690,8 +690,9 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
      * The desktop's helpers' own logs, at the end of the saved log: Set as Desktop
      * Wallpaper's; ddmask's journal (how Linux programs started, which couldn't
      * and why, the system calls Android blocked); the programs Flatpak couldn't
-     * start; and each store app's launcher log (store/apps/<app>/run.log), so an
-     * app that doesn't open says why.
+     * start; and each store app's launcher log (store/apps/<app>/run.log, or
+     * flatpak-tmp/run/<app>/run.log for flatpak run), so an app that doesn't open
+     * says why.
      */
     private fun helperLogs(): String {
         val files = c.filesDir
@@ -701,7 +702,13 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
             // Steam through FEX (X86.kt, assets/x86): setup, the FEX check, FEX's server, Steam itself.
             listOf("x86/install.log", "x86/run/fex-check.log", "x86/run/fexserver.log", "x86/steam.log", "x86/apps.log")
                 .map { java.io.File(files, it) }.filter { it.exists() } +
-            (java.io.File(files, "store/apps").listFiles()?.sortedBy { it.name }?.map { java.io.File(it, "run.log") }
+            (java.io.File(files, "store/apps").listFiles()?.sortedBy { it.name }
+                ?.flatMap { listOf(java.io.File(it, "run.log"), java.io.File(it, "xwayland.log")) }
+                ?.filter { it.exists() } ?: emptyList()) +
+            // Apps started with flatpak run (flatpak.sh hands them to adpk-run.sh), and
+            // the X server X11-only apps get.
+            (java.io.File(files, "flatpak-tmp/run").listFiles()?.sortedBy { it.name }
+                ?.flatMap { listOf(java.io.File(it, "run.log"), java.io.File(it, "xwayland.log")) }
                 ?.filter { it.exists() } ?: emptyList())
         val blocked = java.io.File(files, "glibc/sigsys.log").takeIf { it.exists() }?.let { f ->
             try {

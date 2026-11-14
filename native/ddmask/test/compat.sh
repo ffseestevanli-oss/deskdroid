@@ -16,6 +16,7 @@ mkdir -p "$T/lib" "$T/app/bin" "$T/glib"
 "$CC" -O2 -Wall "$HERE/probe.c" -o "$T/app/bin/probe"
 "$CC" -O2 -Wall "$HERE/sigsys-probe.c" -o "$T/app/bin/sigsys-probe" -lpthread
 "$CC" -O2 -Wall "$HERE/shm-probe.c" -o "$T/app/bin/shm-probe"
+"$CC" -O2 -Wall "$HERE/link-probe.c" -o "$T/app/bin/link-probe"
 "$CC" -O2 -Wall -shared -fPIC "$HERE/android-deny.c" -o "$T/android-deny.so" -ldl
 cp "$T/app/bin/probe" "$T/app/bin/nox"
 printf '#!/bin/sh\necho "nox-script $*"\n' > "$T/app/bin/noxscript"
@@ -116,5 +117,14 @@ out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so" "$T/app/bin/shm-probe" 2>&1)"
 expect "...and where there is a /dev/shm, as before" "$out" "^memfd-reopen=ok$" "^shm-shared=shared$" "^shm-gone=No such file or directory$"
 out="$(env LD_PRELOAD="$T/android-deny.so" TMPDIR="$T/tmp" "$T/app/bin/shm-probe" 2>&1)"
 expect "(without ddmask the memfd copy fails there)" "$out" "^memfd-reopen=Permission denied$"
+
+# -- hard links, which Android refuses (android-deny.c)
+mkdir -p "$T/l1" "$T/l2"
+out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so:$T/android-deny.so" "$T/app/bin/link-probe" "$T/l1" 2>&1)"
+expect "an X server's lock file by hard link: made as a copy, EEXIST once it's there" "$out" "^lock=ok$" "^lock-again=File exists$" \
+  "^lock-text= +4242$" "^lock-mode=444$"
+expect "...other links still fail as they would" "$out" "^link-dir=Permission denied$" "^link-missing=No such file or directory$"
+out="$(env LD_PRELOAD="$T/android-deny.so" "$T/app/bin/link-probe" "$T/l2" 2>&1)"
+expect "(without ddmask the lock file fails there)" "$out" "^lock=Permission denied$"
 
 [ "$fails" -eq 0 ] && echo "all compatibility tests passed" || { echo "$fails failed"; exit 1; }

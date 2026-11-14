@@ -419,6 +419,12 @@ for d in "$APP" "$APP"/*; do [ -e "$d/chrome-sandbox" ] && electron=1; done
 # flatpak tools' folders, so /tmp and /bin/sh (dash, for xkbcomp, its
 # keyboard maps) are where it looks. DESKDROID_X_GEOMETRY:
 # its size (WIDTHxHEIGHT, or fullscreen).
+# A live process (not a zombie, whose pid stays until it's reaped).
+xalive() {
+  [ -n "$1" ] && kill -0 "$1" 2>/dev/null || return 1
+  st="$(sed 's/.*) //; s/ .*//' "/proc/$1/stat" 2>/dev/null)"
+  [ "$st" != Z ] && [ "$st" != X ]
+}
 start_x() {
   CLI="${DESKDROID_FLATPAK_CLI:-$F/flatpak-cli}"
   XW="${DESKDROID_XWAYLAND:-$CLI/usr/bin/Xwayland}"
@@ -428,7 +434,7 @@ start_x() {
   XP="$XT/.X$XN-pid" XR="$XT/.X$XN-ready"
   export DISPLAY=":$XN"
   xpid="$( { tr -cd '0-9' < "$XP"; } 2>/dev/null)"
-  if [ -n "$xpid" ] && [ -s "$XR" ] && kill -0 "$xpid" 2>/dev/null; then
+  if [ -s "$XR" ] && xalive "$xpid"; then
     echo "$SID: X11 only: using the X server on :$XN" >&2
     return 0
   fi
@@ -456,8 +462,16 @@ start_x() {
   # Ready once it names its display (-displayfd). Android keeps apps out of
   # /proc/net/unix and the /tmp socket fails here (-pn: it carries on with
   # its abstract one, which X clients try first).
-  i=0; while [ $i -lt 80 ] && [ ! -s "$XR" ]; do sleep 0.25; i=$((i + 1)); done
-  [ -s "$XR" ] || { echo "$SID: the X server didn't start (see xwayland.log): $(tail -n 3 "$D/xwayland.log" 2>/dev/null | tr '\n' ' ')" >&2; return 1; }
+  xpid="$( { tr -cd '0-9' < "$XP"; } 2>/dev/null)"
+  i=0
+  while [ $i -lt 160 ] && [ ! -s "$XR" ] && xalive "$xpid"; do sleep 0.25; i=$((i + 1)); done
+  [ -s "$XR" ] && return 0
+  if xalive "$xpid"; then
+    echo "$SID: the X server isn't ready after 40 s (still running, pid $xpid): $(tail -n 3 "$D/xwayland.log" 2>/dev/null | tr '\n' ' ')" >&2
+  else
+    echo "$SID: the X server stopped (see xwayland.log): $(tail -n 5 "$D/xwayland.log" 2>/dev/null | tr '\n' ' ')" >&2
+  fi
+  return 1
 }
 xsockets="$(sed -n '/^\[Context\]/,/^\[/{s/^sockets *= *//p}' "$meta" | head -n 1)"
 case ";$xsockets;" in
