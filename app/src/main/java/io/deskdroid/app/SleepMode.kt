@@ -22,6 +22,11 @@ import java.io.File
  *  - Every desktop process (KWin, Plasma, the Linux and Windows apps) runs at
  *    background priority, so Android keeps it off the fast cores when it can.
  *  - The battery, network and CPU widgets' status is written every 30 s, not 2.
+ *  - Sound: the sound server works in 8192-frame cycles (~6 a second, not up to
+ *    190 when a player asks for low latency), and so do the players and
+ *    effects (ViPER FX, EasyEffects) it runs; AudioBridge plays through a
+ *    power-saving track with a second of buffer, which Android can feed from
+ *    its deep buffer with the processor asleep in between.
  *
  * Screen on, a monitor plugged in, or the desktop moved to a monitor: all of
  * it goes back to full power at once. Nothing is paused outright, so music,
@@ -30,6 +35,8 @@ import java.io.File
 object SleepMode {
     /** Background priority (Process.THREAD_PRIORITY_BACKGROUND). */
     private const val SLEEP_NICE = 10
+    /** The sound server's cycle while asleep: 8192 frames at 48 kHz, ~170 ms. */
+    private const val SLEEP_QUANTUM = 8192
 
     @Volatile var asleep = false
         private set
@@ -98,8 +105,9 @@ object SleepMode {
         if (NativeDesk.running) NativeDesk.nativeSetSleeping(sleep)
         PhoneStatus.setSlow(sleep)
         PowerProfile.sleepChanged(sleep)
+        NativeDesk.sound?.setPowerSave(sleep)
         val pkg = c.packageName
-        worker.post { renice(pkg, sleep) }
+        worker.post { renice(pkg, sleep); soundCycles(c, sleep) }
         AppLog.i("Native desktop: " + (if (sleep) "asleep, saving power" else "awake, full power") + " ($why)")
     }
 
@@ -129,6 +137,39 @@ object SleepMode {
         }
         if (!sleep) before.clear()
         AppLog.i("Native desktop: $changed desktop threads " + if (sleep) "to background priority" else "back to full priority")
+    }
+
+    /**
+     * The sound server's cycle while asleep (clock.force-quantum in its
+     * settings metadata, as `pw-metadata -n settings 0 clock.force-quantum 8192`
+     * in a terminal would), back to what players ask for on wake (0).
+     */
+    private fun soundCycles(c: Context, sleep: Boolean) {
+        val libs = c.applicationInfo.nativeLibraryDir
+        val script = File(libs, "libdd_sound.so")
+        val runtime = File(c.cacheDir, "runtime")
+        if (!script.exists() || !File(runtime, "pipewire-0").exists()) return
+        try {
+            val p = ProcessBuilder("/system/bin/sh", script.path, "pw-metadata", "-n", "settings", "0",
+                "clock.force-quantum", if (sleep) SLEEP_QUANTUM.toString() else "0").redirectErrorStream(true).also { pb ->
+                pb.environment().apply {
+                    remove("LD_PRELOAD")
+                    put("DESKDROID_FILES", c.filesDir.path)
+                    put("HOME", File(c.filesDir, "home").path)
+                    put("XDG_RUNTIME_DIR", runtime.path)
+                    put("PIPEWIRE_RUNTIME_DIR", runtime.path)
+                    File(c.filesDir, "store/apps/ddmask/program").takeIf { it.isDirectory }?.let { put("DDMASK_MODULE", it.path) }
+                }
+            }.start()
+            val done = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            if (!done) p.destroy()
+            val out = if (done) p.inputStream.bufferedReader().readText().trim() else ""
+            val code = if (done) p.exitValue() else -1
+            AppLog.i("Native desktop: sound cycles " + (if (sleep) "of $SLEEP_QUANTUM frames" else "back to normal") +
+                if (code != 0) " failed ($code${if (out.isNotEmpty()) ": " + out.take(200) else ""})" else "")
+        } catch (e: Exception) {
+            AppLog.i("Native desktop: couldn't change the sound cycles: $e")
+        }
     }
 
     /**
