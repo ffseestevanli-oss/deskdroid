@@ -2,6 +2,13 @@
   "policies": {
     "DisableTelemetry": true,
     "DisableFirefoxStudies": true,
+    "DisableFirefoxAccounts": true,
+    "DisableAppUpdate": true,
+    "DisableSystemAddonUpdate": true,
+    "DontCheckDefaultBrowser": true,
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "SkipTermsOfUse": true,
     "DisablePocket": true,
     "DisableFeedbackCommands": true,
     "DisableDefaultBrowserAgent": true,
@@ -22,7 +29,9 @@
       "ExtensionRecommendations": false,
       "FeatureRecommendations": false,
       "MoreFromMozilla": false,
-      "SkipOnboarding": true
+      "SkipOnboarding": true,
+      "UrlbarInterventions": false,
+      "FirefoxLabs": false
     },
     "ExtensionSettings": {
       "uBlock0@raymondhill.net": {
