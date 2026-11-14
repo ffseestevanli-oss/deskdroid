@@ -168,6 +168,46 @@ pref("signon.management.page.breach-alerts.enabled", false);
 pref("signon.firefoxRelay.feature", "disabled");
 pref("browser.shopping.experience2023.enabled", false);
 pref("browser.attribution.enabled", false);
+// ---- Etherium (DeskDroid): no Mozilla account, no Sync --------------------
+// No sign-in anywhere: the "Sync your data everywhere" box in the menu, the
+// account button, Settings › Sync, Send Tab and phone pairing all go
+// (policies.json's DisableFirefoxAccounts locks this). Nothing to sync with.
+pref("identity.fxaccounts.enabled", false);
+pref("identity.fxaccounts.toolbar.enabled", false);
+pref("identity.fxaccounts.pairing.enabled", false);
+pref("identity.fxaccounts.commands.enabled", false);
+pref("identity.fxaccounts.autoconfig.uri", "");
+pref("identity.mobilepromo.android", "");
+pref("identity.mobilepromo.ios", "");
+// ---- Etherium (DeskDroid): the rest of the data collection -----------------
+// Newer pings and reports that the settings above don't cover: privacy-
+// preserving measurement (DAP), the browser-characteristics ping, search
+// result categories, Firefox Suggest's data, add-on abuse reports, feedback
+// and breakage-report pages, Mozilla's MITM detection check, and the
+// welcome, VPN and Focus promos.
+pref("toolkit.telemetry.dap_enabled", false);
+pref("toolkit.telemetry.dap.leader.url", "");
+pref("toolkit.telemetry.dap.helper.url", "");
+pref("toolkit.telemetry.user_characteristics_ping.opt-out", true);
+pref("toolkit.telemetry.pioneer-new-studies-available", false);
+pref("browser.search.serpEventTelemetryCategorization.enabled", false);
+pref("browser.urlbar.quicksuggest.dataCollection.enabled", false);
+pref("browser.urlbar.merino.endpointURL", "");
+pref("browser.topsites.contile.endpoint", "");
+pref("browser.newtabpage.activity-stream.telemetry.structuredIngestion.endpoint", "");
+pref("network.trr.confirmation_telemetry_enabled", false);
+pref("extensions.abuseReport.enabled", false);
+pref("app.normandy.first_run", false);
+pref("messaging-system.askForFeedback", false);
+pref("app.feedback.baseURL", "");
+pref("browser.contentblocking.reportBreakage.url", "");
+pref("extensions.webcompat-reporter.newIssueEndpoint", "");
+pref("security.certerrors.mitm.priming.enabled", false);
+pref("security.certerrors.mitm.priming.endpoint", "");
+pref("browser.aboutwelcome.enabled", false);
+pref("browser.privatebrowsing.vpnpromourl", "");
+pref("browser.promo.focus.enabled", false);
+pref("browser.promo.pin.enabled", false);
 // ---- DeskDroid's desktop ---------------------------------------------------
 // Scrolling that stops responding (touch, touchpad and mouse at once): on
 // Wayland Firefox paces scrolling by the compositor's frame callbacks, and
