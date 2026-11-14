@@ -181,7 +181,7 @@ run() {
   unset QT_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH QT_QPA_PLATFORMTHEME QT_STYLE_OVERRIDE \
     QT_QUICK_CONTROLS_STYLE KDEDIRS QTWEBENGINEPROCESS_PATH
   # What flatpak run sets inside the sandbox; ddflatpak makes these paths real.
-  export PATH=/app/bin:/usr/bin
+  # (PATH last, below: this script still needs Android's mkdir and sed.)
   export XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share
   export XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg
   h="$HOME/.var/app/$id"
@@ -201,6 +201,7 @@ run() {
 $envs
 ENVS
   done
+  export PATH=/app/bin:/usr/bin
   if [ "$ARCH" = x86_64 ]; then
     # Its own LD_LIBRARY_PATH entries, as x86 paths (/app/lib/audacity).
     guest="$(sed -n '/^\[Environment\]/,/^\[/{s/^LD_LIBRARY_PATH *= *//p}' "$meta" | head -1)"
