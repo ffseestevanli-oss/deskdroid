@@ -6,7 +6,7 @@
 # store package with an x86_64 runtime.
 set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
-T="$(mktemp -d)"; trap 'pkill -f "$T/" 2>/dev/null; rm -rf "$T"' EXIT
+T="$(mktemp -d)"; trap 'pkill -f "$T/" 2>/dev/null || true; rm -rf "$T"' EXIT
 fails=0
 expect() { # name text regex...
   local name="$1" text="$2"; shift 2

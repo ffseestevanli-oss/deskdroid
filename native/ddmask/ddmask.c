@@ -51,6 +51,9 @@
  *     seccomp filter blocks are made with the allowed call that does the same
  *     (accept, epoll_pwait2, faccessat2, fchmodat2, close_range); the rest
  *     fail with ENOSYS;
+ *   - shared memory (glibc and musl builds): a memfd opened again through
+ *     /proc/self/fd, which Android's SELinux refuses, and shm_open without
+ *     a /dev/shm (below);
  *   - a journal ($DDMASK_JOURNAL): every program started another way, every one
  *     that can't be started and why, and every blocked system call, so a
  *     program that doesn't open leaves a trace.
@@ -922,6 +925,139 @@ EXPORT int faccessat(int dirfd, const char *path, int mode, int flags) {
 /* glibc's euidaccess and eaccess (bash's test -x) check through faccessat inside glibc. */
 EXPORT int euidaccess(const char *path, int mode) { return faccessat(AT_FDCWD, path, mode, AT_EACCESS); }
 EXPORT int eaccess(const char *path, int mode) { return faccessat(AT_FDCWD, path, mode, AT_EACCESS); }
+#endif
+
+/* ---- shared memory (glibc and musl programs) ---- */
+
+#if SELF_WORLD != 0
+/*
+ * Two ways Linux programs share memory between processes, both of which
+ * Android gets in the way of:
+ *
+ *  - memfd: allowed, but Android's SELinux policy lets an app read, write and
+ *    map its memfds, not open them again by path. Programs that make a
+ *    read-only copy that way (open("/proc/self/fd/N", O_RDONLY): Firefox,
+ *    Chromium's read-only regions) get EACCES. They get a copy of the
+ *    descriptor instead (dup). Firefox seals the memfd against writes before
+ *    handing out that copy, so it stays read-only where it counts.
+ *  - shm_open: Android has no /dev/shm, and glibc's and musl's shm_open open
+ *    /dev/shm/<name> inside libc, out of reach of path mapping (ddflatpak's
+ *    /dev/shm mount). shm_open and shm_unlink here open that path through
+ *    open(), which ddflatpak maps when it's loaded; failing that they use
+ *    $DDMASK_SHM, or $TMPDIR/ddmask-shm.
+ */
+typedef int (*open_fn)(const char *, int, ...);
+typedef int (*openat_fn)(int, const char *, int, ...);
+static open_fn real_open_;
+static openat_fn real_openat_;
+#ifdef __GLIBC__
+static open_fn real_open64_;
+static openat_fn real_openat64_;
+#endif
+
+/* After a failed open of path: a copy of the memfd it names, or -1 (errno kept). */
+static int memfd_reopen(int dirfd, const char *path, int flags) {
+    if (errno != EACCES || !path) return -1;
+    int e = errno;
+    if (dirfd != AT_FDCWD && path[0] != '/') return -1;
+    const char *s;
+    if (!strncmp(path, "/proc/self/fd/", 14)) s = path + 14;
+    else if (!strncmp(path, "/proc/thread-self/fd/", 21)) s = path + 21;
+    else if (!strncmp(path, "/proc/", 6)) {
+        char *end;
+        long pid = strtol(path + 6, &end, 10);
+        if (pid != getpid() || strncmp(end, "/fd/", 4)) return -1;
+        s = end + 4;
+    } else return -1;
+    char *end;
+    long fd = strtol(s, &end, 10);
+    if (end == s || *end || fd < 0 || fd > 1 << 20) return -1;
+    if (flags & (O_CREAT | O_TRUNC | O_DIRECTORY)) return -1;
+    char p[64], target[PATH_MAX];
+    snprintf(p, sizeof p, "/proc/self/fd/%ld", fd);
+    ssize_t len = real_readlink ? real_readlink(p, target, sizeof target - 1) : readlink(p, target, sizeof target - 1);
+    if (len < 7 || strncmp(target, "/memfd:", 7) != 0) { errno = e; return -1; }
+    int copy = fcntl((int)fd, (flags & O_CLOEXEC) ? F_DUPFD_CLOEXEC : F_DUPFD, 0);
+    if (copy < 0) { errno = e; return -1; }
+    return copy;
+}
+
+#define OPEN_MODE(flags) \
+    mode_t mode = 0; \
+    if (((flags) & O_CREAT) || ((flags) & O_TMPFILE) == O_TMPFILE) { va_list ap; va_start(ap, flags); mode = va_arg(ap, int); va_end(ap); }
+#define REAL_OPEN(v, name) if (!v) v = (__typeof__(v))dlsym(RTLD_NEXT, name)
+
+EXPORT int open(const char *path, int flags, ...) {
+    OPEN_MODE(flags); REAL_OPEN(real_open_, "open");
+    int r = real_open_ ? real_open_(path, flags, mode) : (int)syscall(SYS_openat, AT_FDCWD, path, flags, mode);
+    return r >= 0 ? r : memfd_reopen(AT_FDCWD, path, flags);
+}
+EXPORT int openat(int dirfd, const char *path, int flags, ...) {
+    OPEN_MODE(flags); REAL_OPEN(real_openat_, "openat");
+    int r = real_openat_ ? real_openat_(dirfd, path, flags, mode) : (int)syscall(SYS_openat, dirfd, path, flags, mode);
+    return r >= 0 ? r : memfd_reopen(dirfd, path, flags);
+}
+#ifdef __GLIBC__
+EXPORT int open64(const char *path, int flags, ...) {
+    OPEN_MODE(flags); REAL_OPEN(real_open64_, "open64");
+    int r = real_open64_ ? real_open64_(path, flags, mode) : (int)syscall(SYS_openat, AT_FDCWD, path, flags | O_LARGEFILE, mode);
+    return r >= 0 ? r : memfd_reopen(AT_FDCWD, path, flags);
+}
+EXPORT int openat64(int dirfd, const char *path, int flags, ...) {
+    OPEN_MODE(flags); REAL_OPEN(real_openat64_, "openat64");
+    int r = real_openat64_ ? real_openat64_(dirfd, path, flags, mode) : (int)syscall(SYS_openat, dirfd, path, flags | O_LARGEFILE, mode);
+    return r >= 0 ? r : memfd_reopen(dirfd, path, flags);
+}
+/* What _FORTIFY_SOURCE builds call for open(path, flags). */
+EXPORT int __open_2(const char *path, int flags) { return open(path, flags); }
+EXPORT int __open64_2(const char *path, int flags) { return open64(path, flags); }
+EXPORT int __openat_2(int dirfd, const char *path, int flags) { return openat(dirfd, path, flags); }
+EXPORT int __openat64_2(int dirfd, const char *path, int flags) { return openat64(dirfd, path, flags); }
+#endif
+
+/* /dev/shm/<name> for a shm_open name (one '/' first, none after), or -1 (EINVAL). */
+static int shm_path(const char *name, const char *dir, char *out, size_t size) {
+    while (*name == '/') name++;
+    if (!*name || strchr(name, '/') || !strcmp(name, ".") || !strcmp(name, "..")) { errno = EINVAL; return -1; }
+    if ((size_t)snprintf(out, size, "%s/%s", dir, name) >= size) { errno = ENAMETOOLONG; return -1; }
+    return 0;
+}
+
+/* Where shared memory goes when /dev/shm can't be had, made if needed. */
+static const char *shm_fallback(char *buf, size_t size) {
+    const char *d = getenv("DDMASK_SHM");
+    if (d && *d) snprintf(buf, size, "%s", d);
+    else {
+        const char *t = getenv("TMPDIR");
+        snprintf(buf, size, "%s/ddmask-shm", t && *t ? t : "/tmp");
+    }
+    mkdir(buf, 0700);
+    return buf;
+}
+
+EXPORT int shm_open(const char *name, int flags, mode_t mode) {
+    char p[PATH_MAX], dir[PATH_MAX];
+    flags |= O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK;
+    if (shm_path(name, "/dev/shm", p, sizeof p) != 0) return -1;
+    int r = open(p, flags, mode);
+    if (r >= 0 || (errno != ENOENT && errno != EACCES && errno != EROFS && errno != ENOTDIR)) return r;
+    /* ENOENT on a name that should exist: /dev/shm itself, or just the name? */
+    if (errno == ENOENT && !(flags & O_CREAT)) {
+        struct stat st;
+        if (stat("/dev/shm", &st) == 0 && S_ISDIR(st.st_mode)) { errno = ENOENT; return r; }
+    }
+    if (shm_path(name, shm_fallback(dir, sizeof dir), p, sizeof p) != 0) return -1;
+    return open(p, flags, mode);
+}
+
+EXPORT int shm_unlink(const char *name) {
+    char p[PATH_MAX], dir[PATH_MAX];
+    if (shm_path(name, "/dev/shm", p, sizeof p) != 0) return -1;
+    int r = unlink(p);
+    if (r == 0 || (errno != ENOENT && errno != EACCES && errno != EROFS && errno != ENOTDIR)) return r;
+    if (shm_path(name, shm_fallback(dir, sizeof dir), p, sizeof p) != 0) return -1;
+    return unlink(p);
+}
 #endif
 
 /* ---- blocked system calls (glibc and musl programs) ---- */

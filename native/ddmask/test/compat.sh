@@ -15,6 +15,8 @@ mkdir -p "$T/lib" "$T/app/bin" "$T/glib"
 "$CC" -O2 -Wall -shared -fPIC -DDDMASK_GLIBC "$HERE/../ddmask.c" -o "$T/glib/libddmask_glibc.so" -ldl
 "$CC" -O2 -Wall "$HERE/probe.c" -o "$T/app/bin/probe"
 "$CC" -O2 -Wall "$HERE/sigsys-probe.c" -o "$T/app/bin/sigsys-probe" -lpthread
+"$CC" -O2 -Wall "$HERE/shm-probe.c" -o "$T/app/bin/shm-probe"
+"$CC" -O2 -Wall -shared -fPIC "$HERE/android-deny.c" -o "$T/android-deny.so" -ldl
 cp "$T/app/bin/probe" "$T/app/bin/nox"
 printf '#!/bin/sh\necho "nox-script $*"\n' > "$T/app/bin/noxscript"
 echo "just text" > "$T/app/bin/notes"
@@ -88,5 +90,19 @@ expect "...and in sigsys.log, by number" "$(sort -un "$T/sigsys.log" | tr '\n' '
 out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so" DDMASK_JOURNAL="$J" "$T/app/bin/sigsys-probe" own 2>&1)"
 expect "a program with its own SIGSYS handler still gets ENOSYS, from any thread" "$out" "^own-thread-getcpu=-1/Function not implemented$"
 expect "...sees its handler as set, and gets the SIGSYS it sends itself" "$out" "^own-handler-kept=yes$" "^own-kill-reached=1$"
+
+# -- shared memory, with Android's refusals (android-deny.c)
+mkdir -p "$T/tmp"
+out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so:$T/android-deny.so" TMPDIR="$T/tmp" "$T/app/bin/shm-probe" 2>&1)"
+expect "a memfd's read-only copy through /proc/self/fd, which Android refuses" "$out" "^memfd-reopen=ok$" "^memfd-shared=shared$" "^memfd-cloexec=yes$"
+expect "...that sealing makes read-only" "$out" "^memfd-sealed=yes copy-writable=no$"
+expect "...while other files stay refused" "$out" "^other-reopen=Permission denied$"
+expect "shm_open without /dev/shm: made, opened again, exclusive, unlinked" "$out" "^shm-again=ok$" "^shm-excl=File exists$" "^shm_unlink=ok$" \
+  "^shm-shared=shared$" "^shm-gone=No such file or directory$"
+expect "...in \$TMPDIR/ddmask-shm, left empty" "dir:$(ls -A "$T/tmp/ddmask-shm" 2>&1)" "^dir:$"
+out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so" "$T/app/bin/shm-probe" 2>&1)"
+expect "...and where there is a /dev/shm, as before" "$out" "^memfd-reopen=ok$" "^shm-shared=shared$" "^shm-gone=No such file or directory$"
+out="$(env LD_PRELOAD="$T/android-deny.so" TMPDIR="$T/tmp" "$T/app/bin/shm-probe" 2>&1)"
+expect "(without ddmask the memfd copy fails there)" "$out" "^memfd-reopen=Permission denied$"
 
 [ "$fails" -eq 0 ] && echo "all compatibility tests passed" || { echo "$fails failed"; exit 1; }

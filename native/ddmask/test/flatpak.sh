@@ -94,5 +94,16 @@ mkdir -p "$T/shm"
 out="$(run env DDFLATPAK_MOUNTS="/dev/shm=$T/shm;/run/ddtest-shm=$T/shm" "$APP/bin/probe" temp:/run/ddtest-shm/.org.chromium.Chromium.XXXXXX)"
 expect "mkostemp and unlink under a mounted path (Chromium's /dev/shm)" "$out" "^temp fd=yes named=yes removed=yes$"
 
+# shm_open (ddmask's, glibc's can't be mapped) goes to the /dev/shm mount,
+# with Android's refusals (no /dev/shm of its own).
+"$CC" -O2 -Wall -shared -fPIC -DDDMASK_GLIBC "$HERE/../ddmask.c" -o "$T/libddmask_glibc.so" -ldl
+"$CC" -O2 -Wall -shared -fPIC "$HERE/android-deny.c" -o "$T/android-deny.so" -ldl
+"$CC" -O2 -Wall "$HERE/shm-probe.c" -o "$APP/bin/shm-probe"
+mkdir -p "$T/tmp"
+out="$(run env LD_PRELOAD="$T/libddflatpak.so:$T/libddmask_glibc.so:$T/android-deny.so" TMPDIR="$T/tmp" \
+  DDFLATPAK_MOUNTS="/dev/shm=$T/shm" "$APP/bin/shm-probe"; ls -A "$T/tmp" | sed 's/^/tmp: /')"
+expect "shm_open under the /dev/shm mount (Firefox's fallback)" "$out" "^shm-again=ok$" "^shm-shared=shared$" "^shm-gone=No such"
+if grep -q "^tmp: " <<<"$out"; then echo "FAIL ...but it used \$TMPDIR"; fails=$((fails + 1)); fi
+
 echo
 [ "$fails" = 0 ] && echo "all ddflatpak tests passed" || { echo "$fails failed"; exit 1; }
