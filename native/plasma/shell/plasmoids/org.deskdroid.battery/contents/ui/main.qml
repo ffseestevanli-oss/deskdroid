@@ -166,7 +166,7 @@ PlasmoidItem {
                 }
                 PlasmaComponents3.Label {
                     text: root.bySaver ? "The phone's Battery Saver is on: Power Save until it's off."
-                        : root.profile === "powersave" ? "Slower, uses the efficient cores and limits busy apps. Longest battery life."
+                        : root.profile === "powersave" ? "Slower: efficient cores, busy apps limited, animations off. Longest battery life."
                         : root.profile === "performance" ? "Every core, the screen's full frame rate, no limits. Uses the most battery."
                         : "Leaves the fastest cores alone and draws at up to 60 frames a second."
                     opacity: 0.75
