@@ -58,6 +58,13 @@ mv "$M/api-1" "$M/api-0"
 out="$(glibc_preload DDMASK_MODULE="$M")"
 expect "...or when the module doesn't fit this APK (no api-1)" "x$out" "$A/libddmask_glibc.so"
 mv "$M/api-0" "$M/api-1"
+# The module reached through a link (/data/user/0/<app> is /data/data/<app>):
+# a glibc program's ddmask, which knows itself by its real path, keeps the
+# list as it is, with ddflatpak first, rather than putting itself first again.
+ln -s "$F" "$T/files-link"; MS="$T/files-link/store/apps/ddmask/program"
+out="$(env LD_PRELOAD="$MS/lib/libddmask_glibc.so" DDMASK_GLIBC_LD_PRELOAD="$MS/lib/libddflatpak.so:$MS/lib/libddmask_glibc.so" \
+  DDMASK_ALLOW=/usr:/bin:/lib:/lib64 DDMASK_LIBS="$A" DDMASK_MODULE="$MS" "$T/probe" x 2>/dev/null | sed -n 's/^DDMASK_GLIBC_LD_PRELOAD=//p')"
+expect "...and keeps ddflatpak first when the module's path has a link in it" "x$out" "^x$MS/lib/libddflatpak.so:$MS/lib/libddmask_glibc.so$"
 
 # The APK's scripts hand over to the module's.
 out="$(env -i PATH=/usr/bin:/bin DDMASK_MODULE="$M" DESKDROID_SH=/bin/sh DESKDROID_FILES="$F" DESKDROID_LIBS="$A" \

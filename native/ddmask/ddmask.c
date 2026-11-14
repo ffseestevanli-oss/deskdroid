@@ -443,9 +443,28 @@ static int count(char *const v[]) {
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
 /* Puts `lib` (a full path) first in the ':'-separated list `var` of envp, into buf. */
+/* Whether the preload list names lib, by path or as the same file under
+ * another (/data/user/0/<app> is /data/data/<app>: the ddmask module's path
+ * reaches the list one way and ddmask's own realpath the other). */
+static int preloads_lib(const char *list, const char *lib) {
+    if (strstr(list, lib)) return 1;
+    struct stat want, st;
+    if (stat(lib, &want) != 0) return 0;
+    char one[PATH_MAX];
+    for (const char *s = list; *s; ) {
+        size_t n = strcspn(s, ": ");
+        if (n && n < sizeof one) {
+            memcpy(one, s, n); one[n] = 0;
+            if (stat(one, &st) == 0 && st.st_dev == want.st_dev && st.st_ino == want.st_ino) return 1;
+        }
+        s += n; if (*s) s++;
+    }
+    return 0;
+}
+
 static char *with_preload(char *const envp[], const char *var, const char *lib, char *buf, size_t size) {
     const char *cur = env_get(envp, var);
-    if (cur && *cur && strstr(cur, lib)) snprintf(buf, size, "%s=%s", var, cur);
+    if (cur && *cur && preloads_lib(cur, lib)) snprintf(buf, size, "%s=%s", var, cur);
     else if (cur && *cur) snprintf(buf, size, "%s=%s:%s", var, lib, cur);
     else snprintf(buf, size, "%s=%s", var, lib);
     return buf;
