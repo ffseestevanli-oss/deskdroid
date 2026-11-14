@@ -210,13 +210,12 @@ fake /proc/sys/fs/inotify/max_user_watches 8192
 # The runtime's fonts.conf includes the host's font folders from here.
 printf '<?xml version="1.0"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n</fontconfig>\n' > "$F/flatpak-tmp/font-dirs.xml"
 mounts="$mounts;/run/host/font-dirs.xml=$F/flatpak-tmp/font-dirs.xml"
-# bubblewrap, which apps run to sandbox their helpers, needs user namespaces
-# that Android doesn't give apps. A bwrap that says so, the way the real one
-# does there, so they run them unsandboxed (glycin, GNOME's image loading for
-# GTK apps: without it GTK 4 apps load no images or icons and can abort).
-printf '#!/system/bin/sh\necho "bwrap: Creating new namespace failed: Operation not permitted" >&2\nexit 1\n' > "$F/flatpak-tmp/bwrap"
-chmod 755 "$F/flatpak-tmp/bwrap"
-mounts="$mounts;/usr/bin/bwrap=$F/flatpak-tmp/bwrap"
+# bubblewrap, which apps run to sandbox their helpers (glycin, GNOME's image
+# loading), needs user namespaces Android doesn't give apps: bwrap.sh stands
+# in for it and runs them unsandboxed. From the module's scripts or the APK.
+bw="$L/libdd_bwrap.so"
+[ -n "$DM" ] && [ -e "$DM/scripts/bwrap.sh" ] && bw="$DM/scripts/bwrap.sh"
+[ -e "$bw" ] && mounts="$mounts;/usr/bin/bwrap=$bw"
 # Firefox (and browsers built from it, which keep its application ID): the
 # settings DeskDroid gives its own Firefox, Etherium (native/firefox/etherium:
 # DD Party's look, no telemetry, Startpage, Wayland scrolling without frame
@@ -482,6 +481,20 @@ start_x() {
     echo "$SID: the X server isn't ready after 40 s (still running, pid $xpid): $(tail -n 3 "$D/xwayland.log" 2>/dev/null | tr '\n' ' ')" >&2
   else
     echo "$SID: the X server stopped (see xwayland.log): $(tail -n 5 "$D/xwayland.log" 2>/dev/null | tr '\n' ' ')" >&2
+    # Its keyboard maps, the way it compiles them (/bin/sh -c xkbcomp), into
+    # xwayland.log: what an X server that stops at "Failed to compile keymap"
+    # doesn't say.
+    if grep -qs 'Failed to compile keymap' "$D/xwayland.log"; then
+      { echo "== xkbcomp, as the X server runs it"
+        ( export DDFLATPAK_RUNTIME="$CLI/usr" DDFLATPAK_APP="$CLI/nothing" DDFLATPAK_TMP="$XT" \
+            DDFLATPAK_MOUNTS="/bin/sh=$CLI/usr/bin/dash;/var/lib/xkb=$XT/xkb" \
+            DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" \
+            DDFLATPAK_LIBPATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" DDMASK_DEBUG=1
+          unset DDFLATPAK_LOADER DDMASK_GLIBC_LD_AUDIT
+          echo 'xkb_keymap { xkb_keycodes { include "evdev+aliases(qwerty)" }; xkb_types { include "complete" }; xkb_compat { include "complete" }; xkb_symbols { include "pc+us+inet(evdev)" }; xkb_geometry { include "pc(pc105)" }; };' |
+            $G "$CLI/usr/bin/dash" -c 'echo "sh: $0"; ls -l /usr/bin/xkbcomp /usr/share/X11/xkb /var/lib/xkb; /usr/bin/xkbcomp -w 1 -R/usr/share/X11/xkb -xkm - -em1 "xkbcomp says:" /var/lib/xkb/probe.xkm; echo "xkbcomp exit $?"; ls -l /var/lib/xkb/probe.xkm'
+        ) 2>&1 | tail -n 40; } >> "$D/xwayland.log"
+    fi
   fi
   return 1
 }
