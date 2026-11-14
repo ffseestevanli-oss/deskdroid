@@ -1094,6 +1094,51 @@ EXPORT int shm_unlink(const char *name) {
     if (shm_path(name, shm_fallback(dir, sizeof dir), p, sizeof p) != 0) return -1;
     return unlink(p);
 }
+
+/* ---- hard links ----
+ * Android refuses apps hard links (EACCES or EPERM, SELinux), and Linux
+ * programs make their lock files with one: link(tmp, lock) works only while
+ * lock doesn't exist (X servers, dotlock, mail tools). For a regular file,
+ * a copy made with O_EXCL answers the same way: the same contents, EEXIST
+ * if it's already there. Only the link count differs. */
+typedef int (*linkat_fn)(int, const char *, int, const char *, int);
+static linkat_fn real_linkat_;
+
+static int copy_link(int od, const char *o, int nd, const char *n, int fl) {
+    struct stat st;
+    if (fstatat(od, o, &st, (fl & AT_SYMLINK_FOLLOW) ? 0 : AT_SYMLINK_NOFOLLOW) != 0) return -1;
+    if (!S_ISREG(st.st_mode)) { errno = EPERM; return -1; }
+    int in = openat(od, o, O_RDONLY | O_CLOEXEC);
+    if (in < 0) return -1;
+    int out = openat(nd, n, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, st.st_mode & 07777);
+    if (out < 0) { int e = errno; close(in); errno = e; return -1; }
+    char buf[8192];
+    ssize_t r;
+    int ok = 1;
+    while (ok && (r = read(in, buf, sizeof buf)) != 0) {
+        if (r < 0) { if (errno != EINTR) ok = 0; continue; }
+        for (ssize_t w = 0; ok && w < r;) {
+            ssize_t k = write(out, buf + w, (size_t)(r - w));
+            if (k < 0) { if (errno != EINTR) ok = 0; } else w += k;
+        }
+    }
+    int e = errno;
+    close(in);
+    if (close(out) != 0 && ok) { ok = 0; e = errno; }
+    if (!ok) { unlinkat(nd, n, 0); errno = e; return -1; }
+    return 0;
+}
+
+EXPORT int linkat(int od, const char *o, int nd, const char *n, int fl) {
+    REAL_OPEN(real_linkat_, "linkat");
+    int r = real_linkat_ ? real_linkat_(od, o, nd, n, fl) : (int)syscall(SYS_linkat, od, o, nd, n, fl);
+    if (r == 0 || (errno != EACCES && errno != EPERM) || (fl & ~AT_SYMLINK_FOLLOW)) return r;
+    int e = errno;
+    if (copy_link(od, o, nd, n, fl) == 0) return 0;
+    if (errno != EEXIST && errno != ENOENT && errno != ENOSPC) errno = e;
+    return -1;
+}
+EXPORT int link(const char *o, const char *n) { return linkat(AT_FDCWD, o, AT_FDCWD, n, 0); }
 #endif
 
 /* ---- blocked system calls (glibc and musl programs) ---- */

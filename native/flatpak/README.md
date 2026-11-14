@@ -52,7 +52,8 @@ share it on `:8`, and it stops 10 s after the last one closes. It listens on
 the abstract socket (`@/tmp/.X11-unix/X8`), which X clients try first; the
 socket file fails on Android and is skipped (`-pn`). `DESKDROID_X_GEOMETRY`
 sets its size (`WIDTHxHEIGHT`, default `1280x800`, or `fullscreen`); its
-output goes to `xwayland.log` beside the app's `run.log`.
+output goes to `xwayland.log` beside the app's `run.log`. It draws on the CPU
+(`XWAYLAND_NO_GLAMOR`, `-shm`): flatpak-cli has no GL libraries.
 
 ## Use
 

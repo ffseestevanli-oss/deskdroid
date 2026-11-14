@@ -136,7 +136,8 @@ if [ -e "$server" ] && [ ! -S "$FEX_SERVERSOCKETPATH" ]; then
   setsid $G "$server" -f -p 60 </dev/null >>"$RUN/fexserver-$ID.log" 2>&1 &
   i=0; while [ $i -lt 20 ] && [ ! -S "$FEX_SERVERSOCKETPATH" ]; do sleep 0.5; i=$((i + 1)); done
 fi
-echo "$ID: starting /app/bin/$cmd $* through FEX-Emu (x86-64, RootFS $ROOT)" >&2
+case "$cmd" in /*) prog="$cmd" ;; *) prog="/app/bin/$cmd" ;; esac
+echo "$ID: starting $prog $* through FEX-Emu (x86-64, RootFS $ROOT)" >&2
 export PATH=/app/bin:/usr/bin
 # The runtime's x86 sh starts the command (a script, zypak, an ELF program).
-exec $G "$FEX" /bin/sh -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
+exec $G "$FEX" /bin/sh -c 'exec "$0" "$@"' "$prog" "$@"
