@@ -1316,7 +1316,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // The flatpak command's programs and libraries (native/flatpak), which
         // run on this glibc; the flatpak command itself is bin/flatpak.
         File(libs, "libdd_flatpakcli.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "flatpak-cli")) }
-        // The sound server (native/sound): Debian's PulseAudio on this glibc.
+        // The sound server (native/sound): Debian's PipeWire on this glibc.
         File(libs, "libdd_soundsrv.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "sound")) }
         val uid = android.os.Process.myUid()
         val home = File(filesDir, "home").apply { mkdirs() }
@@ -1875,10 +1875,11 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * or null (KWin runs without one) if it didn't start.
      */
     /**
-     * The sound server for Linux programs (native/sound): Debian's PulseAudio,
-     * unmodified, on DeskDroid's glibc, listening where libpulse looks
-     * ($XDG_RUNTIME_DIR/pulse/native, also PULSE_SERVER). It writes into a FIFO
-     * that AudioBridge plays through an AudioTrack, like any app's sound.
+     * The sound server for Linux programs (native/sound): Debian's PipeWire and
+     * WirePlumber, unmodified, on DeskDroid's glibc, listening where libpulse
+     * looks ($XDG_RUNTIME_DIR/pulse/native, also PULSE_SERVER) and where PipeWire
+     * programs such as EasyEffects look ($XDG_RUNTIME_DIR/pipewire-0). It writes
+     * into a FIFO that AudioBridge plays through an AudioTrack, like any app's sound.
      * The desktop's own (bionic) programs keep playing through Android directly.
      */
     private fun startSound(libs: String, runtime: File) {
@@ -1888,7 +1889,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             // Unpacked here too: this runs before KWin's environment (glibcRuntime)
             // on the first start of a new build. Once per app version.
             File(libs, "libdd_soundsrv.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "sound")) }
-            if (!File(filesDir, "sound/usr/bin/pulseaudio").exists()) { AppLog.i("[sound] not unpacked; no sound server"); return }
+            if (!File(filesDir, "sound/usr/bin/pipewire").exists()) { AppLog.i("[sound] not unpacked; no sound server"); return }
             NativeDesk.sound?.stop()
             NativeDesk.sound = AudioBridge(File(runtime, "pulse/android.pipe")).also { it.start() }
             val p = ProcessBuilder("/system/bin/sh", script.path, runtime.path).redirectErrorStream(true).also { pb ->

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds DeskDroid's sound server (README.md) from Debian's arm64 packages:
-#   libdd_soundsrv.so   a zip of PulseAudio and only the libraries and modules
-#                       it uses, unpacked into files/sound by the app
+#   libdd_soundsrv.so   a zip of PipeWire, WirePlumber, PulseAudio's tools and
+#                       only the libraries and modules they use, unpacked into
+#                       files/sound by the app
 #   libdd_sound.so      sound.sh, which runs it on DeskDroid's glibc
 # The packages are cached in $DESKDROID_SOUND_CACHE (default
 # ~/.cache/deskdroid/sound), keyed by this folder's contents.
@@ -23,10 +24,11 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 if [ ! -e "$CACHE/.done" ]; then
-  echo "== sound (Debian $SUITE $DEBARCH PulseAudio)"
+  echo "== sound (Debian $SUITE $DEBARCH PipeWire)"
   curl -sSfL -o "$WORK/Packages.xz" "$MIRROR/dists/$SUITE/main/binary-$DEBARCH/Packages.xz"
   xz -d "$WORK/Packages.xz"
-  python3 -I "$HERE/../flatpak/debs.py" "$WORK/Packages" "$MIRROR" pulseaudio pulseaudio-utils > "$WORK/list"
+  python3 -I "$HERE/../flatpak/debs.py" "$WORK/Packages" "$MIRROR" \
+    pipewire-bin pipewire-pulse wireplumber libpipewire-0.3-modules libspa-0.2-modules pulseaudio-utils > "$WORK/list"
   mkdir -p "$WORK/debs" "$WORK/all"
   while read -r url sum; do
     f="$WORK/debs/${url##*/}"
@@ -34,15 +36,27 @@ if [ ! -e "$CACHE/.done" ]; then
     echo "$sum  $f" | sha256sum -c --quiet - || { echo "sound: $url: bad checksum" >&2; exit 1; }
     dpkg-deb -x "$f" "$WORK/all"
   done < "$WORK/list"
-  # The packages pull in much more (GStreamer, FFmpeg, X11 for modules
-  # DeskDroid doesn't load): keep only what the server, its tools and the
-  # modules sound.sh loads need, each library under the name it's asked for
+  # The packages pull in much more (FFADO, ROC, AVB, X11, ALSA for modules
+  # DeskDroid doesn't load): keep only what the server, WirePlumber, the tools
+  # and the modules below need, each library under the name it's asked for
   # (the app's unzip can't make symlinks).
-  mods="$(cd "$WORK/all" && echo usr/lib/pulse-*/modules)"
-  CLOSURE_DIRS="usr/lib/$TRIPLE/pulseaudio:$mods" python3 -I "$HERE/closure.py" "$WORK/all" "$TRIPLE" \
-    usr/bin/pulseaudio usr/bin/pactl usr/bin/pacat \
-    "$mods"/module-pipe-sink.so "$mods"/module-null-source.so "$mods"/module-native-protocol-unix.so \
-    "$mods"/module-always-sink.so "$mods"/module-null-sink.so > "$WORK/keep"
+  U="usr/lib/$TRIPLE"
+  ( cd "$WORK/all"
+    echo usr/bin/pipewire usr/bin/wireplumber usr/bin/wpctl usr/bin/pw-cli usr/bin/pw-dump usr/bin/pw-top \
+      usr/bin/pw-link usr/bin/pw-metadata usr/bin/pw-cat usr/bin/pactl usr/bin/pacat
+    for m in protocol-native profiler access metadata spa-node-factory spa-device-factory spa-node spa-device \
+             client-node client-device adapter link-factory session-manager pipe-tunnel protocol-pulse \
+             loopback filter-chain combine-stream echo-cancel parametric-equalizer fallback-sink; do
+      echo "$U/pipewire-0.3/libpipewire-module-$m.so"
+    done
+    ls "$U"/wireplumber-0.5/*.so
+    ls "$U"/spa-0.2/support/libspa-support.so "$U"/spa-0.2/audioconvert/*.so "$U"/spa-0.2/audiomixer/*.so \
+       "$U"/spa-0.2/control/*.so "$U"/spa-0.2/aec/libspa-aec-null.so "$U"/spa-0.2/filter-graph/libspa-filter-graph.so \
+       "$U"/spa-0.2/filter-graph/libspa-filter-graph-plugin-builtin.so ) > "$WORK/starts"
+  CLOSURE_DIRS="$U/pulseaudio:$U/pipewire-0.3:$U/spa-0.2" python3 -I "$HERE/closure.py" "$WORK/all" "$TRIPLE" \
+    $(cat "$WORK/starts") > "$WORK/keep"
+  # Configuration and WirePlumber's scripts.
+  (cd "$WORK/all" && find usr/share/wireplumber usr/share/pipewire/client.conf usr/share/pipewire/pipewire.conf -type f) >> "$WORK/keep"
   R="$WORK/root"
   while read -r f; do
     mkdir -p "$R/$(dirname "$f")"
@@ -55,4 +69,4 @@ fi
 rm -f "$OUT/libdd_soundsrv.so"
 (cd "$CACHE" && zip -qr -X "$OUT/libdd_soundsrv.so" usr)
 install -m 755 "$HERE/sound.sh" "$OUT/libdd_sound.so"
-echo "   sound: $(du -h "$OUT/libdd_soundsrv.so" | cut -f1) PulseAudio ($(wc -l < "$CACHE/usr/debian-packages.txt") Debian packages, $(find "$CACHE/usr" -type f | wc -l) files kept)"
+echo "   sound: $(du -h "$OUT/libdd_soundsrv.so" | cut -f1) PipeWire ($(wc -l < "$CACHE/usr/debian-packages.txt") Debian packages, $(find "$CACHE/usr" -type f | wc -l) files kept)"

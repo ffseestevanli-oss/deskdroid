@@ -5,6 +5,7 @@ installs from a file and runs without the flatpak command or Flathub on the
 phone. See README.md next to this script.
 
   flathub-adpk.py app     <flatpak dir> <flatpak id> <store id> <runtime pkg> <out.adpk> [--name N] [--summary S]
+                          [--ext <extension ref>,... [--ext-keep <folder>,...]]
   flathub-adpk.py runtime <flatpak dir> <ref> <store id> <out.adpk> --name N --summary S
   flathub-adpk.py mesa    <flatpak dir> <branch> <store id> <out.adpk>
 
@@ -19,6 +20,12 @@ aarch64. A package is the store's "program" kind (Store.kt):
                        (and hard links), execute bits of scripts, empty
                        folders; ddapp lays it out on the first start
   share/               menu entries and icons (apps only)
+
+--ext puts Flathub extensions the app declares ([Extension ...] in its
+metadata: EasyEffects' LV2 plugins) inside the app's package, where Flatpak
+would mount them, with the folders Flatpak merges (merge-dirs) as links and
+their add-ld-path folders on the library path; --ext-keep keeps only those
+top folders of each extension (lv2,lib: not the VST, CLAP, LADSPA copies).
 """
 import hashlib, io, json, os, re, stat, subprocess, sys, zipfile, configparser
 
@@ -115,7 +122,7 @@ class Pkg:
                 return os.path.relpath(real, here)
         return target
 
-    def libdirs(self, prefixes):
+    def libdirs(self, prefixes, extra=()):
         """Absolute RUNPATH/RPATH folders of the ELF files under the given
         sandbox prefixes ({"/app": "APP", "/usr": "RT"}): glibc's loader opens
         them itself, where ddflatpak can't map them, so run.sh adds the real
@@ -130,6 +137,7 @@ class Pkg:
                             v = var + ":" + d[len(pre):].lstrip("/")
                             if v not in dirs:
                                 dirs.append(v)
+        dirs += [d for d in extra if d not in dirs]
         self.add_bytes("program/libdirs.txt", "".join(d + "\n" for d in dirs))
         return dirs
 
@@ -208,7 +216,40 @@ def rewrite_desktop(text, sid, cmd):
     return "\n".join(out) + "\n"
 
 
-def app(fpdir, fpid, sid, rtpkg, out, name=None, summary=None):
+def extensions(pkg, fpdir, meta, refs, keep):
+    """The extensions in refs inside the app's files (Flatpak mounts them at
+    /app/<directory>); returns their add-ld-path folders for libdirs.txt."""
+    secs = {s[len("Extension "):]: meta[s] for s in meta.sections() if s.startswith("Extension ")}
+    libs, placed = [], []
+    for ref in refs:
+        ext = ref.split("/")[0]
+        sec = secs.get(ext)
+        if sec is None:
+            sys.exit(f"{ext}: not an extension the app declares")
+        where = sec["directory"].strip("/")
+        src = os.path.join(deploy(fpdir, "runtime", ref), "files")
+        pkg.add_tree(src, "files/" + where,
+                     skip=lambda rel: bool(keep) and rel.split("/")[0] not in keep and rel != "manifest.json")
+        for p in sec.get("add-ld-path", "").split(";"):
+            if p and (not keep or p.split("/")[0] in keep):
+                libs.append(f"APP:{where}/{p}")
+        placed.append((where, src))
+    # merge-dirs: an extension point with subdirectories gets each merged
+    # folder (lv2) with links to what its extensions have there.
+    for sec in secs.values():
+        top = sec["directory"].strip("/")
+        if sec.get("subdirectories") != "true":
+            continue
+        for md in [m for m in sec.get("merge-dirs", "").split(";") if m]:
+            for where, src in placed:
+                if os.path.dirname(where) != top or not os.path.isdir(os.path.join(src, md)):
+                    continue
+                for entry in sorted(os.listdir(os.path.join(src, md))):
+                    pkg.layout.append(("L", f"files/{top}/{md}/{entry}", f"../{os.path.basename(where)}/{md}/{entry}"))
+    return libs
+
+
+def app(fpdir, fpid, sid, rtpkg, out, name=None, summary=None, exts=None, keep=None):
     ref = f"{fpid}/aarch64/stable"
     d = deploy(fpdir, "app", ref)
     files = os.path.join(d, "files")
@@ -224,7 +265,8 @@ def app(fpdir, fpid, sid, rtpkg, out, name=None, summary=None):
     pkg.add_tree(files, "files", skip=lambda rel: rel.startswith(("share/runtime/", "lib/debug", "include", "lib/pkgconfig")))
     with open(os.path.join(d, "metadata"), "rb") as f:
         pkg.add_bytes("program/metadata", f.read())
-    pkg.libdirs({"/app": "APP", "/usr": "RT"})
+    extra = extensions(pkg, fpdir, meta, exts or [], keep)
+    pkg.libdirs({"/app": "APP", "/usr": "RT"}, extra)
     with open(os.path.join(HERE, "run.sh.in")) as f:
         run = f.read()
     for k, v in {"@SID@": sid, "@FPID@": fpid, "@CMD@": cmd, "@RTPKG@": rtpkg, "@RUNTIME@": runtime}.items():
@@ -329,7 +371,8 @@ def opts(args):
 if __name__ == "__main__":
     o, a = opts(sys.argv[1:])
     if a[0] == "app":
-        app(*a[1:6], name=o.get("name"), summary=o.get("summary"))
+        app(*a[1:6], name=o.get("name"), summary=o.get("summary"),
+            exts=[e for e in o.get("ext", "").split(",") if e], keep=[k for k in o.get("ext-keep", "").split(",") if k])
     elif a[0] == "runtime":
         runtime(*a[1:5], name=o["name"], summary=o["summary"])
     elif a[0] == "mesa":

@@ -10,9 +10,9 @@ import java.io.File
 import java.io.FileInputStream
 
 /**
- * Plays the desktop's sound. PulseAudio inside Debian writes 48 kHz stereo
- * s16le into a FIFO (module-pipe-sink, rootfs/overlay/etc/deskdroid/pulse.pa);
- * this thread reads it and feeds an AudioTrack, which pauses while the desktop
+ * Plays the desktop's sound. The sound server (native/sound, PipeWire) writes
+ * 48 kHz stereo s16le into a FIFO (its pipe tunnel sink, "Phone"); this thread
+ * reads it and feeds an AudioTrack, which pauses while the desktop
  * is quiet. Nothing native to build, so it stays F-Droid friendly.
  */
 class AudioBridge(private val pipe: File) {
@@ -40,7 +40,7 @@ class AudioBridge(private val pipe: File) {
     private fun loop() {
         while (running) {
             try {
-                // open() blocks until PulseAudio opens the other end.
+                // open() blocks until the sound server opens the other end.
                 FileInputStream(pipe).use { input ->
                     shrinkPipe(input)
                     play(input)
@@ -70,7 +70,7 @@ class AudioBridge(private val pipe: File) {
             .setBufferSizeInBytes(minBuf * 2)
             .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             .build()
-        // PulseAudio only writes while something plays. A playing AudioTrack
+        // The server only writes while something plays. A playing AudioTrack
         // keeps Android's audio output powered even when starved, so the track
         // pauses after a quiet spell and starts again with the next sound.
         var playing = false
@@ -97,7 +97,7 @@ class AudioBridge(private val pipe: File) {
         }
     }
 
-    /** The pipe's size is PulseAudio's latency: 64 KiB default is ~340 ms, 16 KiB ~85 ms. */
+    /** The pipe's size is the sound server's latency: 64 KiB default is ~340 ms, 16 KiB ~85 ms. */
     private fun shrinkPipe(input: FileInputStream) {
         try { Os.fcntlInt(input.fd, F_SETPIPE_SZ, 16 * 1024) } catch (_: Exception) {}
     }

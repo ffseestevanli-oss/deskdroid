@@ -30,6 +30,11 @@ Runtimes are packages of their own, shared by the apps:
 | `runtime-kde-6.11` | `org.kde.Platform` 6.11 |
 | `runtime-gnome-50` | `org.gnome.Platform` 50 |
 
+Flathub extensions an app needs and wouldn't work without (EasyEffects' LV2
+plugins: LSP, Calf, ZamPlugins, MDA) go inside the app's package at the place
+Flatpak mounts them (`--ext`), with the folder Flatpak merges (`lv2`) as links
+and only the folders the app uses (`--ext-keep lv2,lib`).
+
 An app's `app.json` lists what it needs (`needs`); `run.sh` says so in
 `store/apps/<id>/run.log` when one is missing. Software doesn't install
 them by itself yet.

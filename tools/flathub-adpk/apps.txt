@@ -30,3 +30,5 @@ io.github.alainm23.planify            planify       runtime-gnome-50
 org.gnome.Evolution                   evolution     runtime-gnome-50
 com.github.jeromerobert.pdfarranger   pdfarranger   runtime-gnome-50
 com.github.flxzt.rnote                rnote         runtime-gnome-50
+# Sound: needs the PipeWire sound server (native/sound); LV2 plugins inside (build.sh)
+com.github.wwmm.easyeffects           easyeffects   runtime-kde-6.11
