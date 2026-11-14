@@ -387,6 +387,35 @@ build_ffmpeg() {
 # AudioManager to switch the phone's audio mode and routing for each sound
 # (QtAudioDeviceManager.setAudioOutput): that would change calls and
 # Android's apps too, so it only notes the device; Android routes the sound.
+# libpulse (PulseAudio's client library, no server) and libsndfile, which it
+# needs: Qt Multimedia plays into DeskDroid's sound server (native/sound,
+# PipeWire) with them, so the desktop's own programs (Sasha...) go through
+# EasyEffects like Linux programs. The server speaks PulseAudio's protocol.
+build_libsndfile() {
+  local s; s="$(unpack https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz libsndfile-1.2.2.tar.xz)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -DBUILD_PROGRAMS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF \
+    -DENABLE_EXTERNAL_LIBS=OFF -DENABLE_MPEG=OFF -DINSTALL_MANPAGES=OFF -DENABLE_CPACK=OFF -DBUILD_REGTEST=OFF
+  test -e "$PREFIX/lib/pkgconfig/sndfile.pc"
+}
+build_libpulse() {
+  local s; s="$(unpack https://www.freedesktop.org/software/pulseaudio/releases/pulseaudio-17.0.tar.xz pulseaudio-17.0.tar.xz)"
+  # Bionic declares backtrace() only from API 33: no execinfo.h, so no backtraces in its log.
+  sed -i "/^  'execinfo.h',$/d" "$s/meson.build"
+  ! grep -q "'execinfo.h'" "$s/meson.build"
+  # Its messages go through gettext (libintl, built just before it).
+  # Its symbol map names pa_simple_* and pa_glib_* (other libraries, not built
+  # here); lld refuses that without --undefined-version.
+  meson_cross "$s" -Dc_args="-I$PREFIX/include" -Dc_link_args="-Wl,--undefined-version -Wl,-z,noexecstack -L$PREFIX/lib" -Ddaemon=false -Dclient=true -Ddoxygen=false -Dman=false -Dtests=false -Ddatabase=simple \
+    -Dalsa=disabled -Dasyncns=disabled -Davahi=disabled -Dbluez5=disabled -Ddbus=disabled -Dfftw=disabled \
+    -Dglib=disabled -Dgsettings=disabled -Dgstreamer=disabled -Dgtk=disabled -Djack=disabled -Dlirc=disabled \
+    -Dopenssl=disabled -Dorc=disabled -Dsoxr=disabled -Dspeex=disabled -Dsystemd=disabled -Dtcpwrap=disabled \
+    -Dudev=disabled -Dvalgrind=disabled -Dx11=disabled -Doss-output=disabled -Dwebrtc-aec=disabled \
+    -Delogind=disabled -Dconsolekit=disabled -Dipv6=false -Dbashcompletiondir=no -Dzshcompletiondir=no
+  test -e "$PREFIX/lib/pkgconfig/libpulse.pc"
+  # Next to libpulse, where the APK's packaging (native/nativedesk) finds what it needs.
+  cp "$PREFIX/lib/pulseaudio/libpulsecommon-17.0.so" "$PREFIX/lib/"
+}
+
 build_qtmultimedia() {
   # qt_src applies patches/qtmultimedia-everywhere-src (the demuxer's).
   local s; s="$(qt_src qtmultimedia)"
@@ -400,6 +429,9 @@ build_qtmultimedia() {
     -DFEATURE_spatialaudio=OFF -DFEATURE_spatialaudio_quick3d=OFF
   test -n "$(find "$PREFIX/plugins" -name '*ffmpegmediaplugin*.so' | head -1)"
   test -z "$(find "$PREFIX/plugins" "$PREFIX/lib/cmake/Qt6Multimedia" -iname '*androidmediaplugin*' | head -1)"
+  # PulseAudio's output (libpulse) next to Android's: patches/.../0002 picks
+  # it on the desktop, where PULSE_SERVER names the sound server.
+  grep -q "QT_FEATURE_pulseaudio 1" "$PREFIX/include/QtMultimedia/qtmultimedia-config.h"
 }
 inputs_qtmultimedia() { declare -f build_ffmpeg; cat "$HERE"/patches/qtmultimedia-everywhere-src/*; }
 # Text to speech, which KTextEditor needs (its "Say" actions); Qt Speech
@@ -1620,8 +1652,8 @@ inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HE
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
-     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors ffmpeg qtmultimedia qtspeech qtwayland qttools deskdroid_ahb
-     ecm plasma_wayland_protocols kconfig_host libintl karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
+     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors ffmpeg libintl libsndfile libpulse qtmultimedia qtspeech qtwayland qttools deskdroid_ahb
+     ecm plasma_wayland_protocols kconfig_host karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      kdecoration kwayland kiconthemes breeze
      kcodecs kitemviews kcompletion kbookmarks kconfigwidgets knotifications kjobwidgets solid openssl qtbase_ssl kio kglobalacceld kwin
