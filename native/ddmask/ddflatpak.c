@@ -49,7 +49,7 @@
 
 static const char *env_app, *env_rt, *env_tmp, *env_loader, *env_libpath;
 static int debug;
-#define MAX_MOUNTS 32
+#define MAX_MOUNTS 64
 static struct { char *at, *to; } mounts[MAX_MOUNTS];
 static int n_mounts;
 /* The program this process runs, when it started through the loader. */

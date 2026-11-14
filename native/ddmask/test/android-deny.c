@@ -1,6 +1,7 @@
 /* Android's refusals for compat.sh, preloaded after ddmask: SELinux refuses
  * reopening a memfd through /proc (EACCES; here, any file) and hard links
- * (EACCES, once the new name is known to be free), and there's no /dev/shm. */
+ * (EACCES, once the new name is known to be free), there's no /dev/shm, and
+ * seccomp blocks System V IPC (glibc's loader makes those ENOSYS). */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <errno.h>
@@ -27,3 +28,7 @@ int linkat(int od, const char *o, int nd, const char *n, int fl) {
     (void)fl; errno = EACCES; return -1;
 }
 int link(const char *o, const char *n) { return linkat(AT_FDCWD, o, AT_FDCWD, n, 0); }
+#include <sys/types.h>
+int shmget(key_t k, size_t s, int f) { (void)k; (void)s; (void)f; errno = ENOSYS; return -1; }
+int shmctl(int i, int c, void *b) { (void)i; (void)c; (void)b; errno = ENOSYS; return -1; }
+int semget(key_t k, int n, int f) { (void)k; (void)n; (void)f; errno = ENOSYS; return -1; }

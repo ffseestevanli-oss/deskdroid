@@ -207,6 +207,39 @@ fake() { # <path under /proc> <contents>
 }
 fake /proc/version "Linux version $(uname -r) (deskdroid) $(uname -v)"
 fake /proc/sys/fs/inotify/max_user_watches 8192
+# /proc/stat, which Android hides: CPU counts and load (htop, system
+# monitors, libraries that size thread pools from it). Idle time from uptime.
+ncpu="$(nproc 2>/dev/null || echo 1)"
+up="$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
+stat="cpu  0 0 0 $((up * 100 * ncpu)) 0 0 0 0 0 0"
+i=0; while [ "$i" -lt "$ncpu" ]; do stat="$stat
+cpu$i 0 0 0 $((up * 100)) 0 0 0 0 0 0"; i=$((i + 1)); done
+fake /proc/stat "$stat
+intr 0
+ctxt 0
+btime $(($(date +%s) - up))
+processes 1
+procs_running 1
+procs_blocked 0"
+# DeskDroid's Android user (u0_a319...), which the runtime's /etc/passwd and
+# /etc/group don't list: programs that look up their own name or home
+# (getpwuid: ssh, Python's getpass, GLib's g_get_user_name, X's xauth) find it.
+uid="$(id -u)" gid="$(id -g)"
+uname_="$(id -un 2>/dev/null)"; case "$uname_" in ''|*[!A-Za-z0-9_.-]*|[0-9]*) uname_=user ;; esac
+gname_="$(id -gn 2>/dev/null)"; case "$gname_" in ''|*[!A-Za-z0-9_.-]*|[0-9]*) gname_="$uname_" ;; esac
+mkdir -p "$F/flatpak-tmp/etc"
+users() { # <runtime file> <line for the Android user> <its id> <made file>
+  { [ -r "$1" ] && grep -v "^[^:]*:[^:]*:$3:" "$1"; printf '%s\n' "$2"; } > "$4.$$" && mv -f "$4.$$" "$4" \
+    && mounts="$mounts;/etc/${4##*/}=$4"
+}
+users "$RT/etc/passwd" "$uname_:x:$uid:$gid:DeskDroid:${HOME:-$F}:/bin/sh" "$uid" "$F/flatpak-tmp/etc/passwd"
+users "$RT/etc/group" "$gname_:x:$gid:" "$gid" "$F/flatpak-tmp/etc/group"
+[ -n "${USER:-}" ] || export USER="$uname_"
+[ -n "${LOGNAME:-}" ] || export LOGNAME="$USER"
+# System V shared memory and semaphores (ddmask's: MIT-SHM between X
+# programs and Xwayland) in one folder for every app and helper.
+export DDMASK_SHM="$F/flatpak-tmp/ddmask-shm"
+mkdir -p "$DDMASK_SHM"
 # The runtime's fonts.conf includes the host's font folders from here.
 printf '<?xml version="1.0"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n</fontconfig>\n' > "$F/flatpak-tmp/font-dirs.xml"
 mounts="$mounts;/run/host/font-dirs.xml=$F/flatpak-tmp/font-dirs.xml"

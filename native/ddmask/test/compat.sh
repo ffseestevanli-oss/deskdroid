@@ -17,6 +17,7 @@ mkdir -p "$T/lib" "$T/app/bin" "$T/glib"
 "$CC" -O2 -Wall "$HERE/sigsys-probe.c" -o "$T/app/bin/sigsys-probe" -lpthread
 "$CC" -O2 -Wall "$HERE/shm-probe.c" -o "$T/app/bin/shm-probe"
 "$CC" -O2 -Wall "$HERE/link-probe.c" -o "$T/app/bin/link-probe"
+"$CC" -O2 -Wall "$HERE/sysv-probe.c" -o "$T/app/bin/sysv-probe"
 "$CC" -O2 -Wall -shared -fPIC "$HERE/android-deny.c" -o "$T/android-deny.so" -ldl
 cp "$T/app/bin/probe" "$T/app/bin/nox"
 printf '#!/bin/sh\necho "nox-script $*"\n' > "$T/app/bin/noxscript"
@@ -120,6 +121,22 @@ out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so" "$T/app/bin/shm-probe" 2>&1)"
 expect "...and where there is a /dev/shm, as before" "$out" "^memfd-reopen=ok$" "^shm-shared=shared$" "^shm-gone=No such file or directory$"
 out="$(env LD_PRELOAD="$T/android-deny.so" TMPDIR="$T/tmp" "$T/app/bin/shm-probe" 2>&1)"
 expect "(without ddmask the memfd copy fails there)" "$out" "^memfd-reopen=Permission denied$"
+
+# -- System V shared memory and semaphores, which Android's seccomp blocks
+mkdir -p "$T/sv"
+out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so:$T/android-deny.so" DDMASK_SHM="$T/sv" "$T/app/bin/sysv-probe" 2>&1)"
+expect "Xorg's MIT-SHM check: an invalid id is EINVAL" "$out" "^probe=Invalid argument$"
+expect "a private segment shared with a child by id, read-only, kept while attached after IPC_RMID" "$out" \
+  "^child-sees=from-parent$" "^child-nattch=[23]$" "^child-after-rmid=changed$" "^size=100000 mode=600 dest=yes$" \
+  "^shmdt=ok$" "^gone=Invalid argument$" "^shmdt-again=Invalid argument$"
+expect "...a keyed segment: found again, IPC_EXCL, too small, gone after IPC_RMID" "$out" "^key=ok$" "^key-same=yes$" \
+  "^key-excl=File exists$" "^key-bigger=Invalid argument$" "^key-after-rmid=No such file or directory$"
+expect "...semaphores: IPC_NOWAIT, a child waiting until another op gives, a timeout, removal" "$out" "^semget=ok$" \
+  "^nowait=Resource temporarily unavailable$" "^ncnt=1$" "^child-took=ok$" "^vals=0,5$" \
+  "^timed=Resource temporarily unavailable$" "^sem-rmid=ok$" "^sem-gone=Invalid argument$"
+expect "...in \$DDMASK_SHM/sysv, left empty" "dir:$(ls -A "$T/sv/sysv" 2>&1)" "^dir:$"
+out="$(env LD_PRELOAD="$T/android-deny.so" "$T/app/bin/sysv-probe" 2>&1 || true)"
+expect "(without ddmask they fail there)" "$out" "^shmget=Function not implemented$"
 
 # -- hard links, which Android refuses (android-deny.c)
 mkdir -p "$T/l1" "$T/l2"

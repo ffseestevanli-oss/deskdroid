@@ -52,6 +52,9 @@ run() {
     XDG_DATA_DIRS="$T/desk-share" XDG_CONFIG_DIRS="$T/desk-xdg" QT_QPA_PLATFORMTHEME=deskdroid QT_PLUGIN_PATH=/desktop/plugins DDAPP_PROGRAM="$S/$1/program" \
     DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$T/loader" sh "$HERE/../adpk-run.sh" "${@:2}"
 }
+mkdir -p "$S/runtime-kde-6.11/program/files/etc"
+printf 'root:x:0:0:root:/root:/bin/bash\nnobody:x:65534:65534:Nobody:/:/sbin/nologin\n' > "$S/runtime-kde-6.11/program/files/etc/passwd"
+printf 'root:x:0:\nwheel:x:10:\n' > "$S/runtime-kde-6.11/program/files/etc/group"
 out="$(run kid3 --dd-command=kid3-cli a b)"
 log="$(cat "$S/kid3/run.log")"
 expect "reads the app, its command and its runtime from the package" "$log" \
@@ -112,8 +115,13 @@ expect "...the same each start" "$(grep -c "^gtk-theme=" "$T/desk-config/glib-2.
 expect "Android's fonts beside the runtime's" "$(cat "$F/flatpak-tmp/fonts.conf")" "<include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>" "<dir>/system/fonts</dir>"
 expect "full FFmpeg (codecs-extra) ahead of the runtime's" "$out" "^DDMASK_GLIBC_LD_LIBRARY_PATH=$F/glibc/lib:$S/kid3/program/files/lib:$S/runtime-mesa-25.08/program/codecs-extra/lib:"
 if [ -r /proc/version ]; then
-  expect "a readable /proc/version is left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?;/run/host/font-dirs.xml=[^;]*;/usr/bin/bwrap=[^;]*$"
+  expect "a readable /proc/version and /proc/stat are left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?;/etc/passwd=[^;]*;/etc/group=[^;]*;/run/host/font-dirs.xml=[^;]*;/usr/bin/bwrap=[^;]*$"
 fi
+expect "the Android user in /etc/passwd and /etc/group, after the runtime's" \
+  "$(cat "$F/flatpak-tmp/etc/passwd" "$F/flatpak-tmp/etc/group")" "^nobody:x:65534:65534:Nobody:/:/sbin/nologin$" \
+  "^[A-Za-z0-9_.-]+:x:$(id -u):$(id -g):DeskDroid:$T/home:/bin/sh$" "^wheel:x:10:$" "^[A-Za-z0-9_.-]+:x:$(id -g):$"
+expect "...as \$USER, with one folder for System V shared memory" "$out" "^USER=[A-Za-z0-9_.-]+$" "^LOGNAME=[A-Za-z0-9_.-]+$" \
+  "^DDMASK_SHM=$F/flatpak-tmp/ddmask-shm$"
 mkdir -p "$T/run" && : > "$L/libdd_vulkan_virtio.so"
 python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$T/run/virgl.sock"
 out2="$(run kid3)"
