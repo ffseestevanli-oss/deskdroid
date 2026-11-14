@@ -15,6 +15,7 @@ expect() { # name text regex...
 }
 F="$T/files" S="$T/files/store/apps" L="$T/libs"
 mkdir -p "$F/glibc/lib" "$L" && : > "$F/glibc/lib/libc.so.6" && : > "$L/libdd_ld-glibc.so"
+cp "$HERE/../bwrap.sh" "$L/libdd_bwrap.so"
 pkg() { # id metadata
   mkdir -p "$S/$1/program/files"; : > "$S/$1/app.txt"; : > "$S/$1/program/.ddsetup-done"
   printf '%s\n' "$2" > "$S/$1/program/metadata"
@@ -65,9 +66,9 @@ expect "the home folder as on Linux: the desktop's settings folder, ~/.local/sha
 expect "the desktop's theme: KDE's platform theme, its data and settings folders after the runtime's" "$out" \
   "^QT_QPA_PLATFORMTHEME=kde$" "^XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share:$T/desk-share$" \
   "^XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg:$T/desk-xdg(:$F/flatpak-tmp/kde-look)?$"
-expect "bubblewrap answers as it does on Android: no namespaces (glycin then loads images unsandboxed)" \
-  "$(sed -n 's/^DDFLATPAK_MOUNTS=//p' <<<"$out" | tr ';' '\n'; sh "$F/flatpak-tmp/bwrap" --unshare-all /bin/true 2>&1; echo "status=$?")" \
-  "^/usr/bin/bwrap=$F/flatpak-tmp/bwrap$" "^bwrap: Creating new namespace failed" "^status=1$"
+expect "bubblewrap is the stand-in that runs helpers unsandboxed (glycin's image loaders)" \
+  "$(sed -n 's/^DDFLATPAK_MOUNTS=//p' <<<"$out" | tr ';' '\n'; env OTHER=1 DDMASK_KEPT=1 sh "$L/libdd_bwrap.so" --unshare-all --clearenv --setenv HOME /h --seccomp 9 /bin/sh -c 'echo "ran HOME=$HOME OTHER=${OTHER:-} DDMASK_KEPT=$DDMASK_KEPT"')" \
+  "^/usr/bin/bwrap=$L/libdd_bwrap.so$" "^ran HOME=/h OTHER= DDMASK_KEPT=1$"
 expect "GTK apps get the desktop's GTK theme" "$out" "^GTK_THEME=DD-Party$" "^GSETTINGS_BACKEND=keyfile$"
 expect "...in GSettings too, only those keys" "$(cat "$T/desk-config/glib-2.0/settings/keyfile")" "^other='kept'$" \
   "^\[org/gnome/desktop/interface\]$" "^color-scheme='prefer-dark'$" "^gtk-theme='DD-Party'$" "^icon-theme='DD-Party'$"

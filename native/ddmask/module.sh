@@ -14,7 +14,7 @@
 #                             takes it from app files (NativeDesk.kt checks)
 #   lib/libddmask_glibc.so, libddmask_musl.so    glibc and musl programs
 #   lib/libddflatpak.so, libddflatpak_audit.so   Flatpak's paths
-#   scripts/adpk-run.sh, flatpak.sh, fex-run.sh  how apps start
+#   scripts/adpk-run.sh, flatpak.sh, fex-run.sh, bwrap.sh  how apps start
 #
 # What stays in the APK, always: the loaders and runners ddmask execs
 # (libdd_ld-glibc.so, libdd_ld-musl.so...), since Android only runs programs
@@ -38,6 +38,7 @@ done
 cp "$libs/libdd_adpk_run.so" "$P/scripts/adpk-run.sh"
 cp "$libs/libdd_flatpak.so" "$P/scripts/flatpak.sh"
 [ -e "$libs/libdd_flatpak_fex.so" ] && cp "$libs/libdd_flatpak_fex.so" "$P/scripts/fex-run.sh"
+[ -e "$libs/libdd_bwrap.so" ] && cp "$libs/libdd_bwrap.so" "$P/scripts/bwrap.sh"
 : > "$P/api-1"
 echo "$version" > "$P/version.txt"
 cd "$T/pkg"

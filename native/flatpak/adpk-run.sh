@@ -210,13 +210,12 @@ fake /proc/sys/fs/inotify/max_user_watches 8192
 # The runtime's fonts.conf includes the host's font folders from here.
 printf '<?xml version="1.0"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n</fontconfig>\n' > "$F/flatpak-tmp/font-dirs.xml"
 mounts="$mounts;/run/host/font-dirs.xml=$F/flatpak-tmp/font-dirs.xml"
-# bubblewrap, which apps run to sandbox their helpers, needs user namespaces
-# that Android doesn't give apps. A bwrap that says so, the way the real one
-# does there, so they run them unsandboxed (glycin, GNOME's image loading for
-# GTK apps: without it GTK 4 apps load no images or icons and can abort).
-printf '#!/system/bin/sh\necho "bwrap: Creating new namespace failed: Operation not permitted" >&2\nexit 1\n' > "$F/flatpak-tmp/bwrap"
-chmod 755 "$F/flatpak-tmp/bwrap"
-mounts="$mounts;/usr/bin/bwrap=$F/flatpak-tmp/bwrap"
+# bubblewrap, which apps run to sandbox their helpers (glycin, GNOME's image
+# loading), needs user namespaces Android doesn't give apps: bwrap.sh stands
+# in for it and runs them unsandboxed. From the module's scripts or the APK.
+bw="$L/libdd_bwrap.so"
+[ -n "$DM" ] && [ -e "$DM/scripts/bwrap.sh" ] && bw="$DM/scripts/bwrap.sh"
+[ -e "$bw" ] && mounts="$mounts;/usr/bin/bwrap=$bw"
 # Firefox (and browsers built from it, which keep its application ID): the
 # settings DeskDroid gives its own Firefox, Etherium (native/firefox/etherium:
 # DD Party's look, no telemetry, Startpage, Wayland scrolling without frame
