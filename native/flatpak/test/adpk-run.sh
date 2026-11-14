@@ -22,6 +22,7 @@ pkg() { # id metadata
 mkdir -p "$T/desk-config/gtk-3.0" "$T/desk-config/glib-2.0/settings"
 printf '# DeskDroid\n[Settings]\ngtk-theme-name=DD-Party\ngtk-icon-theme-name=DD-Party\ngtk-application-prefer-dark-theme=true\n' > "$T/desk-config/gtk-3.0/settings.ini"
 printf "[org/gnome/desktop/interface]\nother='kept'\ngtk-theme='Adwaita'\n" > "$T/desk-config/glib-2.0/settings/keyfile"
+printf '[Colors:View]\nBackgroundNormal=20,10,30\n\n[General]\nColorScheme=DDParty\n' > "$T/desk-config/kdeglobals"
 pkg runtime-kde-6.11 '[Runtime]
 name = org.kde.Platform
 runtime = org.kde.Platform/aarch64/6.11
@@ -62,7 +63,7 @@ expect "the home folder as on Linux: the desktop's settings folder, ~/.local/sha
   "^XDG_CONFIG_HOME=$T/desk-config$" "^XDG_DATA_HOME=$T/home/.local/share$" "^XDG_CACHE_HOME=$T/home/.cache$"
 expect "the desktop's theme: KDE's platform theme, its data and settings folders after the runtime's" "$out" \
   "^QT_QPA_PLATFORMTHEME=kde$" "^XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share:$T/desk-share$" \
-  "^XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg:$T/desk-xdg$"
+  "^XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg:$T/desk-xdg(:$F/flatpak-tmp/kde-look)?$"
 expect "GTK apps get the desktop's GTK theme" "$out" "^GTK_THEME=DD-Party$" "^GSETTINGS_BACKEND=keyfile$"
 expect "...in GSettings too, only those keys" "$(cat "$T/desk-config/glib-2.0/settings/keyfile")" "^other='kept'$" \
   "^\[org/gnome/desktop/interface\]$" "^color-scheme='prefer-dark'$" "^gtk-theme='DD-Party'$" "^icon-theme='DD-Party'$"
@@ -158,6 +159,10 @@ expect "flatpak run starts an app the way a store package starts" "$out" \
 expect "...with Flatpak's GL driver and full FFmpeg" "$out" \
   "^DDFLATPAK_MOUNTS=.*/usr/lib/aarch64-linux-gnu/GL/default=$(readlink -f "$FU"/runtime/org.freedesktop.Platform.GL.default/aarch64/25.08/active/files)" \
   "^DDMASK_GLIBC_LD_LIBRARY_PATH=.*codecs-extra/aarch64/25.08-extra/c/files/lib"
+L2="$F/flatpak-tmp/kde-look"
+expect "KDE apps that choose their own colours get the desktop's scheme as their default" "$out" "^XDG_CONFIG_DIRS=.*:$L2$" "^XDG_CURRENT_DESKTOP=KDE$" \
+  "^QT_LOGGING_RULES=qt.qpa.theme=true$"
+expect "...named under [UiSettings], from kdeglobals" "$(cat "$L2/kdeglobals")" '^\[UiSettings\]$' '^ColorScheme=DDParty$'
 expect "...and its log where the crash dialog finds it" "$log" "^org.mozilla.firefox: starting /app/bin/firefox https://example.org" "Etherium's settings for firefox"
 mounts="$(sed -n 's/^DDFLATPAK_MOUNTS=//p' <<<"$out" | tr ';' '\n')"
 expect "Firefox: Etherium's files over its folder, at /app and the real path" "$mounts" \

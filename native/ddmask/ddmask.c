@@ -477,6 +477,8 @@ static int is_var(const char *entry, const char *var) {
 
 #define HOST_PREFIX "DDMASK_HOST_"
 #define HOST_PREFIX_LEN 12
+#define LINUX_PREFIX "DDMASK_LINUX_"
+#define LINUX_PREFIX_LEN 13
 
 /* For "VAR=value": the desktop's own value of VAR (DDMASK_HOST_VAR), or NULL. */
 static const char *host_value(char *const envp[], const char *entry) {
@@ -495,7 +497,8 @@ static const char *host_value(char *const envp[], const char *entry) {
  * variable (LD_PRELOAD, DDMASK_GLIBC_LD_PRELOAD, DDMASK_MUSL_LD_PRELOAD);
  * DDMASK_EXE/DDMASK_ARGV0 only when given. Going from a bionic program to a
  * glibc or musl one (world > 0), the desktop's own settings stay behind; going
- * back to a bionic one (world 0), they come back (DDMASK_HOST_<VAR>).
+ * back to a bionic one (world 0), they come back (DDMASK_HOST_<VAR>), and
+ * the desktop's settings for Linux programs (DDMASK_LINUX_<VAR>) fill in.
  * nenvp has room for 2 * count(envp) + WORLDS + 3.
  */
 static void build_env(char *const envp[], char **nenvp, struct plan *pl, int with_exe, int world) {
@@ -516,6 +519,20 @@ static void build_env(char *const envp[], char **nenvp, struct plan *pl, int wit
         for (char *const *e = envp; e && *e; e++)
             if (strncmp(*e, HOST_PREFIX, HOST_PREFIX_LEN) == 0 && strchr(*e, '=') > *e + HOST_PREFIX_LEN)
                 nenvp[j++] = *e + HOST_PREFIX_LEN;
+    /* The desktop's look for Linux programs (DDMASK_LINUX_<VAR>: KDE's
+     * platform theme, the GTK theme), where they don't set their own. */
+    if (leaving) {
+        int base = j;
+        for (char *const *e = envp; e && *e; e++) {
+            if (strncmp(*e, LINUX_PREFIX, LINUX_PREFIX_LEN) != 0) continue;
+            const char *kv = *e + LINUX_PREFIX_LEN, *eq = strchr(kv, '=');
+            if (!eq || eq == kv) continue;
+            size_t n = (size_t)(eq - kv) + 1;
+            int set = 0;
+            for (int k = 0; k < base && !set; k++) set = strncmp(nenvp[k], kv, n) == 0;
+            if (!set) nenvp[j++] = (char *)kv;
+        }
+    }
     for (int w = 0; w < WORLDS; w++)
         if (shims[w][0]) nenvp[j++] = with_preload(envp, worlds[w].var, shims[w], pl->preload[w], sizeof pl->preload[w]);
     if (with_exe) {

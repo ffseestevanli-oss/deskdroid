@@ -1255,6 +1255,17 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 "QT_QUICK_CONTROLS_STYLE", "QT_STYLE_OVERRIDE", "QT_WAYLAND_CLIENT_BUFFER_INTEGRATION",
                 "KWIN_FORCE_OWN_QPA", "KDEDIRS", "QTWEBENGINEPROCESS_PATH"))
             env[name]?.let { env["DDMASK_HOST_$name"] = it }
+        // And the desktop's look for every Linux program, where it doesn't
+        // set its own (DDMASK_LINUX_<name>, filled in by ddmask): KDE's
+        // platform theme (kdeglobals: DD Party's colours, icons, fonts), a KDE
+        // desktop for Qt and KDE's own checks, and the GTK theme NativeDesk
+        // picked for gtk-3.0/settings.ini (GTK on Wayland doesn't read it).
+        env["DDMASK_LINUX_QT_QPA_PLATFORMTHEME"] = "kde"
+        env["DDMASK_LINUX_XDG_CURRENT_DESKTOP"] = "KDE"
+        env["XDG_CONFIG_HOME"]?.let { File(it, "gtk-3.0/settings.ini") }?.takeIf { it.exists() }?.let { ini ->
+            Regex("(?m)^gtk-theme-name *= *(.+)$").find(ini.readText())?.groupValues?.get(1)?.trim()
+                ?.takeIf { it.isNotEmpty() }?.let { env["DDMASK_LINUX_GTK_THEME"] = it }
+        }
     }
 
     private fun ddmask(env: MutableMap<String, String>, libs: String) {
