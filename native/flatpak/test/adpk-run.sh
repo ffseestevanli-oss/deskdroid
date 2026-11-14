@@ -65,6 +65,9 @@ expect "the home folder as on Linux: the desktop's settings folder, ~/.local/sha
 expect "the desktop's theme: KDE's platform theme, its data and settings folders after the runtime's" "$out" \
   "^QT_QPA_PLATFORMTHEME=kde$" "^XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share:$T/desk-share$" \
   "^XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg:$T/desk-xdg(:$F/flatpak-tmp/kde-look)?$"
+expect "bubblewrap answers as it does on Android: no namespaces (glycin then loads images unsandboxed)" \
+  "$(sed -n 's/^DDFLATPAK_MOUNTS=//p' <<<"$out" | tr ';' '\n'; sh "$F/flatpak-tmp/bwrap" --unshare-all /bin/true 2>&1; echo "status=$?")" \
+  "^/usr/bin/bwrap=$F/flatpak-tmp/bwrap$" "^bwrap: Creating new namespace failed" "^status=1$"
 expect "GTK apps get the desktop's GTK theme" "$out" "^GTK_THEME=DD-Party$" "^GSETTINGS_BACKEND=keyfile$"
 expect "...in GSettings too, only those keys" "$(cat "$T/desk-config/glib-2.0/settings/keyfile")" "^other='kept'$" \
   "^\[org/gnome/desktop/interface\]$" "^color-scheme='prefer-dark'$" "^gtk-theme='DD-Party'$" "^icon-theme='DD-Party'$"
@@ -108,7 +111,7 @@ expect "...the same each start" "$(grep -c "^gtk-theme=" "$T/desk-config/glib-2.
 expect "Android's fonts beside the runtime's" "$(cat "$F/flatpak-tmp/fonts.conf")" "<include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>" "<dir>/system/fonts</dir>"
 expect "full FFmpeg (codecs-extra) ahead of the runtime's" "$out" "^DDMASK_GLIBC_LD_LIBRARY_PATH=$F/glibc/lib:$S/kid3/program/files/lib:$S/runtime-mesa-25.08/program/codecs-extra/lib:"
 if [ -r /proc/version ]; then
-  expect "a readable /proc/version is left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?;/run/host/font-dirs.xml=[^;]*$"
+  expect "a readable /proc/version is left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?;/run/host/font-dirs.xml=[^;]*;/usr/bin/bwrap=[^;]*$"
 fi
 mkdir -p "$T/run" && : > "$L/libdd_vulkan_virtio.so"
 python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$T/run/virgl.sock"
