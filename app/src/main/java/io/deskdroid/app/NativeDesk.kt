@@ -1898,7 +1898,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (!script.exists() || !File(libs, "libdd_ld-glibc.so").exists()) return
         try {
             // Unpacked here too: this runs before KWin's environment (glibcRuntime)
-            // on the first start of a new build. Once per app version.
+            // on the first start of a new build. Once per app version. glibc
+            // first: the server runs on it, and glibcRuntime would otherwise
+            // replace files/glibc under it (build 1094: "libc.so.6: cannot open").
+            File(libs, "libdd_glibc.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "glibc")) }
             File(libs, "libdd_soundsrv.so").takeIf { it.exists() }?.let { unpackKWinData(it, File(filesDir, "sound")) }
             if (!File(filesDir, "sound/usr/bin/pipewire").exists()) { AppLog.i("[sound] not unpacked; no sound server"); return }
             NativeDesk.sound?.stop()
