@@ -1184,6 +1184,9 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     // GTK programs: Wayland, and settings kept in memory (no dconf here).
                     put("GDK_BACKEND", "wayland")
                     put("GSETTINGS_BACKEND", "memory")
+                    // GIO opens files and folders (Etherium's downloads, GIMP) through
+                    // its gio-launch-desktop helper, which isn't where GLib was built.
+                    put("GIO_LAUNCH_DESKTOP", File(libs, "libdd_gio-launch-desktop.so").path)
                     // Apps the desktop starts (bin/dolphin...) inherit all this.
                     put("PATH", "${bin.path}:${System.getenv("PATH") ?: "/system/bin"}")
                     put("DESKDROID_BIN", bin.path) // help in the terminal lists these apps
