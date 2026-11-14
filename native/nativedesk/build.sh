@@ -124,6 +124,8 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
       install -m 755 "$HERE/android-open.sh" "$OUT/libdd_android-open.so"
       # The app store's programs (GIMP...): bin/<app> (store-program.sh).
       install -m 755 "$HERE/store-program.sh" "$OUT/libdd_store-program.so"
+      # GIO's launcher for GTK programs opening files and folders (gio-launch-desktop.sh).
+      install -m 755 "$HERE/gio-launch-desktop.sh" "$OUT/libdd_gio-launch-desktop.so"
       echo "   apps: ${apps[*]}"
     fi
     # Plugins (Qt's Wayland client, KDE's and KWin's), also flat in the
