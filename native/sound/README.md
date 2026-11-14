@@ -56,7 +56,10 @@ with the same result.
 ## Still open
 
 - A microphone (a source fed from Android's AudioRecord through a second FIFO).
-- The desktop's own (bionic) programs, Qt Multimedia's and Etherium's, still
-  play through Android directly, so EasyEffects doesn't reach them yet.
+- The desktop's own (bionic) programs play into it when they use libpulse:
+  Qt Multimedia's (Sasha) and Etherium (cubeb's PulseAudio backend, through
+  the `libpulse.so.0` stand-in native/nativedesk puts next to it). Others,
+  and Android apps, still play through Android directly, so EasyEffects and
+  ViPER FX don't reach them.
 - Phone's clock is the system clock, not the phone's audio clock: a tiny
   drift either way is a few samples dropped or a short underrun now and then.
