@@ -46,6 +46,11 @@ import java.io.File
  * to the efficient cores, and the cap drops to 1 core (Performance), half a
  * core (Balanced) or a quarter of one (Power Save).
  *
+ * Power Save also turns KDE's animations off (System Settings' animation
+ * speed set to instant, AnimationDurationFactor=0 in kdeglobals), so the
+ * slower desktop doesn't spend its time animating; the other profiles put
+ * back whatever speed was set before (Animations).
+ *
  * Android's Battery Saver puts the desktop on Power Save while it's on, unless
  * that's turned off in the settings. The choice is in the desktop's Battery
  * item (android-open deskdroid:power:<profile>) and DeskDroid's settings.
@@ -79,6 +84,8 @@ object PowerProfile {
         apply("desktop started")
         worker.removeCallbacks(reapply)
         worker.postDelayed(reapply, REAPPLY_MS)
+        // KWin and plasmashell may not have been on the bus yet: tell them again.
+        worker.postDelayed({ app?.let { Animations.notifyAgain(it) } }, 15_000)
     }
 
     /** The desktop stops: every paused app goes again (before it's told to quit). */
@@ -121,6 +128,7 @@ object PowerProfile {
         if (NativeDesk.running) NativeDesk.nativeSetFrameCap(l.fps)
         val pkg = a.packageName
         worker.post {
+            Animations.apply(a, off = name == "powersave")
             Affinity.apply(pkg, l.cores)
             Throttle.setCap(l.cap, asleep)
             if (l.cap > 0) Throttle.start(pkg)
@@ -226,6 +234,84 @@ object PowerProfile {
                 (a..b).toList()
             }
             return ids.ifEmpty { (0 until Runtime.getRuntime().availableProcessors()).toList() }
+        }
+    }
+
+    /**
+     * KDE's animation speed: off (instant) on Power Save, else what it was.
+     * The speed set before Power Save is kept in config/deskdroid-animations
+     * ("default" when none was set) until another profile puts it back.
+     */
+    private object Animations {
+        private const val KEY = "AnimationDurationFactor"
+        private var last: Boolean? = null
+
+        fun apply(c: Context, off: Boolean) {
+            val config = File(c.filesDir, "config")
+            val globals = File(config, "kdeglobals")
+            val saved = File(config, "deskdroid-animations")
+            val text = if (globals.exists()) globals.readText() else ""
+            val now = Ini.get(text, "KDE", KEY)
+            val next = if (off) {
+                if (!saved.exists()) saved.writeText(now ?: "default")
+                "0"
+            } else {
+                if (!saved.exists()) { last = off; return } // never turned off: the person's own setting stands
+                saved.readText().trim().takeUnless { it == "default" || it.isEmpty() }.also { saved.delete() }
+            }
+            if (next != now) {
+                config.mkdirs()
+                globals.writeText(Ini.set(text, "KDE", KEY, next))
+                AppLog.i("Power: animations " + if (off) "off" else "back (${next ?: "default speed"})")
+                notify(c)
+            } else if (last != off && last != null) notify(c)
+            last = off
+        }
+
+        fun notifyAgain(c: Context) { if (last == true) notify(c) }
+
+        private fun notify(c: Context) {
+            val ok = KdeConfigNotify.send(File(c.cacheDir, "runtime/bus"), "kdeglobals", mapOf("KDE" to listOf(KEY)))
+            if (!ok) AppLog.i("Power: couldn't tell the desktop about the animation change (it applies on the next start)")
+        }
+    }
+
+    /** Just enough of KConfig's ini format to read and change one key. */
+    internal object Ini {
+        fun get(text: String, group: String, key: String): String? {
+            var inGroup = false
+            for (line in text.lines()) {
+                val t = line.trim()
+                if (t.startsWith("[")) inGroup = t == "[$group]"
+                else if (inGroup && t.substringBefore('=').trim() == key && '=' in t) return t.substringAfter('=').trim()
+            }
+            return null
+        }
+
+        /** [value] null removes the key. */
+        fun set(text: String, group: String, key: String, value: String?): String {
+            val lines = text.lines().toMutableList()
+            var start = -1
+            var end = lines.size
+            for ((i, line) in lines.withIndex()) {
+                val t = line.trim()
+                if (t.startsWith("[")) {
+                    if (start >= 0) { end = i; break }
+                    if (t == "[$group]") start = i
+                }
+            }
+            if (start < 0) {
+                if (value == null) return text
+                val base = text.trimEnd('\n')
+                return (if (base.isEmpty()) "" else "$base\n\n") + "[$group]\n$key=$value\n"
+            }
+            val at = (start + 1 until end).firstOrNull { lines[it].trim().let { t -> '=' in t && t.substringBefore('=').trim() == key } }
+            when {
+                at != null && value != null -> lines[at] = "$key=$value"
+                at != null -> lines.removeAt(at)
+                value != null -> lines.add(start + 1, "$key=$value")
+            }
+            return lines.joinToString("\n")
         }
     }
 
