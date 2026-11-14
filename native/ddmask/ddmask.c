@@ -96,6 +96,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <sched.h>
+#include <stdint.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
@@ -1172,6 +1174,8 @@ EXPORT int linkat(int od, const char *o, int nd, const char *n, int fl) {
     return -1;
 }
 EXPORT int link(const char *o, const char *n) { return linkat(AT_FDCWD, o, AT_FDCWD, n, 0); }
+
+#include "sysv-ipc.c"
 #endif
 
 /* ---- blocked system calls (glibc and musl programs) ---- */
