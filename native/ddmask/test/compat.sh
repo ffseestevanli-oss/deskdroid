@@ -90,6 +90,9 @@ expect "...and in sigsys.log, by number" "$(sort -un "$T/sigsys.log" | tr '\n' '
 out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so" DDMASK_JOURNAL="$J" "$T/app/bin/sigsys-probe" own 2>&1)"
 expect "a program with its own SIGSYS handler still gets ENOSYS, from any thread" "$out" "^own-thread-getcpu=-1/Function not implemented$"
 expect "...sees its handler as set, and gets the SIGSYS it sends itself" "$out" "^own-handler-kept=yes$" "^own-kill-reached=1$"
+out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so" DDMASK_JOURNAL="$J" "$T/app/bin/sigsys-probe" sandbox 2>&1)"
+expect "a program's own seccomp sandbox (Firefox's) answers the calls it traps" "$out" "^sandbox-trapped=42 data=5$"
+expect "...while Android's still get ddmask's answer" "$out" "^sandbox-android-blocked=-1/Function not implemented$"
 
 # -- shared memory, with Android's refusals (android-deny.c)
 mkdir -p "$T/tmp"

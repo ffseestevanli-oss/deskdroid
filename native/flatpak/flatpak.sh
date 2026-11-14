@@ -151,66 +151,25 @@ run() {
   RT="$(readlink -f "$FLATPAK_USER_DIR/runtime/$rtref/active/files" 2>/dev/null)"
   [ -d "$RT" ] || die "runtime $rtref isn't installed"
   rtbranch="${rtref##*/}"
-  mounts="/dev/shm=$F/flatpak-tmp"
-  libpath="$GLIBC_LIB:$APP/lib:$RT/lib/$TRIPLE:$RT/lib"
-  # The GL driver extension (Mesa, software on Android for now), where
-  # Flatpak mounts it; with one driver its folders are also the merged ones.
+  # Extensions Flatpak would mount: the GL driver (Mesa) and the full FFmpeg.
   GL="$(readlink -f "$FLATPAK_USER_DIR/runtime/org.freedesktop.Platform.GL.default/$ARCH/$rtbranch/active/files" 2>/dev/null)"
-  if [ -n "$GL" ] && [ -d "$GL" ]; then
-    mounts="/usr/lib/$TRIPLE/GL/default=$GL;/usr/lib/$TRIPLE/GL=$GL;$mounts"
-    libpath="$libpath:$GL/lib"
-  fi
-  # Folders the app's and runtime's libraries name in their RUNPATH
-  # (/app/lib/kid3, /usr/lib/<triple>/pulseaudio): glibc's loader opens those
-  # itself, unmapped, so their real folders go on the path, last. Folders
-  # under lib/ that hold libraries stand in for them.
-  for d in "$APP"/lib/*/ "$RT"/lib/"$TRIPLE"/*/; do
-    has_libs "$d" && libpath="$libpath:${d%/}"
+  [ -d "$GL" ] || GL=""
+  CX=""
+  for b in "$rtbranch-extra" "$rtbranch"; do
+    c="$(readlink -f "$FLATPAK_USER_DIR/runtime/org.freedesktop.Platform.codecs-extra/$ARCH/$b/active/files" 2>/dev/null)"
+    [ -n "$c" ] && [ -d "$c" ] && { CX="$c"; break; }
   done
-  # LD_LIBRARY_PATH from the app's [Environment] (Audacity's /app/lib/audacity).
-  for d in $(sed -n '/^\[Environment\]/,/^\[/{s/^LD_LIBRARY_PATH *= *//p}' "$meta" | tr ':' ' '); do
-    case "$d" in /app/*) libpath="$APP/${d#/app/}:$libpath" ;; /usr/*) libpath="$RT/${d#/usr/}:$libpath" ;; esac
-  done
-  export DDFLATPAK_APP="$APP" DDFLATPAK_RUNTIME="$RT" DDFLATPAK_MOUNTS="$mounts"
-  # The same paths for glibc's loader, which opens the folders programs name
-  # for their libraries (RUNPATH /app/lib/<x>) itself (ddmask/ddflatpak-audit.c).
-  [ -e "$(ddlib libddflatpak_audit.so)" ] && export DDMASK_GLIBC_LD_AUDIT="$(ddlib libddflatpak_audit.so)"
-  export DDMASK_GLIBC_LD_LIBRARY_PATH="$libpath" DDFLATPAK_LIBPATH="$libpath"
-  # The desktop's own (bionic) Qt and KDE settings would point the app's Qt at
-  # the wrong plugins.
-  unset QT_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH QT_QPA_PLATFORMTHEME QT_STYLE_OVERRIDE \
-    QT_QUICK_CONTROLS_STYLE KDEDIRS QTWEBENGINEPROCESS_PATH
-  # What flatpak run sets inside the sandbox; ddflatpak makes these paths real.
-  # (PATH last, below: this script still needs Android's mkdir and sed.)
-  export XDG_DATA_DIRS=/app/share:/usr/share:/usr/share/runtime/share
-  export XDG_CONFIG_DIRS=/app/etc/xdg:/etc/xdg
-  h="$HOME/.var/app/$id"
-  export XDG_DATA_HOME="$h/data" XDG_CONFIG_HOME="$h/config" XDG_CACHE_HOME="$h/cache" XDG_STATE_HOME="$h/.local/state"
-  mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
-  export FLATPAK_ID="$id" LOCPATH="$RT/lib/locale"
-  # [Environment] from the runtime's metadata (the KDE runtime's
-  # QT_PLUGIN_PATH=/app/lib/plugins:..., which Ark needs for its KPart), then
-  # the app's; "KEY = value" or "KEY=value".
-  for m in "$FLATPAK_USER_DIR/runtime/$rtref/active/metadata" "$meta"; do
-    [ -f "$m" ] || continue
-    envs="$(sed -n '/^\[Environment\]/,/^\[/{s/^\([A-Za-z_][A-Za-z0-9_]*\) *= */\1=/p}' "$m")"
-    [ -n "$envs" ] || continue
-    while IFS= read -r kv; do
-      case "${kv%%=*}" in LD_LIBRARY_PATH|LD_PRELOAD|PATH) ;; *) export "$kv" ;; esac
-    done <<ENVS
-$envs
-ENVS
-  done
-  export PATH=/app/bin:/usr/bin
-  if [ "$ARCH" = x86_64 ]; then
-    # Its own LD_LIBRARY_PATH entries, as x86 paths (/app/lib/audacity).
-    guest="$(sed -n '/^\[Environment\]/,/^\[/{s/^LD_LIBRARY_PATH *= *//p}' "$meta" | head -1)"
-    export FEXRUN_ID="$id" FEXRUN_APP="$APP" FEXRUN_RT="$RT" FEXRUN_GL="$GL" FEXRUN_LIBPATH="$guest"
-    exec "${DESKDROID_SH:-/system/bin/sh}" "$L/libdd_flatpak_fex.so" "$cmd" "$@"
-  fi
-  # The runtime's sh starts the command, so ddflatpak handles it like any
-  # program the app starts (a script, zypak, an ELF program).
-  exec $G "$RT/bin/sh" -c 'exec "$0" "$@"' "/app/bin/$cmd" "$@"
+  # The rest is what starting a store package does (adpk-run.sh): the
+  # desktop's home folder and look (DD Party), fonts, the GPU, Electron's
+  # Wayland flags, Firefox's Etherium settings, x86-64 apps through FEX-Emu,
+  # the crash dialog.
+  export DDAPP_PROGRAM="$(readlink -f "$base/$branch/active")" DDAPP_ID="$id" DDAPP_RUNTIME="$RT" \
+    DDAPP_RUNTIME_META="$FLATPAK_USER_DIR/runtime/$rtref/active/metadata" DDAPP_GL="$GL" DDAPP_CODECS="$CX" \
+    DDAPP_STATE="$F/flatpak-tmp/run/$id" DESKDROID_FILES="$F" DESKDROID_LIBS="$L"
+  [ -n "$G" ] && export DESKDROID_GLIBC_RUN="$G"
+  run_sh="$L/libdd_adpk_run.so"
+  [ -n "$DM" ] && [ -e "$DM/scripts/adpk-run.sh" ] && run_sh="$DM/scripts/adpk-run.sh"
+  exec "${DESKDROID_SH:-/system/bin/sh}" "$run_sh" --dd-command="$cmd" "$@"
 }
 
 # A remote whose signing key never got imported (remote-add stopped partway,

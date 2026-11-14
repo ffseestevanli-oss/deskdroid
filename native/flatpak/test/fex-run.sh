@@ -72,8 +72,9 @@ expect "without FEX it says where to set it up" "$out" "Steam Installation Assis
 
 # flatpak run: an app installed only for x86_64 goes to FEX.
 cp "$HERE/../flatpak.sh" "$L/libdd_flatpak.so"
-: > "$L/libddflatpak.so"
-out="$(env_run sh "$L/libdd_flatpak.so" run org.example.Tool c d 2>&1)"
+cp "$HERE/../adpk-run.sh" "$L/libdd_adpk_run.so"
+: > "$L/libddflatpak.so"; : > "$L/libdd_ld-glibc.so"; : > "$F/glibc/lib/libc.so.6"
+out="$(env_run DESKDROID_CRASH_DIALOG=0 sh "$L/libdd_flatpak.so" run org.example.Tool c d 2>&1)"
 expect "flatpak run: an x86_64-only app runs through FEX" "$out" "^fex: /bin/sh -c .* /app/bin/tool c d$" "^FEX_ROOTFS=$R$" \
   "^LD_LIBRARY_PATH=/app/lib/tool:/app/lib:.*/GL/default/lib$"
 

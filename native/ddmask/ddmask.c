@@ -1144,9 +1144,13 @@ static void on_sigsys(int sig, siginfo_t *si, void *ctx) {
 #define ARG(i) ((long)g[argreg[i]])
 #define SET_RET(v) (g[REG_RAX] = (greg_t)(v))
 #endif
-    /* Sent by kill() rather than seccomp (SYS_SECCOMP, 1): no call to make,
-     * just ENOSYS as glibc's loader answers (its test sends one that way). */
-    if (si->si_code != 1 && prog_sigsys.sa_handler != SIG_DFL && prog_sigsys.sa_handler != SIG_IGN) {
+    /* The program's own: sent by kill() rather than seccomp (SYS_SECCOMP, 1),
+     * or by a seccomp filter of its own. Android's filter traps with no data
+     * (SECCOMP_RET_DATA, in si_errno); the program's sandbox (Firefox's,
+     * Chromium's) traps with its own, and answers in its handler. Without a
+     * handler: ENOSYS, as glibc's loader answers (its test sends one). */
+    if ((si->si_code != 1 || si->si_errno != 0)
+        && prog_sigsys.sa_handler != SIG_DFL && prog_sigsys.sa_handler != SIG_IGN) {
         errno = e;
         if (prog_sigsys.sa_flags & SA_SIGINFO) prog_sigsys.sa_sigaction(sig, si, ctx);
         else prog_sigsys.sa_handler(sig);
