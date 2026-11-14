@@ -67,6 +67,9 @@ expect "the journal names programs started another way" "$out" \
   "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} ddmask\[[0-9]+\]: $T/app/bin/nox: no execute bit, glibc, through "
 expect "...and why one can't start" "$out" "notes: no execute bit, and not a program or script"
 expect "...and refusals under DDMASK_STRICT_EXEC" "$out" "nox: no execute bit, and not a program or script|nox: .*mode"
+for i in 1 2 3 4 5 6; do run "$T/app/bin/probe" execv "$T/app/bin/notes" >/dev/null || true; done
+expect "...a failure repeated over and over only three times in a row (Chromium restarting a helper)" \
+  "$(tail -n 4 "$J" | grep -c 'notes: no execute bit')" "^3$"
 
 # -- the desktop's environment
 H="QT_PLUGIN_PATH=$T/lib/plugins DDMASK_HOST_QT_PLUGIN_PATH=$T/lib/plugins"

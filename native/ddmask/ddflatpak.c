@@ -352,7 +352,10 @@ static const char *resolve(const char *path, char *const argv[], char ***out, ch
             memmove(a + add + 1, a + 1, argc * sizeof(char *));
             a[0] = interp;
             if (iarg) a[1] = iarg;
-            a[add] = (char *)path;
+            /* An interpreter of the system's (Android's /system/bin/sh) has no
+             * ddflatpak to find /usr/bin/x: give it the script's real path. */
+            char ib[PATH_MAX];
+            a[add] = map(interp, ib) == interp && strcmp(m, path) ? strdup(m) : (char *)path;
             argc += add;
             path = interp;
             continue;

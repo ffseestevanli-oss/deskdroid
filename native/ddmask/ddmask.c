@@ -209,6 +209,38 @@ static void journal_write(const char *file, const char *line, size_t n) {
     close(fd);
 }
 
+/* Is msg (the part after "ddmask[pid]: ", with its newline) already the
+ * last JOURNAL_REPEATS lines of the journal? A program restarting a helper
+ * that can't start (Chromium: hundreds a second) would push everything else
+ * out of it. Only system calls, as for journal_write. */
+#define JOURNAL_REPEATS 3
+static int journal_repeats(const char *file, const char *msg, size_t ml) {
+    int fd = (int)syscall(SYS_openat, AT_FDCWD, file, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 0;
+    char tail[4 * (PATH_MAX + 320)];
+    struct stat st;
+    ssize_t n = 0;
+    if (fstat(fd, &st) == 0 && st.st_size > 0) {
+        off_t off = st.st_size > (off_t)sizeof tail ? st.st_size - (off_t)sizeof tail : 0;
+        n = pread(fd, tail, (size_t)(st.st_size - off), off);
+    }
+    close(fd);
+    if (n <= 0 || tail[n - 1] != '\n') return 0;
+    int same = 0;
+    ssize_t end = n;  /* one past the newline of the line looked at */
+    while (same < JOURNAL_REPEATS && end > 0) {
+        ssize_t start = end - 1;
+        while (start > 0 && tail[start - 1] != '\n') start--;
+        if (start == 0 && n == (ssize_t)sizeof tail) break; /* a cut-off line */
+        if ((size_t)(end - start) < ml || memcmp(tail + end - ml, msg, ml) != 0) break;
+        /* the message must follow "]: " */
+        if ((size_t)(end - start) < ml + 3 || memcmp(tail + end - ml - 3, "]: ", 3) != 0) break;
+        same++;
+        end = start;
+    }
+    return same >= JOURNAL_REPEATS;
+}
+
 /* What to note, from least to most: */
 enum level { L_DEBUG, L_ROUTE, L_FAIL };
 
@@ -233,6 +265,7 @@ static void vlog_(char *const envp[], enum level lv, const char *fmt, va_list ap
         if (gmtime_r(&now, &tm)) t = (int)strftime(buf, 32, "%Y-%m-%d %H:%M:%S ", &tm);
     }
     int n = t + snprintf(buf + t, sizeof buf - t, "ddmask[%d]: ", (int)getpid());
+    int m = n;  /* where the message starts */
     n += vsnprintf(buf + n, sizeof buf - n, fmt, ap);
     if (n > (int)sizeof buf - 2) n = sizeof buf - 2;
     buf[n++] = '\n';
@@ -244,7 +277,7 @@ static void vlog_(char *const envp[], enum level lv, const char *fmt, va_list ap
         if (fd >= 0) close(fd);
     }
     (void)w;
-    if (jf) journal_write(jf, buf, n);
+    if (jf && !journal_repeats(jf, buf + m, (size_t)(n - m))) journal_write(jf, buf, n);
 }
 
 static void note(char *const envp[], enum level lv, const char *fmt, ...) {
