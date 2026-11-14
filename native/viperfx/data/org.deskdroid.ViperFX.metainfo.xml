@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.deskdroid.ViperFX</id>
+  <name>ViPER FX</name>
+  <summary>ViPER4Android's effects for all the desktop's sound</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <description>
+    <p>ViPER4Android's sound effects (ViPER bass and clarity, Headphone Surround+, field and
+    differential surround, FIR equalizer, convolver, ViPER-DDC, dynamic system, reverb, tube
+    simulator, AnalogX, playback gain control) on DeskDroid's PipeWire sound server, without root.
+    It uses ViPERFX_RE, the open reimplementation of ViPER4Android's engine.</p>
+  </description>
+  <launchable type="desktop-id">org.deskdroid.ViperFX.desktop</launchable>
+  <releases><release version="0.1" date="2026-11-14"/></releases>
+</component>

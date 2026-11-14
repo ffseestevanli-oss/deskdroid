@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ViPER FX
+GenericName=Sound effects
+Comment=ViPER4Android's effects for all the desktop's sound
+Exec=viperfx
+Icon=org.deskdroid.ViperFX
+Categories=AudioVideo;Audio;Mixer;
+Keywords=viper;v4a;equalizer;bass;surround;dsp;effects;
+StartupWMClass=viperfx
