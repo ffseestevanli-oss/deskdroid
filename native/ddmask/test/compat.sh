@@ -73,6 +73,15 @@ H="$H QT_QUICK_CONTROLS_STYLE=Fusion DDMASK_HOST_QT_QUICK_CONTROLS_STYLE=org.kde
 out="$(run env $H /bin/sh -c "exec $T/lib/libdd_ld-glibc.so /usr/bin/env")"
 refute "a glibc program started from the desktop doesn't get its plugin path" "$out" "^QT_PLUGIN_PATH="
 expect "...but keeps a value set for it, and the desktop's for later" "$out" "^QT_QUICK_CONTROLS_STYLE=Fusion$" "^DDMASK_HOST_QT_PLUGIN_PATH=$T/lib/plugins$"
+# The desktop's look for Linux programs (DDMASK_LINUX_<VAR>), unless set.
+LK="QT_QPA_PLATFORMTHEME=deskdroid DDMASK_HOST_QT_QPA_PLATFORMTHEME=deskdroid DDMASK_LINUX_QT_QPA_PLATFORMTHEME=kde"
+LK="$LK DDMASK_LINUX_GTK_THEME=DD-Party DDMASK_LINUX_XDG_CURRENT_DESKTOP=KDE XDG_CURRENT_DESKTOP=GNOME"
+out="$(run env $LK /bin/sh -c "exec $T/lib/libdd_ld-glibc.so /usr/bin/env")"
+expect "a glibc program gets the desktop's look: KDE's platform theme, the GTK theme" "$out" "^QT_QPA_PLATFORMTHEME=kde$" "^GTK_THEME=DD-Party$"
+expect "...but not over what's set already" "$out" "^XDG_CURRENT_DESKTOP=GNOME$"
+out="$(run env $LK /bin/sh -c "exec /usr/bin/env")"
+expect "...and bionic programs keep the desktop's own" "$out" "^QT_QPA_PLATFORMTHEME=deskdroid$"
+refute "...without the Linux one" "$out" "^GTK_THEME="
 out="$(run env $H /bin/sh -c "exec /usr/bin/env")"
 expect "bionic to bionic: as it was" "$out" "^QT_PLUGIN_PATH=$T/lib/plugins$"
 out="$(env LD_PRELOAD="$T/glib/libddmask_glibc.so" DDMASK_ALLOW="$ALLOW" QT_PLUGIN_PATH=/app/lib/plugins \

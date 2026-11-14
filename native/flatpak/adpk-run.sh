@@ -380,6 +380,27 @@ fi
 # icons and GTK theme, KDE's defaults from the desktop's Global Theme.
 [ -n "$desk_data" ] && export XDG_DATA_DIRS="$XDG_DATA_DIRS:$desk_data"
 [ -n "$desk_config" ] && export XDG_CONFIG_DIRS="$XDG_CONFIG_DIRS:$desk_config"
+# KDE apps that pick their colours themselves (KColorSchemeManager: Kirigami
+# apps like EasyEffects) take Breeze unless KDE's platform theme answers for
+# them, or a scheme is named under [UiSettings]: the desktop's current one
+# (kdeglobals' ColorScheme), as a default below everything the person saves
+# (an app's own choice in its rc file still wins). Written at every start, so
+# it follows System Settings.
+look="$F/flatpak-tmp/kde-look"
+cs=""
+for g in "$XDG_CONFIG_HOME/kdeglobals" $(echo "$desk_config" | tr ':' ' ' | sed 's|$|/kdeglobals|'); do
+  [ -f "$g" ] || continue
+  cs="$(sed -n 's/^ColorScheme=//p' "$g" | tail -n 1)"
+  [ -n "$cs" ] && break
+done
+if [ -n "$cs" ]; then
+  mkdir -p "$look" && printf '[UiSettings]\nColorScheme=%s\n' "$cs" > "$look/kdeglobals"
+  export XDG_CONFIG_DIRS="$XDG_CONFIG_DIRS:$look"
+fi
+# A KDE desktop, as far as Qt and KDE's libraries ask (the platform theme,
+# KIconTheme, KStyle), and Qt says in run.log which platform theme it took.
+export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-KDE}"
+export QT_LOGGING_RULES="${QT_LOGGING_RULES:+$QT_LOGGING_RULES;}qt.qpa.theme=true"
 # Electron and Chromium apps: Wayland, since there's no X server (Flathub
 # builds often ask for X11 only). Newer Electron ignores the hint variable, so
 # apps started through zypak (Flathub's Electron base) or shipping
