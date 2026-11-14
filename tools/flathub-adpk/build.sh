@@ -36,6 +36,17 @@ grep -v '^#' "$HERE/apps.txt" | while read -r fpid sid rt commit; do
   else
     $I "$fpid"
   fi
-  $P app "$FLATPAK_USER_DIR" "$fpid" "$sid" "$rt" "$OUT/$sid.adpk"
+  # Extensions packed into the app (flathub-adpk.py --ext): EasyEffects' plugins.
+  ext=()
+  case "$sid" in
+    easyeffects)
+      refs=""
+      for e in LSP Calf ZamPlugins MDA; do
+        r="runtime/org.freedesktop.LinuxAudio.Plugins.$e/aarch64/25.08"
+        $I "$r"; refs="$refs${refs:+,}${r#runtime/}"
+      done
+      ext=(--ext "$refs" --ext-keep lv2,lib) ;;
+  esac
+  $P app "$FLATPAK_USER_DIR" "$fpid" "$sid" "$rt" "$OUT/$sid.adpk" "${ext[@]}"
 done
 rm -f "$DDAPP_BIN"
