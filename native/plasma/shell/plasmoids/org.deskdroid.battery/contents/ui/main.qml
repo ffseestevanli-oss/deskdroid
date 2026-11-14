@@ -1,7 +1,8 @@
 // The phone's battery: in the system tray (its icon, with the percentage and
 // charging state in a popup), or on its own on a panel (icon and percentage).
-// The popup also picks the desktop's power profile (Power Save, Balanced,
-// Performance; PowerProfile.kt), like Plasma's own battery item.
+// The desktop's power profile (Power Save, Balanced, Performance;
+// PowerProfile.kt): buttons in the popup, and a menu with a check by the one
+// in use on a right-click (in the tray or on a panel) or a click on a panel.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -46,6 +47,72 @@ PlasmoidItem {
         runner.runCommand("android-open deskdroid:power:" + n);
     }
     Timer { id: pickedReset; interval: 5000; onTriggered: root.picked = "" }
+    // The profile in use: Battery Saver's Power Save wins over the one picked.
+    readonly property string active: bySaver ? "powersave" : profile
+    function profileIcon(n) {
+        for (var i = 0; i < profiles.length; i++) if (profiles[i].name === n) return profiles[i].icon;
+        return profiles[1].icon;
+    }
+    function profileHint(n) {
+        return n === "powersave" ? "Slower: efficient cores, busy apps limited, animations off"
+            : n === "performance" ? "Every core, full frame rate, no limits"
+            : "All but the fastest cores, up to 60 frames a second";
+    }
+
+    // The profiles, a check by the one in use. A menu of its own window, so it
+    // isn't cut off by the panel or the popup.
+    PlasmaExtras.Menu {
+        id: profileMenu
+        PlasmaExtras.MenuItem {
+            text: "Power Save"
+            icon: root.profileIcon("powersave")
+            checkable: true
+            checked: root.active === "powersave"
+            onClicked: root.pick("powersave")
+        }
+        PlasmaExtras.MenuItem {
+            text: "Balanced"
+            icon: root.profileIcon("balanced")
+            checkable: true
+            checked: root.active === "balanced"
+            onClicked: root.pick("balanced")
+        }
+        PlasmaExtras.MenuItem {
+            text: "Performance"
+            icon: root.profileIcon("performance")
+            checkable: true
+            checked: root.active === "performance"
+            onClicked: root.pick("performance")
+        }
+    }
+    // Right-click: the same three in the item's own menu, the one in use checked.
+    Plasmoid.contextualActions: [
+        PlasmaCore.Action {
+            text: "Power Save"
+            icon.name: root.profileIcon("powersave")
+            checkable: true
+            checked: root.active === "powersave"
+            onTriggered: root.pick("powersave")
+        },
+        PlasmaCore.Action {
+            text: "Balanced"
+            icon.name: root.profileIcon("balanced")
+            checkable: true
+            checked: root.active === "balanced"
+            onTriggered: root.pick("balanced")
+        },
+        PlasmaCore.Action {
+            text: "Performance"
+            icon.name: root.profileIcon("performance")
+            checkable: true
+            checked: root.active === "performance"
+            onTriggered: root.pick("performance")
+        }
+    ]
+    function openProfiles(under) {
+        profileMenu.visualParent = under;
+        profileMenu.openRelative();
+    }
     // The system tray draws its items as squares with a heading on their popups.
     readonly property bool inTray: (Plasmoid.containmentDisplayHints & PlasmaCore.Types.ContainmentDrawsPlasmoidHeading) !== 0
 
@@ -77,9 +144,12 @@ PlasmoidItem {
     Component {
         id: row
         RowLayout {
+            id: panelRow
             spacing: Kirigami.Units.smallSpacing
             Layout.minimumWidth: implicitWidth
             Layout.preferredWidth: implicitWidth
+            // A click: the power profiles (a handler, so the row doesn't lay it out).
+            TapHandler { onTapped: root.openProfiles(panelRow) }
             Kirigami.Icon {
                 source: root.iconName
                 Layout.preferredWidth: Math.min(parent.height, Kirigami.Units.iconSizes.medium)
@@ -159,16 +229,14 @@ PlasmoidItem {
                             icon.name: modelData.icon
                             text: modelData.label
                             checkable: true
-                            checked: root.profile === modelData.name
+                            checked: root.active === modelData.name
                             onClicked: root.pick(modelData.name)
                         }
                     }
                 }
                 PlasmaComponents3.Label {
                     text: root.bySaver ? "The phone's Battery Saver is on: Power Save until it's off."
-                        : root.profile === "powersave" ? "Slower: efficient cores, busy apps limited, animations off. Longest battery life."
-                        : root.profile === "performance" ? "Every core, the screen's full frame rate, no limits. Uses the most battery."
-                        : "Leaves the fastest cores alone and draws at up to 60 frames a second."
+                        : root.profileHint(root.active) + "."
                     opacity: 0.75
                     font: Kirigami.Theme.smallFont
                     wrapMode: Text.WordWrap
