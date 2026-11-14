@@ -97,6 +97,7 @@ object SleepMode {
         asleep = sleep
         if (NativeDesk.running) NativeDesk.nativeSetSleeping(sleep)
         PhoneStatus.setSlow(sleep)
+        PowerProfile.sleepChanged(sleep)
         val pkg = c.packageName
         worker.post { renice(pkg, sleep) }
         AppLog.i("Native desktop: " + (if (sleep) "asleep, saving power" else "awake, full power") + " ($why)")

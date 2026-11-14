@@ -13,6 +13,7 @@
 #include <android/hardware_buffer.h>
 #include <android/log.h>
 #include <android/native_window_jni.h>
+#include <dlfcn.h>
 #include <errno.h>
 #include <jni.h>
 #include <poll.h>
@@ -22,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -106,6 +108,8 @@ static struct {
     bool safe_changed;           /* send safe to the desktops */
     uint32_t action;             /* nativeAction: for the desktops, then 0 */
     bool sleeping;               /* nativeSetSleeping: the phone's screen is off, frames at 1 a second */
+    uint32_t frame_cap;          /* nativeSetFrameCap: frames a second at most (power profile), 0 for the screen's rate */
+    uint32_t cap_applied;        /* the cap the window was last told about (ANativeWindow_setFrameRate) */
     /* Swapping the window (the activity went to the background and came
      * back): nativeStart/nativeDetach ask, the loop does it under C.lock. */
     ANativeWindow *pending_window;
@@ -808,6 +812,7 @@ static void swap_window(void)
         if (C.surf == EGL_NO_SURFACE || !eglMakeCurrent(C.dpy, C.surf, C.surf, C.ctx))
             LOGE("can't draw to the new window (0x%x)", eglGetError());
         eglSwapInterval(C.dpy, 1);
+        C.cap_applied = 0; /* a new window: tell it the cap again */
         LOGI("window back: %dx%d", ANativeWindow_getWidth(next), ANativeWindow_getHeight(next));
     } else {
         LOGI("window gone: running in the background");
@@ -817,10 +822,44 @@ static void swap_window(void)
     pthread_mutex_unlock(&C.lock);
 }
 
-/* Time between frames with no window: 20 a second, or 1 with the phone asleep. */
+/* Least time between frames the power profile allows (nativeSetFrameCap); 0: no limit. */
+static uint64_t cap_gap(void)
+{
+    uint32_t fps = __atomic_load_n(&C.frame_cap, __ATOMIC_ACQUIRE);
+    return fps ? 1000000000u / fps : 0;
+}
+
+/* Time between frames with no window: 20 a second (or the profile's cap if
+ * lower), or 1 with the phone asleep. */
 static uint64_t hidden_gap(void)
 {
-    return __atomic_load_n(&C.sleeping, __ATOMIC_ACQUIRE) ? 1000000000u : 50000000u;
+    if (__atomic_load_n(&C.sleeping, __ATOMIC_ACQUIRE)) return 1000000000u;
+    uint64_t cap = cap_gap();
+    return cap > 50000000u ? cap : 50000000u;
+}
+
+/*
+ * Tells Android the rate the window draws at (Android 11+), so a 90 or 120 Hz
+ * screen may drop to the profile's rate instead of refreshing for nothing.
+ * 0 gives the choice back to Android.
+ */
+static void tell_frame_rate(void)
+{
+    typedef int32_t (*set_rate_fn)(ANativeWindow *, float, int8_t);
+    static set_rate_fn set_rate;
+    static bool looked;
+    uint32_t fps = __atomic_load_n(&C.frame_cap, __ATOMIC_ACQUIRE);
+    if (!C.window || fps == C.cap_applied) return;
+    if (!looked) {
+        looked = true;
+        void *lib = dlopen("libnativewindow.so", RTLD_NOW);
+        if (lib) set_rate = (set_rate_fn)dlsym(lib, "ANativeWindow_setFrameRate");
+    }
+    C.cap_applied = fps;
+    if (set_rate) {
+        int32_t r = set_rate(C.window, (float)fps, 0 /* ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT */);
+        LOGI("frame rate: %s%u (%d)", fps ? "" : "screen's own, was ", fps, r);
+    }
 }
 
 /* Some app waits for a FRAME to draw its next frame. */
@@ -842,6 +881,7 @@ static void *loop(void *unused)
     C.dirty = true;
     uint64_t stat_start = now_ns();
     uint64_t last_hidden_frame = 0;
+    uint64_t last_shown_frame = 0;
     unsigned frames = 0;
     double draw_total = 0;
 
@@ -862,7 +902,9 @@ static void *loop(void *unused)
         bool shown = C.surf != EGL_NO_SURFACE;
         int timeout = 1000;
         if (shown) {
-            if (C.dirty) timeout = 0;
+            /* The power profile's cap: the next frame waits for its turn. */
+            uint64_t gap = cap_gap(), since = now_ns() - last_shown_frame;
+            if (C.dirty) timeout = !gap || since >= gap ? 0 : (int)((gap - since + 999999) / 1000000);
         } else if (C.dirty || frames_owed()) {
             uint64_t gap = hidden_gap(), since = now_ns() - last_hidden_frame;
             timeout = since >= gap ? 0 : (int)((gap - since + 999999) / 1000000);
@@ -912,10 +954,18 @@ static void *loop(void *unused)
             LOGI("window %u: scale %.2f", cl->window, scale);
         }
         swap_window();
+        tell_frame_rate();
 
-        /* In the background, a frame only once its turn comes (see above). */
+        /* In the background, a frame only once its turn comes (see above);
+         * shown, once the power profile's cap allows. */
         bool turn = true;
-        if (C.surf == EGL_NO_SURFACE) {
+        if (C.surf != EGL_NO_SURFACE) {
+            uint64_t gap = cap_gap();
+            if (gap && C.dirty) {
+                turn = now_ns() - last_shown_frame >= gap;
+                if (turn) last_shown_frame = now_ns();
+            }
+        } else {
             turn = (C.dirty || frames_owed()) && now_ns() - last_hidden_frame >= hidden_gap();
             if (turn) {
                 last_hidden_frame = now_ns();
@@ -1216,6 +1266,42 @@ Java_io_deskdroid_app_NativeDesk_nativeSetSleeping(JNIEnv *env, jclass cls, jboo
     if (!C.running) return;
     __atomic_store_n(&C.sleeping, (bool)sleeping, __ATOMIC_RELEASE);
     wake();
+}
+
+/*
+ * The power profile's frame cap: at most fps frames a second, shown or not
+ * (0: the screen's own rate). KWin, Plasma and the apps draw when the
+ * compositor hands them a frame, so they all follow it.
+ */
+JNIEXPORT void JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeSetFrameCap(JNIEnv *env, jclass cls, jint fps)
+{
+    (void)env; (void)cls;
+    __atomic_store_n(&C.frame_cap, (uint32_t)(fps > 0 ? fps : 0), __ATOMIC_RELEASE);
+    if (C.running) wake();
+}
+
+/*
+ * Which CPU cores a thread of DeskDroid's may run on (bit n: core n). Allowed
+ * without root for threads of the app's own user; Android's own placement
+ * (cpusets) still bounds it. Returns 0, or the errno.
+ */
+JNIEXPORT jint JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeSetAffinity(JNIEnv *env, jclass cls, jint tid, jlong mask)
+{
+    (void)env; (void)cls;
+    uint64_t set = (uint64_t)mask; /* the kernel's CPU mask: an array of longs, bit n for core n */
+    return syscall(__NR_sched_setaffinity, (pid_t)tid, sizeof set, &set) == 0 ? 0 : errno;
+}
+
+/* The cores a thread may run on now (bit n: core n), or -1. */
+JNIEXPORT jlong JNICALL
+Java_io_deskdroid_app_NativeDesk_nativeGetAffinity(JNIEnv *env, jclass cls, jint tid)
+{
+    (void)env; (void)cls;
+    uint64_t set = 0;
+    if (syscall(__NR_sched_getaffinity, (pid_t)tid, sizeof set, &set) < 0) return -1;
+    return (jlong)set;
 }
 
 /* A desktop action (NDESK_ACTION_*), such as Home showing the desktop. */
