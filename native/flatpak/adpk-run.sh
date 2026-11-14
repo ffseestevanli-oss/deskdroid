@@ -11,6 +11,14 @@
 #
 # Everything about the app comes from the package's program/metadata
 # (Flatpak's: name, command, runtime, [Environment]).
+#
+# `flatpak run` (flatpak.sh) starts apps the flatpak command installed this
+# way too, so they get everything below (the desktop's look, fonts, GPU, the
+# crash dialog): DDAPP_PROGRAM is then the app's active/ folder (files/,
+# metadata), and the runtime and extensions are given rather than looked up
+# among store packages:
+#   DDAPP_ID=<app id> DDAPP_RUNTIME=<runtime files> DDAPP_RUNTIME_META=<its metadata>
+#   [DDAPP_GL=<GL driver files>] [DDAPP_CODECS=<codecs-extra files>] DDAPP_STATE=<run.log's folder>
 # Only Android's own tools (/system/bin) are used before the app starts:
 # PATH changes to the app's at the very end.
 #
@@ -30,6 +38,7 @@ TRIPLE=aarch64-linux-gnu
 P="${DDAPP_PROGRAM:?DDAPP_PROGRAM is the package's program folder}"
 P="${P%/}"
 SID="${P%/program}"; SID="${SID##*/}"
+[ -n "${DDAPP_ID:-}" ] && SID="$DDAPP_ID"
 meta="$P/metadata"
 # [Application] name= and command= (Flatpak's metadata, "key=value").
 FPID="$(sed -n '/^\[Application\]/,/^\[/{s/^name *= *//p}' "$meta" | head -n 1)"
@@ -55,7 +64,9 @@ if [ -z "$RTPKG" ]; then
 fi
 # Mesa and the codecs: whichever runtime-mesa-* is installed (the newest).
 MESAPKG=""
-if [ "$ARCH" = x86_64 ]; then
+if [ -n "${DDAPP_RUNTIME:-}" ]; then
+  RTPKG=""
+elif [ "$ARCH" = x86_64 ]; then
   # An x86-64 Mesa package if there is one (runtime-mesa-*-x86_64); the
   # ARM64 one is no use to an x86 program.
   for d in "$S"/runtime-mesa-*x86_64*; do [ -e "$d/app.txt" ] && MESAPKG="${d##*/}"; done
@@ -63,14 +74,16 @@ else
   for d in "$S"/runtime-mesa-*; do case "$d" in *x86_64*) continue ;; esac; [ -e "$d/app.txt" ] && MESAPKG="${d##*/}"; done
   [ -n "$MESAPKG" ] || MESAPKG=runtime-mesa-25.08
 fi
-LOG="$S/$SID/run.log"
+D="${DDAPP_STATE:-$S/$SID}"
+mkdir -p "$D"
+LOG="$D/run.log"
 exec 2>"$LOG"
 
 # When the app fails: crash.log (this launcher's log, with the end of ddmask's
 # journal), and Software's crash dialog ("Uh oh! Something's not right!"),
 # which saves it where the person chooses. DESKDROID_CRASH_DIALOG=0: no dialog.
 crashed() { # <exit status> <what happened>
-  c="$S/$SID/crash.log"
+  c="$D/crash.log"
   {
     echo "== $SID failed: $2"
     echo "== $(date) · $(uname -sr) $(uname -m)"
@@ -114,7 +127,7 @@ fi
 
 # The runtime and Mesa are packages of their own.
 missing=""
-for need in "$RTPKG" $MESAPKG; do
+for need in $RTPKG $MESAPKG; do
   [ -e "$S/$need/app.txt" ] || missing="$missing $need"
 done
 if [ -n "$missing" ]; then
@@ -148,17 +161,23 @@ setup() {
   DDAPP_SETUP="$1/layout.txt" DDAPP_ROOT="$1" $DDAPP_SETUP_CMD || die "couldn't lay out $1"
   : > "$1/.ddsetup-done"
 }
-setup "$P"
-setup "$S/$RTPKG/program"
-[ -n "$MESAPKG" ] && setup "$S/$MESAPKG/program"
+if [ -z "${DDAPP_RUNTIME:-}" ]; then
+  setup "$P"
+  setup "$S/$RTPKG/program"
+  [ -n "$MESAPKG" ] && setup "$S/$MESAPKG/program"
+fi
 
 cmd="$CMD"
 case "$1" in --dd-command=*) cmd="${1#--dd-command=}"; shift ;; esac
 
 APP="$P/files"
-RT="$S/$RTPKG/program/files"
-GL="${MESAPKG:+$S/$MESAPKG/program/gl}"
-CX="$S/$MESAPKG/program/codecs-extra"
+if [ -n "${DDAPP_RUNTIME:-}" ]; then
+  RT="$DDAPP_RUNTIME" RTMETA="${DDAPP_RUNTIME_META:-}" GL="${DDAPP_GL:-}" CX="${DDAPP_CODECS:-}"
+else
+  RT="$S/$RTPKG/program/files" RTMETA="$S/$RTPKG/program/metadata"
+  GL="${MESAPKG:+$S/$MESAPKG/program/gl}"
+  CX="$S/$MESAPKG/program/codecs-extra"
+fi
 
 G="${DESKDROID_GLIBC_RUN:-}"
 # Started without ddmask (not from the desktop), run glibc's loader ourselves.
@@ -173,7 +192,9 @@ mkdir -p "$F/flatpak-tmp"
 export DDMASK_GLIBC_LD_PRELOAD="$(ddlib libddflatpak.so):$(ddlib libddmask_glibc.so)"
 export DDFLATPAK_TMP="$F/flatpak-tmp" TMPDIR="$F/flatpak-tmp"
 export DDFLATPAK_APP="$APP" DDFLATPAK_RUNTIME="$RT"
-mounts="/usr/lib/$TRIPLE/GL/default=$GL;/usr/lib/$TRIPLE/GL=$GL;/usr/lib/$TRIPLE/codecs-extra=$CX;/dev/shm=$F/flatpak-tmp"
+mounts="/dev/shm=$F/flatpak-tmp"
+[ -n "$GL" ] && mounts="/usr/lib/$TRIPLE/GL/default=$GL;/usr/lib/$TRIPLE/GL=$GL;$mounts"
+[ -n "$CX" ] && mounts="/usr/lib/$TRIPLE/codecs-extra=$CX;$mounts"
 # Android hides some of /proc from apps; programs that check them before
 # starting (LibreOffice: "/proc not mounted" without /proc/version) see
 # stand-ins instead.
@@ -187,12 +208,54 @@ fake /proc/sys/fs/inotify/max_user_watches 8192
 # The runtime's fonts.conf includes the host's font folders from here.
 printf '<?xml version="1.0"?>\n<fontconfig>\n  <dir>/system/fonts</dir>\n</fontconfig>\n' > "$F/flatpak-tmp/font-dirs.xml"
 mounts="$mounts;/run/host/font-dirs.xml=$F/flatpak-tmp/font-dirs.xml"
+# Firefox (and browsers built from it, which keep its application ID): the
+# settings DeskDroid gives its own Firefox, Etherium (native/firefox/etherium:
+# DD Party's look, no telemetry, Startpage, Wayland scrolling without frame
+# callbacks), laid over the browser's folder the way Etherium.kt copies them
+# into Etherium's. Folders both have are merged (links to the browser's own
+# files plus these); the rest replaces or adds a path. Both the /app path and
+# the real one, since Firefox finds its folder from /proc/self/exe.
+# DESKDROID_ETHERIUM_SETTINGS=0: the browser as Flathub ships it.
+merge() { # <settings folder> <browser's folder> <merged folder to make>
+  rm -rf "$3"; mkdir -p "$3"
+  for o in "$2"/* "$2"/.[!.]*; do [ -e "$o" ] || [ -L "$o" ] || continue; ln -s "$o" "$3/${o##*/}"; done
+  for e in "$1"/*; do
+    [ -e "$e" ] || continue
+    n="${e##*/}"
+    if [ -d "$e" ] && [ -d "$2/$n" ]; then rm -f "$3/$n"; merge "$e" "$2/$n" "$3/$n"
+    else rm -rf "$3/$n"; ln -s "$e" "$3/$n"; fi
+  done
+}
+ES="$F/kwin/share/deskdroid/etherium"
+if [ -d "$ES" ] && [ "${DESKDROID_ETHERIUM_SETTINGS:-1}" != 0 ]; then
+  for ini in "$APP"/lib/*/application.ini; do
+    grep -qs '^ID={ec8030f7-c20a-464f-9b0e-13a3a9e97384}' "$ini" || continue
+    gre="${ini%/application.ini}" virt="/app${ini#$APP}"; virt="${virt%/application.ini}"
+    for e in "$ES"/*; do
+      [ -e "$e" ] || continue
+      n="${e##*/}" to="$e"
+      if [ -d "$e" ] && [ -d "$gre/$n" ]; then
+        to="$F/flatpak-tmp/etherium/$SID/$n"
+        merge "$e" "$gre/$n" "$to"
+      fi
+      mounts="$mounts;$virt/$n=$to;$gre/$n=$to"
+    done
+    echo "$SID: Etherium's settings for ${gre##*/} (DD Party look, privacy)" >&2
+  done
+fi
 export DDFLATPAK_MOUNTS="$mounts"
 # glibc's loader asks ddflatpak's audit library for /app and /usr in RUNPATHs.
 [ -e "$(ddlib libddflatpak_audit.so)" ] && export DDMASK_GLIBC_LD_AUDIT="$(ddlib libddflatpak_audit.so)"
 # Folders the app's and runtime's programs name in their RUNPATH (/app/lib/<x>,
 # /usr/lib/<x>): glibc's loader opens those itself, unmapped.
 rpaths=""
+if [ -n "${DDAPP_RUNTIME:-}" ]; then
+  # (No libdirs.txt from the packager: folders under lib/ that hold libraries.)
+  has_libs() { for x in "$1"*.so "$1"*.so.*; do [ -e "$x" ] && return 0; done; return 1; }
+  for d in "$APP"/lib/*/ "$RT"/lib/"$TRIPLE"/*/; do
+    has_libs "$d" && rpaths="$rpaths:${d%/}"
+  done
+fi
 for f in "$P/libdirs.txt" "$S/$RTPKG/program/libdirs.txt"; do
   [ -f "$f" ] || continue
   while IFS= read -r d; do
@@ -206,7 +269,7 @@ done
 # FFmpeg with every codec (Mesa's package's codecs-extra, Flathub's
 # org.freedesktop.Platform.codecs-extra) ahead of the runtime's, which leaves
 # H.264, HEVC and others out: Flatpak puts it first the same way (ld.so.conf).
-export DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$APP/lib:$CX/lib$rpaths:$RT/lib/$TRIPLE:$RT/lib:$GL/lib"
+export DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$APP/lib${CX:+:$CX/lib}$rpaths:$RT/lib/$TRIPLE:$RT/lib${GL:+:$GL/lib}"
 export DDFLATPAK_LIBPATH="$DDMASK_GLIBC_LD_LIBRARY_PATH"
 # The desktop's own (bionic) Qt and KDE settings would point the app's Qt at
 # the wrong plugins.
@@ -274,7 +337,8 @@ export FLATPAK_ID="$FPID" LOCPATH="$RT/lib/locale" LANG="${LANG:-C.UTF-8}"
 export GST_PLUGIN_SYSTEM_PATH=/app/lib/gstreamer-1.0:/usr/lib/extensions/gstreamer-1.0:/usr/lib/$TRIPLE/gstreamer-1.0
 # [Environment] from the runtime's metadata (QT_PLUGIN_PATH=/app/lib/plugins...),
 # then the app's ("KEY = value" or "KEY=value").
-for m in "$S/$RTPKG/program/metadata" "$meta"; do
+for m in "$RTMETA" "$meta"; do
+  [ -f "$m" ] || continue
   envs="$(sed -n '/^\[Environment\]/,/^\[/{s/^\([A-Za-z_][A-Za-z0-9_]*\) *= */\1=/p}' "$m")"
   [ -n "$envs" ] || continue
   while IFS= read -r kv; do
@@ -322,7 +386,7 @@ grep -qs zypak "$APP/bin/$cmd" && electron=1
 for d in "$APP" "$APP"/*; do [ -e "$d/chrome-sandbox" ] && electron=1; done
 [ -n "$electron" ] && set -- --ozone-platform=wayland --enable-features=UseOzonePlatform,WaylandWindowDecorations --no-sandbox "$@"
 export PATH=/app/bin:/usr/bin
-echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-no runtime}, $gpu)" >&2
+echo "$SID: starting /app/bin/$cmd $* (${FPID:-?}, ${RTPKG:-${RT:-no runtime}}, $gpu)" >&2
 # The runtime's sh starts the command, so ddflatpak handles it like any
 # program the app starts (a script, zypak, an ELF program). Not exec'd: the
 # launcher waits, so a failure gets the crash dialog. Closing normally (0) or

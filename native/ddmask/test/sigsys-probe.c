@@ -16,6 +16,7 @@
 #include <sys/syscall.h>
 #include <sys/un.h>
 #include <time.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 #ifndef SYS_faccessat2
@@ -57,6 +58,40 @@ static void own(void) {
     printf("own-handler-kept=%s\n", now.sa_handler == own_handler ? "yes" : "no");
     kill(getpid(), SIGSYS);
     printf("own-kill-reached=%d\n", own_got);
+}
+
+/* "sandbox": the program's own seccomp filter on top of Android's, trapping
+ * with its own data (Firefox's and Chromium's sandboxes answer those calls in
+ * their SIGSYS handler, through their broker). */
+static volatile int sb_data = -1;
+static void sb_handler(int sig, siginfo_t *si, void *ctx) {
+    (void)sig;
+    ucontext_t *uc = ctx;
+    sb_data = si->si_errno;
+#if defined(__aarch64__)
+    uc->uc_mcontext.regs[0] = 42;
+#else
+    uc->uc_mcontext.gregs[REG_RAX] = 42;
+#endif
+}
+static void sandbox(void) {
+    struct sigaction sa = { 0 };
+    sa.sa_sigaction = sb_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSYS, &sa, NULL);
+    struct sock_filter f[] = {
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_getppid, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_TRAP | 5),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+    };
+    struct sock_fprog prog = { sizeof f / sizeof f[0], f };
+    if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) { perror("seccomp"); return; }
+    long r = syscall(SYS_getppid);
+    printf("sandbox-trapped=%ld data=%d\n", r, sb_data);
+    unsigned cpu;
+    r = syscall(SYS_getcpu, &cpu, NULL, NULL);
+    printf("sandbox-android-blocked=%ld/%s\n", r, r < 0 ? strerror(errno) : "ok");
 }
 
 int main(int argc, char **argv) {
@@ -102,5 +137,6 @@ int main(int argc, char **argv) {
     r = syscall(SYS_getcpu, &cpu, NULL, NULL);
     printf("getcpu=%ld/%s\n", r, r < 0 ? strerror(errno) : "ok");
     if (argc > 1 && !strcmp(argv[1], "own")) own();
+    if (argc > 1 && !strcmp(argv[1], "sandbox")) sandbox();
     return 0;
 }

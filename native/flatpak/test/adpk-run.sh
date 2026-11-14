@@ -124,4 +124,45 @@ expect "...and asks Software to install it" "$(cat "$F"/open-requests/*.req)" "^
 rm -rf "$S/runtime-kde-6.11" "$F/open-requests"
 run kid3 >/dev/null || true
 expect "a runtime that was never installed gets its package name from the metadata" "$(cat "$F"/open-requests/*.req)" "^deskdroid:software:install:runtime-kde-6.11$"
+
+# flatpak run (flatpak.sh): an app the flatpak command installed starts here
+# too, with its runtime and extensions from Flatpak's folders. Firefox gets
+# Etherium's settings over its folder.
+FU="$F/flatpak"
+A="$FU/app/org.mozilla.firefox/aarch64/stable/abc"
+R="$FU/runtime/org.freedesktop.Platform/aarch64/25.08/def"
+mkdir -p "$A/files/lib/firefox/defaults/pref" "$A/files/lib/firefox/distribution" "$A/files/bin" "$R/files/bin" \
+  "$FU/runtime/org.freedesktop.Platform.GL.default/aarch64/25.08/g/files/lib" "$FU/runtime/org.freedesktop.Platform.codecs-extra/aarch64/25.08-extra/c/files/lib"
+for d in "$A" "$R" "$FU"/runtime/org.freedesktop.Platform.*/aarch64/*/*; do ln -sfn "${d##*/}" "${d%/*}/active"; done
+printf '[Application]\nname=org.mozilla.firefox\nruntime=org.freedesktop.Platform/aarch64/25.08\ncommand=firefox\n' > "$A/metadata"
+printf '[Runtime]\nname=org.freedesktop.Platform\n\n[Environment]\nGST_FROM_RUNTIME=1\n' > "$R/metadata"
+printf '[App]\nVendor=Mozilla\nName=Firefox\nID={ec8030f7-c20a-464f-9b0e-13a3a9e97384}\n' > "$A/files/lib/firefox/application.ini"
+echo 'pref("app.update.channel", "release");' > "$A/files/lib/firefox/defaults/pref/channel-prefs.js"
+echo '[Global]' > "$A/files/lib/firefox/distribution/distribution.ini"
+echo '{"flathub":1}' > "$A/files/lib/firefox/distribution/policies.json"
+E="$F/kwin/share/deskdroid/etherium"
+mkdir -p "$E/defaults/pref" "$E/distribution" "$E/etherium-chrome"
+echo 'pref("general.config.filename", "etherium.cfg");' > "$E/defaults/pref/autoconfig.js"
+echo '{"etherium":1}' > "$E/distribution/policies.json"
+echo '// cfg' > "$E/etherium.cfg"; echo '/* css */' > "$E/etherium-chrome/userChrome.css"
+cp "$HERE/../flatpak.sh" "$L/libdd_flatpak.so"; cp "$HERE/../adpk-run.sh" "$L/libdd_adpk_run.so"
+out="$(env -i HOME="$T/home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="$T/run" XDG_CONFIG_HOME="$T/desk-config" \
+  DESKDROID_FILES="$F" DESKDROID_LIBS="$L" DESKDROID_GLIBC_RUN="$T/loader" DESKDROID_SH=/bin/sh DESKDROID_CRASH_DIALOG=0 \
+  sh "$L/libdd_flatpak.so" run --branch=stable --arch=aarch64 org.mozilla.firefox @@u https://example.org @@ 2>&1)"
+log="$(cat "$F/flatpak-tmp/run/org.mozilla.firefox/run.log" 2>&1)"
+AF="$(readlink -f "$A/files")"
+expect "flatpak run starts an app the way a store package starts" "$out" \
+  "^args: $(readlink -f "$R/files")/bin/sh -c exec \"\\\$0\" \"\\\$@\" /app/bin/firefox https://example.org$" \
+  "^GTK_THEME=DD-Party$" "^QT_QPA_PLATFORMTHEME=kde$" "^XDG_CONFIG_HOME=$T/desk-config$" "^FLATPAK_ID=org.mozilla.firefox$" \
+  "^GST_FROM_RUNTIME=1$" "^FONTCONFIG_FILE=" "^PATH=/app/bin:/usr/bin$"
+expect "...with Flatpak's GL driver and full FFmpeg" "$out" \
+  "^DDFLATPAK_MOUNTS=.*/usr/lib/aarch64-linux-gnu/GL/default=$(readlink -f "$FU"/runtime/org.freedesktop.Platform.GL.default/aarch64/25.08/active/files)" \
+  "^DDMASK_GLIBC_LD_LIBRARY_PATH=.*codecs-extra/aarch64/25.08-extra/c/files/lib"
+expect "...and its log where the crash dialog finds it" "$log" "^org.mozilla.firefox: starting /app/bin/firefox https://example.org" "Etherium's settings for firefox"
+mounts="$(sed -n 's/^DDFLATPAK_MOUNTS=//p' <<<"$out" | tr ';' '\n')"
+expect "Firefox: Etherium's files over its folder, at /app and the real path" "$mounts" \
+  "^/app/lib/firefox/etherium.cfg=$E/etherium.cfg$" "^$AF/lib/firefox/etherium.cfg=$E/etherium.cfg$" "^/app/lib/firefox/etherium-chrome=$E/etherium-chrome$"
+M="$F/flatpak-tmp/etherium/org.mozilla.firefox"
+expect "...folders both have merged: Firefox's own prefs and Etherium's" "$(ls "$M/defaults/pref" | tr '\n' ' ')" "autoconfig.js" "channel-prefs.js"
+expect "...Etherium's policies win, Firefox's other files stay" "$(cat "$M/distribution/policies.json" "$M/distribution/distribution.ini")" '"etherium":1' '^\[Global\]$'
 [ "$fails" -eq 0 ] && echo "all adpk-run tests passed" || { echo "$fails failed"; exit 1; }
