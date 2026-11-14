@@ -1,0 +1,20 @@
+<RCC>
+  <qresource prefix="/">
+    <file>qml/Main.qml</file>
+    <file>qml/qmldir</file>
+    <file>qml/Theme.qml</file>
+    <file>qml/Rainbow.qml</file>
+    <file>qml/Chamfer.qml</file>
+    <file>qml/DDSwitch.qml</file>
+    <file>qml/DDSlider.qml</file>
+    <file>qml/DDChoice.qml</file>
+    <file>qml/DDButton.qml</file>
+    <file>qml/Card.qml</file>
+    <file>qml/Meter.qml</file>
+    <file alias="icons/viperfx.svg">data/viperfx.svg</file>
+    <file alias="fonts/Orbitron.ttf">data/fonts/Orbitron.ttf</file>
+    <file alias="fonts/ChakraPetch-Regular.ttf">data/fonts/ChakraPetch-Regular.ttf</file>
+    <file alias="fonts/ChakraPetch-SemiBold.ttf">data/fonts/ChakraPetch-SemiBold.ttf</file>
+    <file alias="fonts/ChakraPetch-Bold.ttf">data/fonts/ChakraPetch-Bold.ttf</file>
+  </qresource>
+</RCC>
