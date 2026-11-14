@@ -53,6 +53,13 @@ object PhoneStatus {
         if (!on) { h.removeCallbacks(r); h.post(r) }
     }
 
+    /** Fresh numbers now (the power profile changed), not at the next tick. */
+    @Synchronized fun refresh() {
+        val h = handler ?: return
+        val r = tick ?: return
+        h.removeCallbacks(r); h.post(r)
+    }
+
     @Synchronized fun stop() {
         thread?.quitSafely()
         thread = null; handler = null; tick = null
@@ -85,6 +92,9 @@ object PhoneStatus {
             .put("cpu", cpu)
             .put("cores", cores)
             .put("network", net)
+            .put("profile", PowerProfile.effective)
+            .put("profileChosen", Prefs.powerProfile(c))
+            .put("profileBySaver", PowerProfile.forcedBySaver)
             .put("time", System.currentTimeMillis())
         val out = File(c.filesDir, "status.json")
         val tmp = File(c.filesDir, "status.json.new")

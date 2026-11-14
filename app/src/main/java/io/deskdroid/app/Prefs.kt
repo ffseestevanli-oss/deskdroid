@@ -72,6 +72,15 @@ object Prefs {
     fun sleepSaver(c: Context) = prefs(c).getBoolean("sleep_saver", true)
     fun setSleepSaver(c: Context, on: Boolean) = prefs(c).edit().putBoolean("sleep_saver", on).apply()
 
+    /** The desktop's power profile (PowerProfile): "powersave", "balanced" or "performance". */
+    fun powerProfile(c: Context) = prefs(c).getString("power_profile", "balanced")!!
+        .takeIf { it in PowerProfile.NAMES } ?: "balanced"
+    fun setPowerProfile(c: Context, p: String) = prefs(c).edit().putString("power_profile", p).apply()
+
+    /** Android's Battery Saver puts the desktop on Power Save too, whatever the profile. */
+    fun followBatterySaver(c: Context) = prefs(c).getBoolean("power_follow_saver", true)
+    fun setFollowBatterySaver(c: Context, on: Boolean) = prefs(c).edit().putBoolean("power_follow_saver", on).apply()
+
     /** The screen stays on while the desktop is showing. */
     fun keepAwake(c: Context) = prefs(c).getBoolean("keep_awake", false)
     fun setKeepAwake(c: Context, on: Boolean) = prefs(c).edit().putBoolean("keep_awake", on).apply()

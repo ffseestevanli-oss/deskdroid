@@ -1,5 +1,7 @@
 // The phone's battery: in the system tray (its icon, with the percentage and
 // charging state in a popup), or on its own on a panel (icon and percentage).
+// The popup also picks the desktop's power profile (Power Save, Balanced,
+// Performance; PowerProfile.kt), like Plasma's own battery item.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -24,6 +26,26 @@ PlasmoidItem {
     readonly property string stateText: !status.valid ? "" : charging
         ? (status.data.chargeMinutes > 0 ? "Charging, full in " + Math.floor(status.data.chargeMinutes / 60) + " h " + (status.data.chargeMinutes % 60) + " min" : "Charging")
         : (status.data.plugged ? "Plugged in" : "On battery")
+    // The power profile DeskDroid applies, and the one picked here (shown at
+    // once, before status.json catches up).
+    property string picked: ""
+    readonly property string profile: picked !== "" ? picked : (status.valid && status.data.profileChosen ? status.data.profileChosen : "balanced")
+    readonly property bool bySaver: status.valid && status.data.profileBySaver === true
+    readonly property var profiles: [
+        { name: "powersave", label: "Power Save", icon: "power-profile-power-saver-symbolic" },
+        { name: "balanced", label: "Balanced", icon: "power-profile-balanced-symbolic" },
+        { name: "performance", label: "Performance", icon: "power-profile-performance-symbolic" }
+    ]
+    function profileLabel(n) {
+        for (var i = 0; i < profiles.length; i++) if (profiles[i].name === n) return profiles[i].label;
+        return "Balanced";
+    }
+    function pick(n) {
+        picked = n;
+        pickedReset.restart();
+        runner.runCommand("android-open deskdroid:power:" + n);
+    }
+    Timer { id: pickedReset; interval: 5000; onTriggered: root.picked = "" }
     // The system tray draws its items as squares with a heading on their popups.
     readonly property bool inTray: (Plasmoid.containmentDisplayHints & PlasmaCore.Types.ContainmentDrawsPlasmoidHeading) !== 0
 
@@ -31,7 +53,7 @@ PlasmoidItem {
     Plasmoid.status: low ? PlasmaCore.Types.NeedsAttentionStatus : PlasmaCore.Types.ActiveStatus
     preferredRepresentation: inTray ? compactRepresentation : fullRepresentation
     toolTipMainText: percent < 0 ? "Battery" : "Battery " + percent + "%"
-    toolTipSubText: stateText
+    toolTipSubText: stateText + (status.valid ? (stateText ? "\n" : "") + "Power profile: " + profileLabel(bySaver ? "powersave" : profile) + (bySaver ? " (Battery Saver)" : "") : "")
 
     compactRepresentation: MouseArea {
         hoverEnabled: true
@@ -114,6 +136,44 @@ PlasmoidItem {
                 Layout.fillWidth: true
                 Layout.leftMargin: Kirigami.Units.largeSpacing
                 Layout.rightMargin: Kirigami.Units.largeSpacing
+            }
+            // Power profile: how hard DeskDroid's desktop and apps may work.
+            ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
+                PlasmaComponents3.Label {
+                    text: "Power Profile"
+                    font.bold: true
+                }
+                RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+                    Layout.fillWidth: true
+                    Repeater {
+                        model: root.profiles
+                        PlasmaComponents3.ToolButton {
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1
+                            display: PlasmaComponents3.AbstractButton.TextUnderIcon
+                            icon.name: modelData.icon
+                            text: modelData.label
+                            checkable: true
+                            checked: root.profile === modelData.name
+                            onClicked: root.pick(modelData.name)
+                        }
+                    }
+                }
+                PlasmaComponents3.Label {
+                    text: root.bySaver ? "The phone's Battery Saver is on: Power Save until it's off."
+                        : root.profile === "powersave" ? "Slower, uses the efficient cores and limits busy apps. Longest battery life."
+                        : root.profile === "performance" ? "Every core, the screen's full frame rate, no limits. Uses the most battery."
+                        : "Leaves the fastest cores alone and draws at up to 60 frames a second."
+                    opacity: 0.75
+                    font: Kirigami.Theme.smallFont
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
             }
             PlasmaComponents3.Button {
                 text: "Phone's Battery Settings…"

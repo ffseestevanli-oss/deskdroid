@@ -161,6 +161,12 @@ object NativeDesk {
     const val ACTION_BACK = 4
     /** The phone asleep (SleepMode): the compositor hands out a frame a second, not twenty. */
     @JvmStatic external fun nativeSetSleeping(sleeping: Boolean)
+    /** The power profile's frame cap (PowerProfile): at most fps frames a second, 0 for the screen's rate. */
+    @JvmStatic external fun nativeSetFrameCap(fps: Int)
+    /** Which cores a desktop thread may run on (bit n: core n); 0 or the errno (PowerProfile). */
+    @JvmStatic external fun nativeSetAffinity(tid: Int, mask: Long): Int
+    /** The cores a thread may run on now, or -1. */
+    @JvmStatic external fun nativeGetAffinity(tid: Int): Long
 
     /** Plasma's usual size on a phone (about twice the panel's pixels), or the menu's choice. */
     fun desktopScale(c: android.content.Context): Float =
@@ -388,6 +394,11 @@ object NativeDesk {
                     Handler(Looper.getMainLooper()).post { openPhoneSettings(c, path.removePrefix("deskdroid:settings:")) }
                     return
                 }
+                // The Battery item's power profiles (PowerProfile.kt).
+                if (path.startsWith("deskdroid:power:")) {
+                    PowerProfile.set(c, path.removePrefix("deskdroid:power:"))
+                    return
+                }
                 // An Android widget on the desktop (AndroidWidgets.kt).
                 if (path.startsWith("deskdroid:widget:")) {
                     AndroidWidgets.handle(c, path)
@@ -568,6 +579,8 @@ object NativeDesk {
 
     /** Ends the desktop: its processes, the compositor, the service and the window. */
     fun stop(c: android.content.Context, why: String) {
+        // Apps the CPU cap paused can't act on being told to quit: they go again first.
+        PowerProfile.stop()
         synchronized(apps) {
             apps.forEach { it.destroy() }
             apps.clear()
@@ -759,6 +772,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         NativeDesk.running = true
         PhoneStatus.start(applicationContext)
         SleepMode.start(applicationContext)
+        PowerProfile.start(applicationContext)
         SharedClipboard.start(applicationContext)
         DesktopMedia.start(applicationContext)
         startForegroundService(android.content.Intent(this, NativeDeskService::class.java))
@@ -2274,6 +2288,17 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     SleepMode.prefChanged()
                 }.view,
                 scaleTile),
+            // Power Save, Balanced, Performance: the desktop's CPU and frame rate (PowerProfile).
+            section("Power profile",
+                io.deskdroid.app.ui.Segmented(ui, listOf("Power Save", "Balanced", "Performance"),
+                    PowerProfile.NAMES.indexOf(Prefs.powerProfile(this)).coerceAtLeast(0)) { i ->
+                    PowerProfile.set(this, PowerProfile.NAMES[i])
+                }.view,
+                io.deskdroid.app.ui.Segmented(ui, listOf("Ignore Battery Saver", "Power Save with Battery Saver"),
+                    if (Prefs.followBatterySaver(this)) 1 else 0) { i ->
+                    Prefs.setFollowBatterySaver(this, i == 1)
+                    PowerProfile.prefChanged()
+                }.view),
         )
         val settings = ui.column(14) {
             setPadding(0, dp(4), 0, dp(8))
