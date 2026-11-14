@@ -73,7 +73,7 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
     }
     bundlename() {
       local n; n="$(unversioned "$1")"
-      case "$n" in libQt6*|libKF6*|libkwin*|libkdecorations*|libKWayland*|libplasmashell*) echo "$n" ;; *) echo "libdd_${n#lib}" ;; esac
+      case "$n" in libdd_*|libQt6*|libKF6*|libkwin*|libkdecorations*|libKWayland*|libplasmashell*) echo "$n" ;; *) echo "libdd_${n#lib}" ;; esac
     }
     install -m 755 "$DESKDROID_QT_ANDROID/lib/libkwin_wayland.so" "$OUT/libkwin_wayland.so"
     # The Qt libraries already copied count too: some need non-Qt libraries
@@ -329,6 +329,15 @@ if [ -n "${DESKDROID_QT_ANDROID:-}" ]; then
           [ -e "$P/distribution/policies.json" ] && sed -i \
             "s|/data/data/io.deskdroid.app/files/kwin/firefox/|/data/data/io.deskdroid.app/files/store/apps/firefox/program/|g" \
             "$P/distribution/policies.json"
+          # Sound into the desktop's sound server (PipeWire: ViPER FX, EasyEffects
+          # hear it): Firefox's audio library (cubeb) tries PulseAudio before
+          # AAudio and opens libpulse.so.0 by that name. A stand-in by that name
+          # that needs the APK's libdd_pulse.so (Qt Multimedia's libpulse) lets
+          # it; with no sound server running it falls back to AAudio.
+          : > "$WORK/pulse0.c"
+          "$BIN/clang" --target="aarch64-linux-android$API" -shared -fPIC -nostdlib -Wl,-soname,libpulse.so.0 \
+            -Wl,-z,max-page-size=16384 "$WORK/pulse0.c" -o "$P/libpulse.so.0"
+          patchelf --add-needed libdd_pulse.so "$P/libpulse.so.0"
           # Etherium's settings as they are now, over the ones it was built with.
           "$HERE/../firefox/etherium/settings.sh" "$P" /data/data/io.deskdroid.app/files/store/apps/firefox/program
           echo firefox > "$pkg/program.txt"
