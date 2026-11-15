@@ -284,6 +284,30 @@ if [ -d "$ES" ] && [ "${DESKDROID_ETHERIUM_SETTINGS:-1}" != 0 ]; then
     echo "$SID: Etherium's settings for ${gre##*/} (DD Party look, privacy)" >&2
   done
 fi
+# The user folders (user-dirs.dirs: Documents, Videos... on the phone's
+# storage, NativeDesk.kt) as the app's own programs see them: any it can't
+# open (VLC: "The specified folder does not exist or was not readable") is
+# DeskDroid's own folder of that name instead, in a copy of the file laid
+# over the desktop's for this app.
+ud="${XDG_CONFIG_HOME:-${HOME:-$F}/.config}/user-dirs.dirs"
+if [ -f "$ud" ]; then
+  dirs="$(sed -n 's/^XDG_[A-Z]*_DIR="\(\/[^"]*\)"$/\1/p' "$ud" 2>/dev/null)"
+  bad="$(printf '%s\n' "$dirs" | DDFLATPAK_MOUNTS="$mounts" $G "$RT/bin/sh" -c \
+    'while IFS= read -r d; do [ -n "$d" ] || continue; (cd "$d" && [ -r . ]) >/dev/null 2>&1 || echo "$d"; done' 2>/dev/null)"
+  # (Only the folders asked about: nothing else the loader might print.)
+  bad="$(printf '%s\n' "$bad" | grep -Fx -- "$dirs" 2>/dev/null)"
+  if [ -n "$bad" ]; then
+    mine="$F/flatpak-tmp/user-dirs.$SID.dirs"
+    cp "$ud" "$mine.$$"
+    printf '%s\n' "$bad" | while IFS= read -r d; do
+      own="$F/${d##*/}"
+      mkdir -p "$own"
+      sed -i "s|=\"$d\"\$|=\"$own\"|" "$mine.$$"
+      echo "$SID: it can't open $d; it gets $own instead" >&2
+    done
+    mv -f "$mine.$$" "$mine" && mounts="$mounts;$ud=$mine"
+  fi
+fi
 export DDFLATPAK_MOUNTS="$mounts"
 # glibc's loader asks ddflatpak's audit library for /app and /usr in RUNPATHs.
 [ -e "$(ddlib libddflatpak_audit.so)" ] && export DDMASK_GLIBC_LD_AUDIT="$(ddlib libddflatpak_audit.so)"

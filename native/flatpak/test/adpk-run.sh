@@ -43,6 +43,8 @@ LD_LIBRARY_PATH=/app/lib/extra'
 cat > "$T/loader" <<'L'
 #!/bin/sh
 case "$1" in */Xwayland) exec "$@" ;; esac
+# The user-folder check (a shell reading folder names): run it.
+case "$3" in *"read -r d"*) shift; exec /bin/sh "$@" ;; esac
 echo "args: $*"
 env | sort
 L
@@ -55,6 +57,8 @@ run() {
 mkdir -p "$S/runtime-kde-6.11/program/files/etc"
 printf 'root:x:0:0:root:/root:/bin/bash\nnobody:x:65534:65534:Nobody:/:/sbin/nologin\n' > "$S/runtime-kde-6.11/program/files/etc/passwd"
 printf 'root:x:0:\nwheel:x:10:\n' > "$S/runtime-kde-6.11/program/files/etc/group"
+mkdir -p "$T/phone/Music"
+printf 'XDG_MUSIC_DIR="%s"\nXDG_VIDEOS_DIR="/nonexistent/phone/Movies"\nXDG_TEMPLATES_DIR="$HOME/Templates"\n' "$T/phone/Music" > "$T/desk-config/user-dirs.dirs"
 out="$(run kid3 --dd-command=kid3-cli a b)"
 log="$(cat "$S/kid3/run.log")"
 expect "reads the app, its command and its runtime from the package" "$log" \
@@ -115,8 +119,13 @@ expect "...the same each start" "$(grep -c "^gtk-theme=" "$T/desk-config/glib-2.
 expect "Android's fonts beside the runtime's" "$(cat "$F/flatpak-tmp/fonts.conf")" "<include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>" "<dir>/system/fonts</dir>"
 expect "full FFmpeg (codecs-extra) ahead of the runtime's" "$out" "^DDMASK_GLIBC_LD_LIBRARY_PATH=$F/glibc/lib:$S/kid3/program/files/lib:$S/runtime-mesa-25.08/program/codecs-extra/lib:"
 if [ -r /proc/version ]; then
-  expect "a readable /proc/version and /proc/stat are left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?;/etc/passwd=[^;]*;/etc/group=[^;]*;/run/host/font-dirs.xml=[^;]*;/usr/bin/bwrap=[^;]*$"
+  expect "a readable /proc/version and /proc/stat are left alone" "$out" "^DDFLATPAK_MOUNTS=[^ ]*/dev/shm=$F/flatpak-tmp(;/proc/sys[^;]*)?;/etc/passwd=[^;]*;/etc/group=[^;]*;/run/host/font-dirs.xml=[^;]*;/usr/bin/bwrap=[^;]*(;[^;]*/user-dirs.dirs=[^;]*)?$"
 fi
+expect "a user folder the app can't open is DeskDroid's own instead, for that app" \
+  "$(cat "$F/flatpak-tmp/user-dirs.kid3.dirs"; cat "$S/kid3/run.log"; [ -d "$F/Movies" ] && echo made)" \
+  "^XDG_VIDEOS_DIR=\"$F/Movies\"$" "^XDG_MUSIC_DIR=\"$T/phone/Music\"$" "^XDG_TEMPLATES_DIR=\"\\\$HOME/Templates\"$" \
+  "kid3: it can't open /nonexistent/phone/Movies; it gets $F/Movies instead" "^made$"
+expect "...laid over the desktop's file" "$out" "^DDFLATPAK_MOUNTS=.*;$T/desk-config/user-dirs.dirs=$F/flatpak-tmp/user-dirs.kid3.dirs(;|$)"
 expect "the Android user in /etc/passwd and /etc/group, after the runtime's" \
   "$(cat "$F/flatpak-tmp/etc/passwd" "$F/flatpak-tmp/etc/group")" "^nobody:x:65534:65534:Nobody:/:/sbin/nologin$" \
   "^[A-Za-z0-9_.-]+:x:$(id -u):$(id -g):DeskDroid:$T/home:/bin/sh$" "^wheel:x:10:$" "^[A-Za-z0-9_.-]+:x:$(id -g):$"
