@@ -399,6 +399,13 @@ object NativeDesk {
                     X86.installAsync(c)
                     return
                 }
+                // dd-log in the desktop's terminal (deskdroid-shrc): Save log, as in
+                // Settings; it waits for ~/deskdroid-log.txt.
+                if (path == "deskdroid:save-log") {
+                    AppLog.i("Save log from the desktop's terminal (dd-log)")
+                    LogExport.saveAndToast(c)
+                    return
+                }
                 // The keyboard button on the panel: show or hide the phone's keyboard.
                 if (path == "deskdroid:keyboard") {
                     Handler(Looper.getMainLooper()).post {
@@ -1243,7 +1250,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 val code = p.waitFor()
                 val exit = "exited with code $code" + if (code > 128) " (signal ${code - 128})" else ""
                 overlay("shell: $exit", always = true)
-                overlay("Full log: Settings, Save log to Downloads", always = true)
+                overlay("Full log: Save log in the DD menu or Settings, or dd-log in the terminal", always = true)
                 val dir = File(data, "plugins/kf6/packagestructure")
                 AppLog.i("[plasmashell] ${dir.path}: ${dir.list()?.joinToString() ?: "missing"}")
                 AppLog.i("[plasmashell] exited ($code)")
@@ -2348,6 +2355,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 showMenu(false)
                 startActivity(android.content.Intent(this@NativeDeskActivity, StoreActivity::class.java))
             },
+            // The same log as Settings › Save log, without leaving the desktop.
+            ui.tile("Save log", P.PINK) { showMenu(false); LogExport.saveAndToast(this@NativeDeskActivity) },
         )
         panel.addView(ui.row(6) { actions.forEach { addView(ui.weight(it)) } },
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
@@ -2603,17 +2612,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 android.widget.Toast.makeText(this, Prefs.TOUCH_MODE_LABELS[Prefs.TOUCH_MODES.indexOf(next)],
                     android.widget.Toast.LENGTH_SHORT).show()
             }
-            Gestures.START_MENU -> NativeDesk.nativeAction(NativeDesk.ACTION_LAUNCHER)
-            Gestures.OVERVIEW -> NativeDesk.nativeAction(NativeDesk.ACTION_OVERVIEW)
-            Gestures.SHOW_DESKTOP -> NativeDesk.nativeAction(NativeDesk.ACTION_SHOW_DESKTOP)
-            Gestures.BACK -> NativeDesk.nativeAction(NativeDesk.ACTION_BACK)
-            Gestures.SWITCH_WINDOW -> {
-                // Alt+Tab, let go at once: KWin goes to the window used before.
-                NativeDesk.nativeKey(KeyEvent.KEYCODE_ALT_LEFT, 0, true)
-                NativeDesk.nativeKey(KeyEvent.KEYCODE_TAB, 0, true)
-                NativeDesk.nativeKey(KeyEvent.KEYCODE_TAB, 0, false)
-                NativeDesk.nativeKey(KeyEvent.KEYCODE_ALT_LEFT, 0, false)
-            }
+            else -> desktopGesture(action)
         }
     }
 
@@ -3045,6 +3044,12 @@ class PhoneTouchpadActivity : Activity() {
     private val blackedOut get() = ::blackout.isInitialized && blackout.visibility == android.view.View.VISIBLE
     private var swallowing = false
     private var fingerDown = false
+    // The touch area, where the edge and corner swipes start (Gestures).
+    private lateinit var area: FrameLayout
+    // The touchpad screen's own DD menu: a sheet over the phone's screen.
+    private lateinit var menu: FrameLayout
+    private lateinit var menuPanel: LinearLayout
+    private val menuOpen get() = ::menu.isInitialized && menu.visibility == android.view.View.VISIBLE
     private val displays by lazy { getSystemService(android.hardware.display.DisplayManager::class.java) }
     private val listener = object : android.hardware.display.DisplayManager.DisplayListener {
         override fun onDisplayAdded(id: Int) = Unit
@@ -3061,6 +3066,7 @@ class PhoneTouchpadActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         NativeDesk.touchpad = java.lang.ref.WeakReference(this)
+        Gestures.start(this) // the touch area's edge and corner swipes
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         pad = NativeDeskActivity.KeyboardSurface(this).apply {
             isFocusable = true
@@ -3077,7 +3083,7 @@ class PhoneTouchpadActivity : Activity() {
             addView(ui.text("ON THE BIG SCREEN", 15f).apply { typeface = P.orbitron(context); letterSpacing = 0.06f })
             addView(ui.text("${NativeDesk.surfaceW.toInt()} × ${NativeDesk.surfaceH.toInt()} · unplug to bring it back", 12f, P.MUTED))
         }
-        val area = FrameLayout(this).apply {
+        area = FrameLayout(this).apply {
             addView(TouchpadArea(context), FrameLayout.LayoutParams(-1, -1))
             addView(pad, FrameLayout.LayoutParams(1, 1)) // takes the keyboard's text
             addView(ui.column(6) {
@@ -3157,6 +3163,8 @@ class PhoneTouchpadActivity : Activity() {
                 }
                 addView(scale, LinearLayout.LayoutParams(-2, dp(44)))
                 addView(ui.outlineButton("APPS", P.CYAN, P.CYAN) { showDrawer(true) }, LinearLayout.LayoutParams(-2, dp(44)))
+                // The DD menu, also a swipe up from the touch area's bottom right corner (Gestures).
+                addView(ui.outlineButton("MENU", P.PINK, P.PINK) { showMenu(true) }, LinearLayout.LayoutParams(-2, dp(44)))
             }, LinearLayout.LayoutParams(-1, -2))
             addView(area, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(ui.row(8) {
@@ -3182,6 +3190,7 @@ class PhoneTouchpadActivity : Activity() {
             setBackgroundColor(P.BG)
             addView(content, FrameLayout.LayoutParams(-1, -1))
             addView(apps.view, FrameLayout.LayoutParams(-1, -1))
+            addView(buildMenu(), FrameLayout.LayoutParams(-1, -1))
             addView(io.deskdroid.app.ui.RainbowStrip(context), FrameLayout.LayoutParams(-1, dp(4)))
             blackout = android.view.View(context).apply {
                 setBackgroundColor(Color.BLACK)
@@ -3203,7 +3212,7 @@ class PhoneTouchpadActivity : Activity() {
         // Not while a finger rests on the pad, the app drawer is up, or the
         // phone's keyboard is (it would stay lit over the black).
         val keyboardUp = Build.VERSION.SDK_INT >= 30 && pad.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
-        if (fingerDown || drawerOpen || keyboardUp) {
+        if (fingerDown || drawerOpen || menuOpen || keyboardUp) {
             scheduleBlackout(); return
         }
         if (blackedOut) return
@@ -3243,7 +3252,182 @@ class PhoneTouchpadActivity : Activity() {
             return true
         }
         scheduleBlackout()
+        return gestureTouch(e)
+    }
+
+    // ---- Edge and corner swipes on the touch area, as on the phone's own
+    // desktop (NativeDeskActivity, Gestures.kt; System Settings › Gestures sets
+    // what each does): a swipe up from the area's bottom right corner opens the
+    // DD menu unless changed, the bottom left corner the keyboard. A touch that
+    // starts where a swipe could begin is held back until it's clearly that
+    // swipe or clearly not; if not, the touchpad gets it as it happened. The
+    // triple tap stays a triple click here.
+    private var hold = 0 // 0 passing through, 1 maybe a swipe, -1 swipe done (rest of the touch ignored)
+    private var holdZone = ""
+    private var downX = 0f
+    private var downY = 0f
+    private val held = ArrayList<MotionEvent>()
+    private val releaseHeld = Runnable { if (hold == 1) { hold = 0; replayHeld() } }
+    private fun px(dp: Float) = dp * resources.displayMetrics.density
+
+    private fun gestureTouch(e: MotionEvent): Boolean {
+        val act = e.actionMasked
+        if (act == MotionEvent.ACTION_DOWN) {
+            idle.removeCallbacks(releaseHeld)
+            held.forEach { it.recycle() }; held.clear()
+            hold = 0
+            downX = e.rawX; downY = e.rawY
+            if (!drawerOpen && !menuOpen) gestureZone(e)?.let {
+                holdZone = it; hold = 1
+                idle.postDelayed(releaseHeld, SWIPE_MS)
+                held.add(MotionEvent.obtain(e))
+                return true
+            }
+            return super.dispatchTouchEvent(e)
+        }
+        val end = act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL
+        when (hold) {
+            0 -> return super.dispatchTouchEvent(e)
+            -1 -> { if (end) hold = 0; return true }
+        }
+        val dx = e.rawX - downX
+        val dy = e.rawY - downY
+        val along = when (holdZone) { Gestures.LEFT -> dx; Gestures.RIGHT -> -dx; Gestures.TOP -> dy; else -> -dy }
+        val across = if (holdZone == Gestures.LEFT || holdZone == Gestures.RIGHT) abs(dy) else abs(dx)
+        if (act == MotionEvent.ACTION_MOVE && along > px(48f) && along > across * 1.5f) {
+            hold = -1
+            idle.removeCallbacks(releaseHeld)
+            held.forEach { it.recycle() }; held.clear()
+            runGesture(Gestures.action(holdZone))
+            return true
+        }
+        val notASwipe = end || act == MotionEvent.ACTION_POINTER_DOWN ||
+            across > px(32f) || e.eventTime - e.downTime > SWIPE_MS
+        if (!notASwipe) { held.add(MotionEvent.obtain(e)); return true }
+        hold = 0
+        replayHeld()
         return super.dispatchTouchEvent(e)
+    }
+
+    private fun replayHeld() {
+        idle.removeCallbacks(releaseHeld)
+        held.forEach { super.dispatchTouchEvent(it); it.recycle() }; held.clear()
+    }
+
+    /** Where a swipe with an action could start under this finger (inside the touch area), or null. */
+    private fun gestureZone(e: MotionEvent): String? {
+        if (!::area.isInitialized || area.width == 0) return null
+        val at = IntArray(2).also { area.getLocationOnScreen(it) }
+        val x = e.rawX - at[0]
+        val y = e.rawY - at[1]
+        val w = area.width.toFloat(); val h = area.height.toFloat()
+        if (x < 0 || y < 0 || x > w || y > h) return null
+        val corner = y > h - px(EDGE_DP)
+        val zones = listOfNotNull(
+            if (corner && x < w * 0.3f) Gestures.BOTTOM_LEFT else null,
+            if (corner && x > w * 0.7f) Gestures.BOTTOM_RIGHT else null,
+            if (x < px(SIDE_DP)) Gestures.LEFT else null,
+            if (x > w - px(SIDE_DP)) Gestures.RIGHT else null,
+            if (y < px(SIDE_DP)) Gestures.TOP else null,
+            if (y > h - px(SIDE_DP)) Gestures.BOTTOM else null,
+        )
+        return zones.firstOrNull { Gestures.action(it) != Gestures.NONE }
+    }
+
+    private fun runGesture(action: String) {
+        AppLog.i("Gestures (touchpad screen): $action")
+        when (action) {
+            Gestures.DD_MENU -> showMenu(true)
+            Gestures.KEYBOARD -> toggleKeyboard()
+            // Touchpad <-> Direct touch is for the phone's own desktop: this screen is always a touchpad.
+            Gestures.TOUCH_MODE -> android.widget.Toast.makeText(this,
+                "The phone is the touchpad while the desktop is on a monitor", android.widget.Toast.LENGTH_SHORT).show()
+            else -> desktopGesture(action)
+        }
+    }
+
+    // ---- The DD menu on the touchpad screen: the parts of the phone's DD menu
+    // that matter with the desktop on a monitor (the rest is on the monitor's
+    // own System Settings), and Save log, so the log needn't wait for unplugging.
+
+    private fun buildMenu(): android.view.View {
+        menu = FrameLayout(this).apply {
+            setBackgroundColor(0x55000000)
+            visibility = android.view.View.GONE
+            setOnClickListener { showMenu(false) } // a tap outside the sheet closes it
+        }
+        menuPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(io.deskdroid.app.ui.Party.PANEL)
+            elevation = px(16f)
+            isClickable = true
+        }
+        menu.addView(menuPanel, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.BOTTOM))
+        return menu
+    }
+
+    fun showMenu(open: Boolean) {
+        if (!::menu.isInitialized || open == menuOpen) return
+        if (open) {
+            if (drawerOpen) drawer?.close()
+            softKeyboard(false)
+            fillMenu()
+            releaseMouse()
+        }
+        menu.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+        if (!open) captureMouse()
+    }
+
+    private fun fillMenu() {
+        val ui = io.deskdroid.app.ui.Ui(this)
+        val P = io.deskdroid.app.ui.Party
+        fun dp(v: Int) = px(v.toFloat()).toInt()
+        menuPanel.removeAllViews()
+        menuPanel.setPadding(dp(16), dp(10), dp(16), dp(16))
+        menuPanel.addView(android.view.View(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = px(2f); setColor(P.BORDER) }
+        }, LinearLayout.LayoutParams(dp(40), dp(4)).apply { gravity = android.view.Gravity.CENTER_HORIZONTAL; bottomMargin = dp(6) })
+        menuPanel.addView(ui.row {
+            addView(ui.text("DESKDROID", 15f).apply { typeface = P.orbitron(context); letterSpacing = 0.08f })
+            spacer()
+            addView(ui.outlineButton("✕", P.TEXT) { showMenu(false) }, LinearLayout.LayoutParams(dp(40), dp(40)))
+        }, LinearLayout.LayoutParams(-1, -2))
+        fun heading(title: String) = ui.text("— ${title.uppercase()} —", 11f, P.MUTED, 700).apply {
+            gravity = android.view.Gravity.CENTER
+            letterSpacing = 0.12f
+        }
+        val settings = ui.column(6) {
+            addView(heading("Scroll behavior"), LinearLayout.LayoutParams(-1, -2))
+            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Wheel", "Touchpad"),
+                if (Prefs.scrollWheel(context)) 0 else 1) { i -> Prefs.setScrollWheel(context, i == 0) }.view,
+                LinearLayout.LayoutParams(-1, -2))
+            addView(heading("Power profile"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+            addView(io.deskdroid.app.ui.Segmented(ui, listOf("Power Save", "Balanced", "Performance"),
+                PowerProfile.NAMES.indexOf(Prefs.powerProfile(context)).coerceAtLeast(0)) { i ->
+                PowerProfile.set(context, PowerProfile.NAMES[i])
+            }.view, LinearLayout.LayoutParams(-1, -2))
+        }
+        menuPanel.addView(settings, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        val actions = listOf(
+            ui.tile("Save log", P.PINK) { showMenu(false); LogExport.saveAndToast(this) },
+            ui.tile("Agora (Software)", P.GREEN) {
+                showMenu(false)
+                startActivity(android.content.Intent(this, StoreActivity::class.java))
+            },
+            ui.tile("Restart desktop", P.YELLOW) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Restart the desktop?")
+                    .setMessage("Unsaved work in desktop apps will be lost.")
+                    .setPositiveButton("Restart Desktop") { _, _ ->
+                        showMenu(false)
+                        NativeDesk.restart(this, "Restart Desktop in the touchpad screen's menu")
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            },
+        )
+        menuPanel.addView(ui.row(6) { actions.forEach { addView(ui.weight(it)) } },
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
     }
 
     override fun onResume() {
@@ -3270,7 +3454,7 @@ class PhoneTouchpadActivity : Activity() {
     // screen, so it can't reach the monitor's edges and reveal Android's
     // taskbar there (MonitorGuard). The app drawer lets it go, for its search box.
     private fun captureMouse() {
-        if (drawerOpen || !hasWindowFocus() || pad.hasPointerCapture() || NativeDesk.surfaceW <= 0f) return
+        if (drawerOpen || menuOpen || !hasWindowFocus() || pad.hasPointerCapture() || NativeDesk.surfaceW <= 0f) return
         pad.setOnCapturedPointerListener { _, e ->
             if (e.actionMasked == MotionEvent.ACTION_SCROLL)
                 NativeDesk.nativeScroll(-e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 120f,
@@ -3294,12 +3478,12 @@ class PhoneTouchpadActivity : Activity() {
 
     override fun onGenericMotionEvent(e: MotionEvent): Boolean {
         // A mouse that isn't captured yet (it was plugged in after the focus came here).
-        if (e.isFromSource(InputDevice.SOURCE_MOUSE) && !drawerOpen) { captureMouse(); return true }
+        if (e.isFromSource(InputDevice.SOURCE_MOUSE) && !drawerOpen && !menuOpen) { captureMouse(); return true }
         return super.onGenericMotionEvent(e)
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (drawerOpen) return false
+        if (drawerOpen || menuOpen) return false
         if (NativeDesk.surfaceW <= 0f) return false
         touchpad.wheel = Prefs.scrollWheel(this)
         touchpad.onTouch(e, NativeDesk.surfaceW, NativeDesk.surfaceH)
@@ -3311,13 +3495,14 @@ class PhoneTouchpadActivity : Activity() {
         // the phone's own desktop: edit mode, popups, dialogs).
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (e.repeatCount == 0) {
-                if (drawerOpen) drawer?.close()
+                if (menuOpen) showMenu(false)
+                else if (drawerOpen) drawer?.close()
                 else if (NativeDesk.running) NativeDesk.nativeAction(NativeDesk.ACTION_BACK)
             }
             return true
         }
         // Typing in the drawer's search box stays there.
-        if (drawerOpen) return super.onKeyDown(keyCode, e)
+        if (drawerOpen || menuOpen) return super.onKeyDown(keyCode, e)
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
         if (!KeyEvent.isModifierKey(keyCode)) DeskInput.interrupted(click = false) // a real keyboard's key
         NativeDesk.physicalKey(keyCode, e, true)
@@ -3326,7 +3511,7 @@ class PhoneTouchpadActivity : Activity() {
 
     override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) return true
-        if (drawerOpen) return super.onKeyUp(keyCode, e)
+        if (drawerOpen || menuOpen) return super.onKeyUp(keyCode, e)
         if (VolumeKeys.isVolumeKey(keyCode)) return true
         NativeDesk.physicalKey(keyCode, e, false)
         return true
@@ -3347,6 +3532,8 @@ class PhoneTouchpadActivity : Activity() {
 
     override fun onDestroy() {
         idle.removeCallbacks(goBlack)
+        idle.removeCallbacks(releaseHeld)
+        held.forEach { it.recycle() }; held.clear()
         displays.unregisterDisplayListener(listener)
         if (drawerOpen) drawer?.close()
         if (NativeDesk.touchpad?.get() === this) NativeDesk.touchpad = null
@@ -3477,6 +3664,23 @@ class NativeTouch(private val view: android.view.View) {
 
     companion object {
         const val LONG_PRESS_MS = 500L
+    }
+}
+
+/** The gesture actions the desktop itself does, the same on the phone's screen and its touchpad screen. */
+fun desktopGesture(action: String) {
+    when (action) {
+        Gestures.START_MENU -> NativeDesk.nativeAction(NativeDesk.ACTION_LAUNCHER)
+        Gestures.OVERVIEW -> NativeDesk.nativeAction(NativeDesk.ACTION_OVERVIEW)
+        Gestures.SHOW_DESKTOP -> NativeDesk.nativeAction(NativeDesk.ACTION_SHOW_DESKTOP)
+        Gestures.BACK -> NativeDesk.nativeAction(NativeDesk.ACTION_BACK)
+        Gestures.SWITCH_WINDOW -> {
+            // Alt+Tab, let go at once: KWin goes to the window used before.
+            NativeDesk.nativeKey(KeyEvent.KEYCODE_ALT_LEFT, 0, true)
+            NativeDesk.nativeKey(KeyEvent.KEYCODE_TAB, 0, true)
+            NativeDesk.nativeKey(KeyEvent.KEYCODE_TAB, 0, false)
+            NativeDesk.nativeKey(KeyEvent.KEYCODE_ALT_LEFT, 0, false)
+        }
     }
 }
 

@@ -9,7 +9,7 @@ class GestureSwipes : public GestureModule
 public:
     GestureSwipes(QObject *parent, const KPluginMetaData &data)
         : GestureModule(parent, data,
-                        QStringLiteral("Swipe in from a corner or an edge of the phone's screen. A touch that isn't a swipe still reaches the desktop."),
+                        QStringLiteral("Swipe in from a corner or an edge of the phone's screen, or of its touch area while the desktop is on a monitor. A touch that isn't a swipe still reaches the desktop."),
                         {
                             {QStringLiteral("bottom_left"), QStringLiteral("Bottom left corner"), QStringLiteral("Swipe up from the corner."),
                              QStringLiteral("keyboard")},
