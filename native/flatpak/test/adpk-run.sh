@@ -102,7 +102,7 @@ expect "a command given as a path (VLC's /app/bin/vlc) runs as it is" "$xout" "^
 expect "an X11-only app gets an X server (Xwayland) and DISPLAY" "$xout" "^DISPLAY=:8$" "^vlc: X11 only: starting an X server \(Xwayland :8, 1280x800\)$" \
   "^vlc: starting /app/bin/vlc"
 expect "...as a window, keyboard maps through dash, /tmp in flatpak-tmp" "$(cat "$T/xwayland.txt")" \
-  "^xargs: :8 -geometry 1280x800 -shm -nolisten tcp -pn -terminate 10 -displayfd 3$" "^XWAYLAND_NO_GLAMOR=1$" "^DDFLATPAK_MOUNTS=/bin/sh=$T/cli/usr/bin/dash;" \
+  "^xargs: :8 -geometry 1280x800 -shm -nolisten tcp -pn -terminate 10 -displayfd 3$" "^XWAYLAND_NO_GLAMOR=1$" "^DDFLATPAK_MOUNTS=/bin/sh=$T/cli/usr/bin/sh;" \
   "^DDFLATPAK_TMP=$F/flatpak-tmp$" "^DDFLATPAK_RUNTIME=$T/cli/usr$"
 xout="$(xrun "$T/cli")"
 expect "...the next X11-only app shares it" "$xout" "^DISPLAY=:8$" "^vlc: X11 only: using the X server on :8$"
