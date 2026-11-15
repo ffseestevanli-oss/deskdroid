@@ -1,6 +1,7 @@
 # DeskDroid: plasma-workspace's settings pages for System Settings ›
 # Appearance & Style: Colors, Icons, Plasma Style, Application Style,
-# Fonts and Global Theme, with the krdb library they share. WORKSPACE_SRC is
+# Fonts, Cursors, Wallpaper, System Sounds and Global Theme, with the krdb library
+# they share. WORKSPACE_SRC is
 # plasma-workspace's source. There's no X11 here: the pages' X11 code is
 # behind HAVE_X11, and X11::X11 is an empty target for the few that link it
 # unconditionally.
@@ -29,9 +30,13 @@ find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Core DBus Gui Qml 
 find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS
     Archive ColorScheme Config CoreAddons DBusAddons GuiAddons I18n IconThemes JobWidgets
     KCMUtils KIO NewStuff Package Service Svg WindowSystem XmlGui)
+find_package(KF6Config ${KF6_MIN_VERSION} REQUIRED COMPONENTS Qml)
 find_package(Plasma 6.4.5 REQUIRED)
+find_package(PlasmaQuick 6.4.5 REQUIRED)
+find_package(PlasmaActivities 6.4.5 REQUIRED)
 find_package(Breeze 6.4.5 CONFIG)
 find_package(Fontconfig REQUIRED)
+find_package(Canberra REQUIRED) # build_libcanberra
 find_package(LibKWorkspace 6.4.5 CONFIG REQUIRED) # plasmashell's (build_plasmashell)
 
 set(HAVE_X11 0)
@@ -57,3 +62,14 @@ add_subdirectory(${WORKSPACE_SRC}/kcms/lookandfeel lookandfeel)
 
 # Fonts: fonts.cmake in place of kcms/fonts/CMakeLists.txt (build_kcms_workspace).
 add_subdirectory(${WORKSPACE_SRC}/kcms/fonts fonts)
+# Cursors: cursortheme.cmake in place of its CMakeLists.txt, with x11-shim/.
+set(X11_SHIM ${CMAKE_CURRENT_SOURCE_DIR}/x11-shim)
+add_subdirectory(${WORKSPACE_SRC}/kcms/cursortheme cursortheme)
+# Wallpaper: the desktop's wallpaper, set in plasmashell over D-Bus.
+# Its DefaultWallpaper is libkworkspace's, which doesn't install the header.
+# Nor config-outputorder.h, which its installed outputorderwatcher.h includes.
+configure_file(${WORKSPACE_SRC}/libkworkspace/defaultwallpaper.h ${CMAKE_CURRENT_BINARY_DIR}/defaultwallpaper.h COPYONLY)
+configure_file(${WORKSPACE_SRC}/libkworkspace/config-outputorder.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-outputorder.h)
+add_subdirectory(${WORKSPACE_SRC}/kcms/wallpaper wallpaper)
+# System Sounds: the sound theme for notifications (libcanberra, as KNotifications).
+add_subdirectory(${WORKSPACE_SRC}/kcms/soundtheme soundtheme)
