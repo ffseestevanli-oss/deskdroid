@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+X-KDE-System-Settings-Category=gestures
+X-KDE-System-Settings-Parent-Category=
+X-KDE-Weight=15
+Icon=input-touchscreen
+
+Name=Gestures
+Comment=Swipes from the screen's edges and corners, and taps
+X-KDE-Keywords=gesture,gestures,swipe,edge,corner,tap,triple tap,touch,touchpad,direct touch

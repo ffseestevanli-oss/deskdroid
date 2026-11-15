@@ -33,6 +33,12 @@ private val KWIN_GRAPHICS_LINES = listOf(
     "nativedesk: KWin's test shader", "nativedesk: egl", "Creating the OpenGL rendering failed", "extension is unsupported",
     "Failed to compile", "Failed to link", "Driver does not recommend")
 private const val EDGE_DP = 56f // how far up from the bottom a corner swipe may start
+private const val SIDE_DP = 20f // how far in from an edge an edge swipe may start (Gestures)
+private const val SWIPE_MS = 500L // a swipe in from an edge or corner is clear by then, or it isn't one
+private const val TAP_MS = 250L // a tap is shorter (triple tap)
+private const val TAP_GAP_MS = 350L // and the next one follows sooner
+private const val TAP_SLOP_DP = 16f // a tap moves less
+private const val TAP_NEAR_DP = 48f // and lands this close to the one before
 
 /**
  * Native desktop test: the first step towards running Plasma as Android code
@@ -164,6 +170,10 @@ object NativeDesk {
     const val ACTION_SHOW_DESKTOP = 1
     /** NDESK_ACTION_BACK: leaves Plasma's edit mode, else Escape (Back). */
     const val ACTION_BACK = 4
+    /** NDESK_ACTION_LAUNCHER: Plasma's start menu (a gesture, System Settings › Gestures). */
+    const val ACTION_LAUNCHER = 5
+    /** NDESK_ACTION_OVERVIEW: KWin's Overview (a gesture). */
+    const val ACTION_OVERVIEW = 6
     /** The phone asleep (SleepMode): the compositor hands out a frame a second, not twenty. */
     @JvmStatic external fun nativeSetSleeping(sleeping: Boolean)
     /** The power profile's frame cap (PowerProfile): at most fps frames a second, 0 for the screen's rate. */
@@ -723,6 +733,10 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             v.onApplyWindowInsets(insets)
         }
         systemBars(false) // full screen, unless the menu's Android bars are on
+        // System Settings › Gestures: read now and again whenever it's saved.
+        Gestures.start(this)
+        Gestures.changed = onGesturesChanged
+        window.decorView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> claimSideEdges() }
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
@@ -2428,59 +2442,195 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             .show()
     }
 
-    // ---- Swipes up from the bottom corners (in every touch mode): left
-    // brings the keyboard, right opens the DD menu. A touch that starts in a
-    // corner is held back until it's clearly a swipe up or clearly not one;
-    // if not, it goes to the desktop as it happened. Android's navigation bar
-    // comes up only for a swipe from the bottom's middle: one that a corner
-    // swipe revealed is put away again (the menu shows its own).
-    private var edge = 0 // 0 none, 1 left corner, 2 right corner, -1 swipe done (rest of the touch ignored)
-    private var edgeX = 0f
-    private var edgeY = 0f
+    // ---- Touch gestures (in every touch mode; System Settings › Gestures
+    // sets what each does, Gestures.kt): swipes in from the bottom corners
+    // (keyboard and DD menu unless changed), the bottom, left, right and top
+    // edges, and a triple tap (Touchpad <-> Direct touch unless changed).
+    // A touch that starts where a gesture could begin is held back until it's
+    // clearly that gesture or clearly not; if not, it goes to the desktop as
+    // it happened. Only gestures with an action hold anything back. Android's
+    // navigation bar comes up for a swipe from the bottom it doesn't get: one
+    // that a gesture revealed is put away again (the menu shows its own).
+    private var hold = 0 // 0 passing through, 1 maybe an edge swipe, 2 maybe a third tap, -1 gesture done (rest of the touch ignored)
+    private var holdZone = ""
+    private var downX = 0f
+    private var downY = 0f
+    private var multiTouch = false
     private val held = ArrayList<MotionEvent>()
+    // The taps just before this touch, for the triple tap.
+    private var taps = 0
+    private var lastTapUp = 0L
+    private var lastTapX = 0f
+    private var lastTapY = 0f
+    // A finger that rests where a gesture could start, without moving: once
+    // it's clearly not a gesture, the desktop gets it (a press and hold).
+    private val releaseHeld = Runnable {
+        if (hold <= 0) return@Runnable
+        if (hold == 1) hideCornerBars()
+        hold = 0
+        replayHeld()
+    }
 
     override fun dispatchTouchEvent(e: MotionEvent): Boolean {
-        if (e.actionMasked == MotionEvent.ACTION_DOWN) {
-            edge = 0
-            val v = window.decorView
-            // The desktop's bottom corners: above the navigation bar while Android's bars stay shown.
-            val bottom = v.height - ((surfaceView.layoutParams as? FrameLayout.LayoutParams)?.bottomMargin ?: 0)
-            if (started && menu.visibility != android.view.View.VISIBLE &&
-                    !e.isFromSource(InputDevice.SOURCE_MOUSE) && e.rawY > bottom - dp(EDGE_DP) && e.rawY <= bottom) {
-                edge = when {
-                    e.rawX < v.width * 0.3f -> 1
-                    e.rawX > v.width * 0.7f -> 2
-                    else -> 0
+        if (e.isFromSource(InputDevice.SOURCE_MOUSE)) return super.dispatchTouchEvent(e)
+        val act = e.actionMasked
+        if (act == MotionEvent.ACTION_DOWN) {
+            main.removeCallbacks(releaseHeld)
+            held.forEach { it.recycle() }; held.clear()
+            hold = 0; multiTouch = false
+            downX = e.rawX; downY = e.rawY
+            if (started && menu.visibility != android.view.View.VISIBLE) {
+                if (taps >= 2 && e.eventTime - lastTapUp < TAP_GAP_MS && nearLastTap(e) &&
+                        Gestures.action(Gestures.TRIPLE_TAP) != Gestures.NONE) {
+                    hold = 2
+                    main.postDelayed(releaseHeld, TAP_MS)
+                } else {
+                    gestureZone(e)?.let { holdZone = it; hold = 1; main.postDelayed(releaseHeld, SWIPE_MS) }
                 }
             }
-            if (edge == 0) return super.dispatchTouchEvent(e)
-            edgeX = e.rawX; edgeY = e.rawY
+            if (hold == 0) return super.dispatchTouchEvent(e)
             held.add(MotionEvent.obtain(e))
             return true
         }
-        val end = e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL
-        when (edge) {
-            0 -> return super.dispatchTouchEvent(e)
-            -1 -> { if (end) edge = 0; return true }
+        if (act == MotionEvent.ACTION_POINTER_DOWN) multiTouch = true
+        val end = act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL
+        when (hold) {
+            0 -> { if (end) countTap(e); return super.dispatchTouchEvent(e) }
+            -1 -> { if (end) hold = 0; return true }
+            2 -> {
+                val tap = !multiTouch && act != MotionEvent.ACTION_CANCEL && !movedFromDown(e, TAP_SLOP_DP) &&
+                    e.eventTime - e.downTime < TAP_MS
+                if (tap && act == MotionEvent.ACTION_UP) {
+                    gestureDone()
+                    taps = 0
+                    runGesture(Gestures.action(Gestures.TRIPLE_TAP))
+                    hold = 0
+                    return true
+                }
+                if (tap) { held.add(MotionEvent.obtain(e)); return true }
+                taps = 0
+                return replayWith(e)
+            }
         }
-        val up = edgeY - e.rawY
-        val side = abs(e.rawX - edgeX)
-        if (e.actionMasked == MotionEvent.ACTION_MOVE && up > dp(48f) && up > side * 1.5f) {
-            val which = edge
-            edge = -1
-            held.forEach { it.recycle() }; held.clear()
-            if (which == 1) toggleKeyboard() else showMenu(true)
+        // hold == 1: maybe a swipe in from holdZone.
+        val dx = e.rawX - downX
+        val dy = e.rawY - downY
+        val along = when (holdZone) { Gestures.LEFT -> dx; Gestures.RIGHT -> -dx; Gestures.TOP -> dy; else -> -dy }
+        val across = if (holdZone == Gestures.LEFT || holdZone == Gestures.RIGHT) abs(dy) else abs(dx)
+        if (act == MotionEvent.ACTION_MOVE && along > dp(48f) && along > across * 1.5f) {
+            gestureDone()
+            runGesture(Gestures.action(holdZone))
             hideCornerBars()
             return true
         }
-        val notASwipe = end || e.actionMasked == MotionEvent.ACTION_POINTER_DOWN ||
-            side > dp(32f) || e.eventTime - e.downTime > 500
+        val notASwipe = end || act == MotionEvent.ACTION_POINTER_DOWN ||
+            across > dp(32f) || e.eventTime - e.downTime > SWIPE_MS
         if (!notASwipe) { held.add(MotionEvent.obtain(e)); return true }
-        edge = 0
         hideCornerBars()
+        if (end) countTap(e)
+        return replayWith(e)
+    }
+
+    /** The held touch was a gesture: the desktop never sees it. */
+    private fun gestureDone() {
+        hold = -1
+        main.removeCallbacks(releaseHeld)
+        held.forEach { it.recycle() }; held.clear()
+    }
+
+    private fun replayHeld() {
+        main.removeCallbacks(releaseHeld)
         held.forEach { super.dispatchTouchEvent(it); it.recycle() }; held.clear()
+    }
+
+    /** Not a gesture after all: the desktop gets the held touch, then this event. */
+    private fun replayWith(e: MotionEvent): Boolean {
+        hold = 0
+        replayHeld()
         return super.dispatchTouchEvent(e)
     }
+
+    /** Where a gesture with an action could start under this finger, or null. */
+    private fun gestureZone(e: MotionEvent): String? {
+        val v = window.decorView
+        // The desktop's bottom: above the navigation bar while Android's bars stay shown.
+        val bottom = v.height - ((surfaceView.layoutParams as? FrameLayout.LayoutParams)?.bottomMargin ?: 0)
+        val x = e.rawX
+        val y = e.rawY
+        if (y > bottom) return null
+        val corner = y > bottom - dp(EDGE_DP)
+        val zones = listOfNotNull(
+            if (corner && x < v.width * 0.3f) Gestures.BOTTOM_LEFT else null,
+            if (corner && x > v.width * 0.7f) Gestures.BOTTOM_RIGHT else null,
+            if (x < dp(SIDE_DP)) Gestures.LEFT else null,
+            if (x > v.width - dp(SIDE_DP)) Gestures.RIGHT else null,
+            if (y < dp(SIDE_DP)) Gestures.TOP else null,
+            if (y > bottom - dp(SIDE_DP)) Gestures.BOTTOM else null,
+        )
+        return zones.firstOrNull { Gestures.action(it) != Gestures.NONE }
+    }
+
+    private fun movedFromDown(e: MotionEvent, slopDp: Float) =
+        kotlin.math.hypot(e.rawX - downX, e.rawY - downY) > dp(slopDp)
+
+    private fun nearLastTap(e: MotionEvent) =
+        kotlin.math.hypot(e.rawX - lastTapX, e.rawY - lastTapY) < dp(TAP_NEAR_DP)
+
+    /** A touch the desktop got just ended: a tap counts towards a triple tap. */
+    private fun countTap(e: MotionEvent) {
+        val tap = e.actionMasked == MotionEvent.ACTION_UP && !multiTouch &&
+            !movedFromDown(e, TAP_SLOP_DP) && e.eventTime - e.downTime < TAP_MS
+        if (!tap) { taps = 0; return }
+        taps = if (taps > 0 && e.eventTime - lastTapUp < TAP_GAP_MS && nearLastTap(e)) taps + 1 else 1
+        lastTapUp = e.eventTime
+        lastTapX = e.rawX; lastTapY = e.rawY
+    }
+
+    /** What a gesture does (Gestures' actions). */
+    private fun runGesture(action: String) {
+        AppLog.i("Gestures: $action")
+        when (action) {
+            Gestures.DD_MENU -> showMenu(true)
+            Gestures.KEYBOARD ->
+                if (Build.VERSION.SDK_INT >= 30 && surfaceView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true) softKeyboard(false)
+                else toggleKeyboard()
+            Gestures.TOUCH_MODE -> {
+                val next = if (Prefs.touchMode(this) == "direct") "touchpad" else "direct"
+                Prefs.setTouchMode(this, next)
+                android.widget.Toast.makeText(this, Prefs.TOUCH_MODE_LABELS[Prefs.TOUCH_MODES.indexOf(next)],
+                    android.widget.Toast.LENGTH_SHORT).show()
+            }
+            Gestures.START_MENU -> NativeDesk.nativeAction(NativeDesk.ACTION_LAUNCHER)
+            Gestures.OVERVIEW -> NativeDesk.nativeAction(NativeDesk.ACTION_OVERVIEW)
+            Gestures.SHOW_DESKTOP -> NativeDesk.nativeAction(NativeDesk.ACTION_SHOW_DESKTOP)
+            Gestures.BACK -> NativeDesk.nativeAction(NativeDesk.ACTION_BACK)
+            Gestures.SWITCH_WINDOW -> {
+                // Alt+Tab, let go at once: KWin goes to the window used before.
+                NativeDesk.nativeKey(KeyEvent.KEYCODE_ALT_LEFT, 0, true)
+                NativeDesk.nativeKey(KeyEvent.KEYCODE_TAB, 0, true)
+                NativeDesk.nativeKey(KeyEvent.KEYCODE_TAB, 0, false)
+                NativeDesk.nativeKey(KeyEvent.KEYCODE_ALT_LEFT, 0, false)
+            }
+        }
+    }
+
+    /**
+     * Android's Back gesture takes swipes in from the side edges. While a
+     * side edge has a gesture, its middle (as much as Android allows, 200dp)
+     * is the desktop's; above and below it Back still works.
+     */
+    private fun claimSideEdges() {
+        val v = window.decorView
+        if (v.height == 0) return
+        val band = minOf(dp(200f).toInt(), v.height)
+        val top = (v.height - band) / 2
+        val wide = dp(SIDE_DP).toInt()
+        val rects = ArrayList<android.graphics.Rect>()
+        if (Gestures.action(Gestures.LEFT) != Gestures.NONE) rects += android.graphics.Rect(0, top, wide, top + band)
+        if (Gestures.action(Gestures.RIGHT) != Gestures.NONE) rects += android.graphics.Rect(v.width - wide, top, v.width, top + band)
+        if (v.systemGestureExclusionRects != rects) v.systemGestureExclusionRects = rects
+    }
+    private val onGesturesChanged: () -> Unit = { main.post { claimSideEdges() } }
 
     /**
      * Android shows its hidden bars for a swipe from anywhere along the
@@ -2825,6 +2975,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     override fun onDestroy() {
+        if (Gestures.changed === onGesturesChanged) Gestures.changed = null
         if (external) MonitorGuard.dexMetaKeys(this, false)
         if (external && NativeDesk.owner?.get().let { it == null || it === this }) MonitorOverlay.hide()
         main.removeCallbacks(tick)
