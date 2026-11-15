@@ -485,13 +485,17 @@ start_x() {
   fi
   rm -f "$XP" "$XR"
   mkdir -p "$XT/.X11-unix" "$XT/xkb"
+  # dash, the /bin/sh it runs xkbcomp with: flatpak-cli has it as usr/bin/sh
+  # (the APK keeps one name per file), not usr/bin/dash.
+  XSH="$CLI/usr/bin/sh"
+  [ -f "$CLI/usr/bin/dash" ] && XSH="$CLI/usr/bin/dash"
   geo="${DESKDROID_X_GEOMETRY:-1280x800}"
   if [ "$geo" = fullscreen ]; then size="-fullscreen"; else size="-geometry $geo"; fi
   decorate=""
   grep -qs -- '-decorate' "$XW" && decorate="-decorate"
   echo "$SID: X11 only: starting an X server (Xwayland :$XN, $geo)" >&2
   ( export DDFLATPAK_RUNTIME="$CLI/usr" DDFLATPAK_APP="$CLI/nothing" DDFLATPAK_TMP="$XT" \
-      DDFLATPAK_MOUNTS="/bin/sh=$CLI/usr/bin/dash;/var/lib/xkb=$XT/xkb" \
+      DDFLATPAK_MOUNTS="/bin/sh=$XSH;/var/lib/xkb=$XT/xkb" \
       DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" \
       DDFLATPAK_LIBPATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" PATH="/system/bin:$PATH"
     # Drawing on the CPU: no GL for its glamor here (no libEGL in flatpak-cli),
@@ -520,12 +524,12 @@ start_x() {
     if grep -qs 'Failed to compile keymap' "$D/xwayland.log"; then
       { echo "== xkbcomp, as the X server runs it"
         ( export DDFLATPAK_RUNTIME="$CLI/usr" DDFLATPAK_APP="$CLI/nothing" DDFLATPAK_TMP="$XT" \
-            DDFLATPAK_MOUNTS="/bin/sh=$CLI/usr/bin/dash;/var/lib/xkb=$XT/xkb" \
+            DDFLATPAK_MOUNTS="/bin/sh=$XSH;/var/lib/xkb=$XT/xkb" \
             DDMASK_GLIBC_LD_LIBRARY_PATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" \
             DDFLATPAK_LIBPATH="$F/glibc/lib:$CLI/usr/lib/$TRIPLE:$CLI/usr/lib" DDMASK_DEBUG=1
           unset DDFLATPAK_LOADER DDMASK_GLIBC_LD_AUDIT
           echo 'xkb_keymap { xkb_keycodes { include "evdev+aliases(qwerty)" }; xkb_types { include "complete" }; xkb_compat { include "complete" }; xkb_symbols { include "pc+us+inet(evdev)" }; xkb_geometry { include "pc(pc105)" }; };' |
-            $G "$CLI/usr/bin/dash" -c 'echo "sh: $0"; ls -l /usr/bin/xkbcomp /usr/share/X11/xkb /var/lib/xkb; /usr/bin/xkbcomp -w 1 -R/usr/share/X11/xkb -xkm - -em1 "xkbcomp says:" /var/lib/xkb/probe.xkm; echo "xkbcomp exit $?"; ls -l /var/lib/xkb/probe.xkm'
+            $G "$XSH" -c 'echo "sh: $0"; ls -l /usr/bin/xkbcomp /usr/share/X11/xkb /var/lib/xkb; /usr/bin/xkbcomp -w 1 -R/usr/share/X11/xkb -xkm - -em1 "xkbcomp says:" /var/lib/xkb/probe.xkm; echo "xkbcomp exit $?"; ls -l /var/lib/xkb/probe.xkm'
         ) 2>&1 | tail -n 40; } >> "$D/xwayland.log"
     fi
   fi

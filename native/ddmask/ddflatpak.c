@@ -355,12 +355,18 @@ static const char *resolve(const char *path, char *const argv[], char ***out, ch
             /* An interpreter of the system's (Android's /system/bin/sh) has no
              * ddflatpak to find /usr/bin/x: give it the script's real path. */
             char ib[PATH_MAX];
-            a[add] = map(interp, ib) == interp && strcmp(m, path) ? strdup(m) : (char *)path;
+            if (map(interp, ib) == interp && strcmp(m, path)) a[add] = strdup(m);
+            else a[add] = path == self ? strdup(self) : (char *)path;
             argc += add;
             path = interp;
             continue;
         }
         *out = a;
+        /* self is this function's: the caller gets a copy in its own buf
+         * (Electron's helpers, started as /proc/self/exe without a loader,
+         * otherwise exec'd a path its later calls had written over: "" or
+         * "/data/data/io.de"). */
+        if (m == self) { snprintf(buf, PATH_MAX, "%s", self); m = buf; }
         return m; /* anything else: as the system would */
     }
     free(a);
