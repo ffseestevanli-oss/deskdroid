@@ -432,7 +432,7 @@ build_libvorbis() {
   test -e "$PREFIX/lib/pkgconfig/vorbisfile.pc"
 }
 build_libcanberra() {
-  local s; s="$(unpack http://0pointer.de/lennart/projects/libcanberra/libcanberra-0.30.tar.xz libcanberra-0.30.tar.xz)"
+  local s; s="$(unpack https://deb.debian.org/debian/pool/main/libc/libcanberra/libcanberra_0.30.orig.tar.xz libcanberra-0.30.tar.xz)"
   cp /usr/share/misc/config.sub /usr/share/misc/config.guess "$s/build-aux/"
   perl -0pi -e 's/as_fn_error \$\? "Unable to find libltdl\." "\$LINENO" 5/:/ or die "ltdl check"' "$s/configure"
   # Its own malloc.h hides the system's from Bionic's stdlib.h (which includes
