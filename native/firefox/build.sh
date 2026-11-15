@@ -89,7 +89,8 @@ if [ "$BRANDING" = browser/branding/etherium ]; then
   mkdir -p "$dist/extensions"
   sed "s|@DISTRIBUTION@|$DESKDROID_FIREFOX_DIR/distribution|g" "$HERE/etherium/policies.json" > "$dist/policies.json"
   curl -sSfL --retry 4 -o "$dist/extensions/uBlock0@raymondhill.net.xpi" "$UBLOCK_URL"
-  unzip -l "$dist/extensions/uBlock0@raymondhill.net.xpi" | grep -q "manifest.json"
+  # (grep -q would stop reading early: unzip then dies of SIGPIPE, which pipefail counts)
+  unzip -l "$dist/extensions/uBlock0@raymondhill.net.xpi" | grep "manifest.json" >/dev/null
   name="$(basename "$pkg")"
   (cd "$OUT/pkg" && tar cJf "$OUT/${name%%.tar.*}.tar.xz" *)
   rm -rf "$OUT/pkg"
