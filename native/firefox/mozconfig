@@ -28,8 +28,12 @@ ac_add_options --disable-synth-speechd
 ac_add_options --disable-elf-hack
 ac_add_options --disable-webrtc
 ac_add_options --disable-dbus
-# Sound through Android itself (AAudio); Termux uses PulseAudio.
-ac_add_options --enable-audio-backends=aaudio
+# Sound: PulseAudio first, into the desktop's sound server (PipeWire, where
+# ViPER FX and EasyEffects hear it; libpulse is native/plasma's, opened as
+# libpulse.so.0, the stand-in native/nativedesk puts next to the browser),
+# else Android itself (AAudio) when no server is running. cubeb tries them
+# in that order. Termux uses PulseAudio only.
+ac_add_options --enable-audio-backends=pulseaudio,aaudio
 # The NDK's clang for the phone (API 29, Android 10), the runner's clang 19
 # for build tools that run on the build machine. __ANDROID__ off for C++ and
 # __TERMUX__ on, as in Termux: Bionic, but Linux everywhere else.
