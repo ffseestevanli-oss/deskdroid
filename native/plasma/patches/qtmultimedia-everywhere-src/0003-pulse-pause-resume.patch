@@ -1,0 +1,42 @@
+diff --git a/src/multimedia/pulseaudio/qpulseaudiosink.cpp b/src/multimedia/pulseaudio/qpulseaudiosink.cpp
+index f8790cf..19f5917 100644
+--- a/src/multimedia/pulseaudio/qpulseaudiosink.cpp
++++ b/src/multimedia/pulseaudio/qpulseaudiosink.cpp
+@@ -144,7 +144,14 @@ QAudio::State QPulseAudioSink::state() const
+ 
+ void QPulseAudioSink::streamUnderflowCallback()
+ {
+-    bool atEnd = m_audioSource && m_audioSource->atEnd();
++    // DeskDroid: only a pulled source can be at its end. In push mode
++    // m_audioSource is our own write-only device, whose atEnd() is always
++    // true, so every underrun (a paused player writes nothing) drained the
++    // stream, and each drain lets the server's read index run past what was
++    // written. After a long pause the player's new sound landed behind it and
++    // was dropped until writing caught up: Sasha played silence after a pause
++    // until a seek or the next song made a new stream.
++    bool atEnd = m_pullMode && m_audioSource && m_audioSource->atEnd();
+     if (atEnd && m_stateMachine.state() != QAudio::StoppedState) {
+         qCDebug(qLcPulseAudioOut) << "Draining stream at end of buffer";
+         exchangeDrainOperation(pa_stream_drain(m_stream.get(), outputStreamDrainComplete, this));
+diff --git a/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegaudiorenderer.cpp b/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegaudiorenderer.cpp
+index 1140b9f..bc650b9 100644
+--- a/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegaudiorenderer.cpp
++++ b/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegaudiorenderer.cpp
+@@ -217,6 +217,17 @@ std::chrono::milliseconds AudioRenderer::timerInterval() const
+ void AudioRenderer::onPauseChanged()
+ {
+     m_firstFrameToSink = true;
++    // DeskDroid: pause the sink with the player. Left running, a paused
++    // player's sink sits in an endless underrun, which keeps the sound server
++    // (and Android's audio output behind it) playing silence; suspended, the
++    // PulseAudio stream is corked and the server can go idle.
++    if (m_sink) {
++        if (isPaused() && m_sink->state() != QAudio::SuspendedState
++            && m_sink->state() != QAudio::StoppedState)
++            m_sink->suspend();
++        else if (!isPaused() && m_sink->state() == QAudio::SuspendedState)
++            m_sink->resume();
++    }
+     Renderer::onPauseChanged();
+ }
+ 
