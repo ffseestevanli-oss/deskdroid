@@ -59,6 +59,8 @@ printf 'root:x:0:0:root:/root:/bin/bash\nnobody:x:65534:65534:Nobody:/:/sbin/nol
 printf 'root:x:0:\nwheel:x:10:\n' > "$S/runtime-kde-6.11/program/files/etc/group"
 mkdir -p "$T/phone/Music"
 printf 'XDG_MUSIC_DIR="%s"\nXDG_VIDEOS_DIR="/nonexistent/phone/Movies"\nXDG_TEMPLATES_DIR="$HOME/Templates"\n' "$T/phone/Music" > "$T/desk-config/user-dirs.dirs"
+mkdir -p "$T/home/.local/share/applications"; echo "[Desktop Entry]" > "$T/home/.local/share/applications/kid3.desktop"
+printf '%s\n' "$T/home/.local/share/icons/kid3.png" "$T/home/.local/share/applications/kid3.desktop" > "$S/kid3/files.txt"
 out="$(run kid3 --dd-command=kid3-cli a b)"
 log="$(cat "$S/kid3/run.log")"
 expect "reads the app, its command and its runtime from the package" "$log" \
@@ -126,6 +128,8 @@ expect "a user folder the app can't open is DeskDroid's own instead, for that ap
   "^XDG_VIDEOS_DIR=\"$F/Movies\"$" "^XDG_MUSIC_DIR=\"$T/phone/Music\"$" "^XDG_TEMPLATES_DIR=\"\\\$HOME/Templates\"$" \
   "kid3: it can't open /nonexistent/phone/Movies; it gets $F/Movies instead" "^made$"
 expect "...laid over the desktop's file" "$out" "^DDFLATPAK_MOUNTS=.*;$T/desk-config/user-dirs.dirs=$F/flatpak-tmp/user-dirs.kid3.dirs(;|$)"
+expect "the menu entry for the taskbar's icon and notifications (BAMF_DESKTOP_FILE_HINT)" "$out" \
+  "^BAMF_DESKTOP_FILE_HINT=$T/home/.local/share/applications/kid3.desktop$"
 expect "the Android user in /etc/passwd and /etc/group, after the runtime's" \
   "$(cat "$F/flatpak-tmp/etc/passwd" "$F/flatpak-tmp/etc/group")" "^nobody:x:65534:65534:Nobody:/:/sbin/nologin$" \
   "^[A-Za-z0-9_.-]+:x:$(id -u):$(id -g):DeskDroid:$T/home:/bin/sh$" "^wheel:x:10:$" "^[A-Za-z0-9_.-]+:x:$(id -g):$"

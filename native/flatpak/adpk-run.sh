@@ -399,6 +399,14 @@ cat > "$F/flatpak-tmp/fonts.conf" <<FONTS
 FONTS
 export FONTCONFIG_FILE="$F/flatpak-tmp/fonts.conf"
 export FLATPAK_ID="$FPID" LOCPATH="$RT/lib/locale" LANG="${LANG:-C.UTF-8}"
+# Its menu entry, for the taskbar's icon and the name on its notifications:
+# Plasma reads BAMF_DESKTOP_FILE_HINT from a window's process (as for Snaps)
+# when the window's app id names no menu entry. Otherwise the process is
+# glibc's loader (libdd_ld-glibc.so): no icon, and that name. The store's
+# package (files.txt) or the entry Flatpak exported.
+hint="$(grep -m 1 '/applications/[^/]*\.desktop$' "$S/$SID/files.txt" 2>/dev/null)"
+[ -f "$hint" ] || hint="$F/flatpak/exports/share/applications/$FPID.desktop"
+[ -f "$hint" ] && export BAMF_DESKTOP_FILE_HINT="$hint"
 export GST_PLUGIN_SYSTEM_PATH=/app/lib/gstreamer-1.0:/usr/lib/extensions/gstreamer-1.0:/usr/lib/$TRIPLE/gstreamer-1.0
 # [Environment] from the runtime's metadata (QT_PLUGIN_PATH=/app/lib/plugins...),
 # then the app's ("KEY = value" or "KEY=value").
