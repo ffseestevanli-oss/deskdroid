@@ -754,6 +754,8 @@ done:
 
 static int dd_execve(const char *path, char *const argv[], char *const envp[]) {
     if (!path) { errno = EFAULT; return -1; }
+    /* execve("") is ENOENT without a journal line (programs probe with it). */
+    if (!*path) { errno = ENOENT; return -1; }
     char *nargv[count(argv) + EXTRA_ARGS + 2];
     char *nenvp[2 * count(envp) + WORLDS + 3];
     struct plan pl;
