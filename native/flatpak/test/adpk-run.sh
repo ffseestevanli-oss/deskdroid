@@ -116,6 +116,22 @@ expect "...started once" "$(grep -c xargs "$T/xwayland.txt")" "^1$"
 kill "$(cat "$F/flatpak-tmp/.X8-pid")" 2>/dev/null || true; rm -f "$F/flatpak-tmp/.X8-pid"
 xout="$(xrun "$T/none")"
 expect "...says so when the build has no Xwayland" "$xout" "^vlc: X11 only, and this DeskDroid build has no X server \(Xwayland\)$" "^vlc: starting /app/bin/vlc"
+# KWin's X server (its Xwayland support): its lock file in XDG_RUNTIME_DIR.
+mkdir -p "$T/run"; sleep 30 & kpid=$!
+printf '%10d\n' "$kpid" > "$T/run/.X0-lock"
+: > "$T/xwayland.txt"
+xout="$(xrun "$T/cli")"
+expect "with KWin's X server, X11-only apps use it: desktop windows" "$xout" "^DISPLAY=:0$" "^vlc: X11 only: KWin's X server on :0$"
+expect "...and no X server of their own" "x$(cat "$T/xwayland.txt")" "^x$"
+kill "$kpid"; wait "$kpid" 2>/dev/null || true
+xout="$(xrun "$T/none")"
+expect "...not once KWin's has gone" "$xout" "^vlc: X11 only, and this DeskDroid build has no X server"
+rm -f "$T/run/.X0-lock"
+# xwayland.sh: flatpak-cli's Xwayland with its paths, as KWin starts it.
+: > "$T/xwayland.txt"
+env -i HOME="$F" PATH=/usr/bin:/bin DESKDROID_LIBS="$L" DESKDROID_FLATPAK_CLI="$T/cli" sh "$HERE/../xwayland.sh" :0 -rootless -displayfd 3 3>/dev/null
+expect "xwayland.sh starts it for KWin, keyboard maps through dash" "$(cat "$T/xwayland.txt")" "^xargs: :0 -rootless -displayfd 3$" \
+  "^XWAYLAND_NO_GLAMOR=1$" "^DDFLATPAK_MOUNTS=/bin/sh=$T/cli/usr/bin/sh;/var/lib/xkb=$F/flatpak-tmp/xkb$" "^DDFLATPAK_RUNTIME=$T/cli/usr$"
 expect "apps that draw through Wayland get no X server" "$(run kid3 2>&1 | grep -c '^DISPLAY=' || true)" "^0$"
 expect "...the same each start" "$(grep -c "^gtk-theme=" "$T/desk-config/glib-2.0/settings/keyfile")" "^1$"
 expect "Android's fonts beside the runtime's" "$(cat "$F/flatpak-tmp/fonts.conf")" "<include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>" "<dir>/system/fonts</dir>"

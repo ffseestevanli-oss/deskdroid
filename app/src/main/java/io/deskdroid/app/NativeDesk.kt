@@ -1046,10 +1046,18 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             startSound(libs, runtime)
             startGpu(libs, runtime)
             val scale = NativeDesk.desktopScale(this).toDouble()
+            // X11 apps (Flathub's VLC) as desktop windows: KWin's Xwayland
+            // support, with flatpak-cli's Xwayland (native/flatpak/xwayland.sh).
+            // Started when the first X11 app connects. A file named kwin-no-x11
+            // in the app's files folder turns it off.
+            val xwayland = File(libs, "libdd_xwayland.so").takeIf {
+                it.exists() && File(libs, "libdd_flatpakcli.so").exists() && !File(filesDir, "kwin-no-x11").exists()
+            }
             val p = ProcessBuilder(
-                "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
-                QtHost::class.java.name, libs, "libkwin_wayland.so",
-                "--nativedesk", "--scale", scale.toString(), "--socket", "wayland-0"
+                listOf("/system/bin/app_process", "-Xnoimage-dex2oat", "/",
+                    QtHost::class.java.name, libs, "libkwin_wayland.so",
+                    "--nativedesk", "--scale", scale.toString(), "--socket", "wayland-0") +
+                    (if (xwayland != null) listOf("--xwayland") else emptyList())
             ).redirectErrorStream(true).also { pb ->
                 pb.environment().apply {
                     remove("LD_PRELOAD")
@@ -1080,6 +1088,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("KDE_DEBUG", "1")
                     put("QT_LOGGING_RULES", "js=true;kde.plasma.activitiesstats=false;qt.sql.qsqldatabase=false") // no KCrash handler: our own prints where a crash happened
                     put("KWIN_FORCE_OWN_QPA", "1") // KWin only takes its own Qt platform plugin when the program is named kwin_wayland; ours is app_process
+                    xwayland?.let { put("KWIN_XWAYLAND", it.path) }
                     ddmaskHostEnv(this)
                 }
             }.start()

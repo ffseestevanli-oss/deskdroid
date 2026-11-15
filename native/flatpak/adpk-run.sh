@@ -498,6 +498,22 @@ xalive() {
   st="$(sed 's/.*) //; s/ .*//' "/proc/$1/stat" 2>/dev/null)"
   [ "$st" != Z ] && [ "$st" != X ]
 }
+# KWin's own X server (its Xwayland support, NativeDesk.kt): X11 windows are
+# desktop windows like any other. Its lock files are in $XDG_RUNTIME_DIR
+# (.X<n>-lock, KWin's pid); X clients reach it at DISPLAY=:<n>.
+kwin_x() {
+  for lock in "${XDG_RUNTIME_DIR:-$F/runtime}"/.X*-lock; do
+    [ -f "$lock" ] || continue
+    n="${lock##*/.X}"; n="${n%-lock}"
+    case "$n" in ''|*[!0-9]*) continue ;; esac
+    lpid="$( { tr -cd '0-9' < "$lock"; } 2>/dev/null)"
+    [ -n "$lpid" ] && kill -0 "$lpid" 2>/dev/null || continue
+    export DISPLAY=":$n"
+    echo "$SID: X11 only: KWin's X server on :$n" >&2
+    return 0
+  done
+  return 1
+}
 start_x() {
   CLI="${DESKDROID_FLATPAK_CLI:-$F/flatpak-cli}"
   XW="${DESKDROID_XWAYLAND:-$CLI/usr/bin/Xwayland}"
@@ -569,7 +585,7 @@ start_x() {
 }
 xsockets="$(sed -n '/^\[Context\]/,/^\[/{s/^sockets *= *//p}' "$meta" | head -n 1)"
 case ";$xsockets;" in
-  *";x11;"*) case ";$xsockets;" in *";wayland;"*|*";fallback-x11;"*) ;; *) start_x ;; esac ;;
+  *";x11;"*) case ";$xsockets;" in *";wayland;"*|*";fallback-x11;"*) ;; *) kwin_x || start_x ;; esac ;;
 esac
 export PATH=/app/bin:/usr/bin
 echo "$SID: starting $prog $* (${FPID:-?}, ${RTPKG:-${RT:-no runtime}}, $gpu)" >&2
