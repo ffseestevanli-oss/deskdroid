@@ -1316,15 +1316,18 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             // (DDMASK_MODULE, with api-1 when it fits this APK) and otherwise uses
             // the APK's own copies; DDMASK_LIBS is the APK's folder, for the
             // loaders, which Android only runs from there.
-            val module = File(filesDir, "store/apps/ddmask/program")
+            // A module older than this APK is passed over (DdmaskModule).
             env["DDMASK_LIBS"] = libs
-            env["DDMASK_MODULE"] = module.path
-            val modLib = File(module, "lib/libddmask.so")
-            if (File(module, "api-1").exists() && modLib.exists()) {
+            val module = DdmaskModule.dir(filesDir)
+            if (module == null && DdmaskModule.stale(filesDir))
+                AppLog.i("ddmask: the APK's (${BuildConfig.VERSION_NAME}); the installed module (${DdmaskModule.version(filesDir)}) is older")
+            module?.let { env["DDMASK_MODULE"] = it.path }
+            val modLib = module?.let { File(it, "lib/libddmask.so") }
+            if (modLib != null && modLib.exists()) {
                 if (preloads(modLib)) {
                     lib = modLib
                     env["DDMASK_MODULE_BIONIC"] = "1"
-                    AppLog.i("ddmask: the module's (${File(module.parentFile, "version.txt").takeIf { it.exists() }?.readText()?.trim() ?: "?"})")
+                    AppLog.i("ddmask: the module's (${DdmaskModule.version(filesDir)})")
                 } else AppLog.i("ddmask: Android's linker won't preload the module's libddmask.so; the APK's for Android programs")
             }
             env["LD_PRELOAD"] = lib.path

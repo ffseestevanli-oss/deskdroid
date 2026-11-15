@@ -158,7 +158,7 @@ object SleepMode {
                     put("HOME", File(c.filesDir, "home").path)
                     put("XDG_RUNTIME_DIR", runtime.path)
                     put("PIPEWIRE_RUNTIME_DIR", runtime.path)
-                    File(c.filesDir, "store/apps/ddmask/program").takeIf { it.isDirectory }?.let { put("DDMASK_MODULE", it.path) }
+                    DdmaskModule.dir(c.filesDir)?.let { put("DDMASK_MODULE", it.path) }
                 }
             }.start()
             val done = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
