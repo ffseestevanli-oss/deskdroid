@@ -234,6 +234,56 @@ build_libxcb() {
   autotools_cross "$s" --disable-static --disable-devel-docs --without-doxygen
 }
 
+# X11 for KWin's Xwayland support (KWIN_BUILD_X11): KWin runs Xwayland
+# rootless and manages X11-only apps (Flathub's VLC) as ordinary windows.
+# The xcb-util helpers, libX11 (KWin and KWindowSystem's NETWM code use
+# Xlib's types), and xkbcommon-x11 (rebuilt in build_xkbcommon_x11).
+build_xcb_util() {
+  local s; s="$(unpack $XORG/lib/xcb-util-0.4.1.tar.xz xcb-util-0.4.1.tar.xz)"
+  autotools_cross "$s" --disable-static
+}
+build_xcb_util_renderutil() {
+  local s; s="$(unpack $XORG/lib/xcb-util-renderutil-0.3.10.tar.xz xcb-util-renderutil-0.3.10.tar.xz)"
+  autotools_cross "$s" --disable-static
+}
+build_xcb_util_image() {
+  local s; s="$(unpack $XORG/lib/xcb-util-image-0.4.1.tar.xz xcb-util-image-0.4.1.tar.xz)"
+  autotools_cross "$s" --disable-static
+}
+build_xcb_util_cursor() {
+  local s; s="$(unpack $XORG/lib/xcb-util-cursor-0.1.5.tar.xz xcb-util-cursor-0.1.5.tar.xz)"
+  autotools_cross "$s" --disable-static
+}
+build_xcb_util_keysyms() {
+  local s; s="$(unpack $XORG/lib/xcb-util-keysyms-0.4.1.tar.xz xcb-util-keysyms-0.4.1.tar.xz)"
+  autotools_cross "$s" --disable-static
+}
+build_xcb_util_wm() {
+  local s; s="$(unpack $XORG/lib/xcb-util-wm-0.4.2.tar.xz xcb-util-wm-0.4.2.tar.xz)"
+  autotools_cross "$s" --disable-static
+}
+build_xtrans() {
+  local s; s="$(unpack $XORG/lib/xtrans-1.6.0.tar.xz xtrans-1.6.0.tar.xz)"
+  autotools_cross "$s" --disable-docs
+}
+build_libx11() {
+  local s; s="$(unpack $XORG/lib/libX11-1.8.12.tar.xz libX11-1.8.12.tar.xz)"
+  # Cross-compiling: the keysym table generator runs on the build machine.
+  autotools_cross "$s" --disable-static --disable-specs --without-xmlto --without-fop --enable-malloc0returnsnull \
+    CC_FOR_BUILD=cc
+  test -e "$PREFIX/lib/libX11-xcb.so"
+}
+build_libxfixes() { # KWindowSystem's X11 part links it
+  local s; s="$(unpack $XORG/lib/libXfixes-6.0.1.tar.xz libXfixes-6.0.1.tar.xz)"
+  autotools_cross "$s" --disable-static
+}
+build_xkbcommon_x11() {
+  local s; s="$(unpack https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-1.11.0.tar.gz libxkbcommon-1.11.0.tar.gz)"
+  meson_cross "$s" -Denable-x11=true -Denable-wayland=false -Denable-docs=false -Denable-tools=false -Denable-xkbregistry=false \
+    -Denable-bash-completion=false -Dxkb-config-root=/system/usr/share/xkb
+  test -e "$PREFIX/lib/libxkbcommon-x11.so"
+}
+
 build_libdisplay_info() {
   local s; s="$(unpack https://gitlab.freedesktop.org/emersion/libdisplay-info/-/archive/0.2.0/libdisplay-info-0.2.0.tar.gz libdisplay-info-0.2.0.tar.gz)"
   meson_cross "$s"
@@ -603,7 +653,19 @@ build_ki18n() {
 }
 build_kwidgetsaddons() { kf kwidgetsaddons; }
 build_kguiaddons() { kf kguiaddons -DWITH_WAYLAND=ON -DBUILD_GEO_SCHEME_HANDLER=OFF; }
-build_kwindowsystem() { kf kwindowsystem -DKWINDOWSYSTEM_WAYLAND=ON -DKWINDOWSYSTEM_X11=OFF; }  # after the Qt fixes
+# With its X11 part (NETWM, KSelectionOwner...) for KWin's Xwayland support.
+# This Qt has no xcb platform, so Qt's private QX11Info is a stand-in
+# (x11-qt/private/qtx11extras_p.h): not an X11 platform, no connection of
+# Qt's. KWin hands NETWM its own connection to Xwayland.
+build_kwindowsystem() {
+  local s; s="$(kf_src kwindowsystem)"
+  sed -i 's/^if (WIN32 OR APPLE OR ANDROID OR HAIKU)$/if (WIN32 OR APPLE OR HAIKU)/' "$s/CMakeLists.txt"
+  grep -q "^if (WIN32 OR APPLE OR HAIKU)$" "$s/CMakeLists.txt"
+  unandroid "$s"
+  kde_cmake "$s" -DUSE_DBUS=ON -DKWINDOWSYSTEM_WAYLAND=ON -DKWINDOWSYSTEM_X11=ON -DCMAKE_CXX_FLAGS="-I$HERE/x11-qt"
+  test -e "$PREFIX/include/KF6/KWindowSystem/netwm.h"
+}  # after the Qt fixes
+inputs_kwindowsystem() { cat "$HERE"/x11-qt/private/*; }
 build_kdbusaddons() { kf kdbusaddons; }
 build_kcolorscheme() { kf kcolorscheme; }
 build_kidletime() { kf kidletime; }
@@ -699,6 +761,8 @@ build_kwin() {
   unandroid "$s"
   # Our backend: KWin's desktop as a window of DeskDroid's Android compositor.
   python3 "$HERE/kwin-nativedesk/add-to-kwin.py" "$s"
+  # Xwayland: sockets in $XDG_RUNTIME_DIR, the X server from $KWIN_XWAYLAND.
+  python3 "$HERE/kwin-nativedesk/xwayland-android.py" "$s"
   # Android is Linux underneath: /proc/self/exe, the same scheduler and so on.
   grep -rl --include=CMakeLists.txt 'CMAKE_SYSTEM_NAME MATCHES "Linux"' "$s" | xargs sed -i 's/CMAKE_SYSTEM_NAME MATCHES "Linux"/CMAKE_SYSTEM_NAME MATCHES "Linux|Android"/'
   # The "kill this frozen window" helper is X11 only, and the wrapper that
@@ -713,8 +777,8 @@ build_kwin() {
   perl -0pi -e 's/(    QPainter painter\(buffer\);\n)/$1    painter.setWindow(m_output->geometry());\n/ or die "cursor patch"' "$s/src/scene/cursordelegate_qpainter.cpp"
   # memfd_create and friends are API 30+; the Pixel has them, so link them weakly.
   # Big build, many fixes to come: keep going past errors so a run shows them all.
-  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -I$HERE/x11-stubs" -DCMAKE_C_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
-    -DKWIN_BUILD_X11=OFF -DKWIN_BUILD_RUNNERS=OFF \
+  KEEP_GOING=1 kde_cmake "$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -I$HERE/x11-qt" -DCMAKE_C_FLAGS=-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF \
+    -DKWIN_BUILD_X11=ON -DKWIN_BUILD_RUNNERS=OFF \
     -DKWIN_BUILD_ACTIVITIES=OFF -DKWIN_BUILD_EIS=OFF -DBUILD_DOC=OFF -DNATIVE_PREFIX="$QT_HOST_PATH"
 }
 
@@ -1719,6 +1783,7 @@ inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HE
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
+     xcb_util xcb_util_renderutil xcb_util_image xcb_util_cursor xcb_util_keysyms xcb_util_wm xtrans libx11 libxfixes xkbcommon_x11
      qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors ffmpeg libintl libsndfile libpulse libogg libvorbis libcanberra ocean_sound_theme qtmultimedia qtspeech qtwayland qttools deskdroid_ahb
      ecm plasma_wayland_protocols kconfig_host karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
@@ -1734,7 +1799,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      qcoro purpose)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
-inputs_kwin() { cat "$HERE"/kwin-nativedesk/*.* "$HERE"/kwin-nativedesk/CMakeLists.txt "$HERE/../nativedesk/protocol.h" "$HERE/ahb/deskdroid_ahb.h"; }
+inputs_kwin() { cat "$HERE"/x11-qt/private/* "$HERE"/kwin-nativedesk/*.* "$HERE"/kwin-nativedesk/CMakeLists.txt "$HERE/../nativedesk/protocol.h" "$HERE/ahb/deskdroid_ahb.h"; }
 
 failed=()
 after_qtbase=0

@@ -13,6 +13,7 @@
 #   libdd_nobwrap.so     stands in for bubblewrap, which Android can't run
 #   libdd_adpk_run.so    adpk-run.sh: starts store packages made from Flathub apps
 #   libdd_bwrap.so       bwrap.sh: bubblewrap inside apps, running helpers unsandboxed
+#   libdd_xwayland.so    xwayland.sh: Xwayland with its paths, for KWin and adpk-run.sh
 #   libdd_flatpak_fex.so fex-run.sh: x86-64 Flatpak apps through FEX-Emu
 #   libddflatpak.so      ddflatpak.c built against glibc (aarch64)
 #   libddflatpak_audit.so  ddflatpak-audit.c: its paths for glibc's loader
@@ -74,6 +75,7 @@ rm -f "$OUT/libdd_flatpakcli.so"
 install -m 755 "$HERE/flatpak.sh" "$OUT/libdd_flatpak.so"
 install -m 755 "$HERE/adpk-run.sh" "$OUT/libdd_adpk_run.so"
 install -m 755 "$HERE/bwrap.sh" "$OUT/libdd_bwrap.so"
+install -m 755 "$HERE/xwayland.sh" "$OUT/libdd_xwayland.so"
 install -m 755 "$HERE/nobwrap.sh" "$OUT/libdd_nobwrap.so"
 install -m 755 "$HERE/fex-run.sh" "$OUT/libdd_flatpak_fex.so"
 "${CROSS}gcc" -O2 -Wall -Wextra -shared -fPIC -ffile-prefix-map="$HERE/..=." "$HERE/../ddmask/ddflatpak.c" -ldl \
