@@ -930,7 +930,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                         put("XDG_DATA_DIRS", dataDirs(data))
                         put("XDG_CONFIG_HOME", File(filesDir, "config").path)
                         put("XDG_CONFIG_DIRS", kdeDefaultsDirs(File(filesDir, "config")))
-                        put("XCURSOR_PATH", File(data, "share/icons").path)
+                        put("XCURSOR_PATH", cursorPath(data))
                         sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
                     }
                 }
@@ -978,6 +978,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 ?.writeText("[Mouse]\ncursorTheme=breeze_cursors\ncursorSize=24\n")
             applyDarkDefault(config, data)
             applyFontDefaults(config)
+            applySplashDefaults(config, data)
             // KDE's app database (ksycoca) lists only the apps a menu file takes in;
             // with none, Plasma finds no apps. KDE's own menu, with its categories,
             // plus the Android folders, and a fresh database each start so it
@@ -1066,7 +1067,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
                     put("QT_PLUGIN_PATH", pluginPath(libs, data)) // Qt's plugins flat, KDE's by namespace
                     put("QML_IMPORT_PATH", File(data, "qml").path) // Aurorae's window borders are QML
-                    put("XCURSOR_PATH", File(data, "share/icons").path)
+                    put("XCURSOR_PATH", cursorPath(data))
                     if (bus != null) put("DBUS_SESSION_BUS_ADDRESS", bus)
                     put("FONTCONFIG_FILE", fonts.path)
                     put("QT_QPA_FONTDIR", "/system/fonts")
@@ -1183,64 +1184,67 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                 setExecutable(true, false)
             }
         } catch (e: Exception) { AppLog.i("Native desktop test: couldn't add the steam command: $e") }
+        // The desktop's environment, which the splash screen shares.
+        val shellEnv: MutableMap<String, String>.() -> Unit = {
+            remove("LD_PRELOAD")
+            put("CLASSPATH", applicationInfo.sourceDir)
+            put("LD_LIBRARY_PATH", libs)
+            ddmask(this, libs)
+            put("HOME", filesDir.path)
+            put("DESKDROID_USER_NAME", NativeDesk.userName(this@NativeDeskActivity))
+            put("LANG", java.util.Locale.getDefault().let { "${it.language}_${it.country}.UTF-8" }) // the phone's language, for dates, times and text
+            put("TMPDIR", cacheDir.path)
+            put("XDG_RUNTIME_DIR", runtime.path)
+            put("PULSE_SERVER", "unix:" + File(runtime, "pulse/native").path) // Linux programs: the sound server (startSound)
+            put("XDG_DATA_DIRS", dataDirs(data))
+            put("XDG_CONFIG_HOME", config.path)
+            put("XDG_CONFIG_DIRS", kdeDefaultsDirs(config))
+            put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
+            put("XCURSOR_PATH", cursorPath(data))
+            put("FONTCONFIG_FILE", File(data, "fonts.conf").path)
+            put("QT_QPA_FONTDIR", "/system/fonts")
+            put("QT_QPA_PLATFORM", "wayland")
+            put("WAYLAND_DISPLAY", "wayland-0")
+            put("QT_PLUGIN_PATH", pluginPath(libs, data))
+            put("QML_IMPORT_PATH", File(data, "qml").path)
+            // DeskDroid's battery, CPU and RAM widgets read files/status.json.
+            put("QML_XHR_ALLOW_FILE_READ", "1")
+            // KDE's look instead of Android's (Qt picks Material there: white
+            // windows, big controls): Plasma's platform theme (colors, fonts,
+            // icons, file dialogs) and KDE's Qt Quick Controls style. A file
+            // named android-style in the app's files folder turns it off.
+            if (!File(filesDir, "android-style").exists()) {
+                put("QT_QPA_PLATFORMTHEME", "kde")
+                put("QT_QUICK_CONTROLS_STYLE", "org.kde.desktop")
+            }
+            if (gpu) put("QT_WAYLAND_CLIENT_BUFFER_INTEGRATION", "deskdroid-ahb") else put("QT_QUICK_BACKEND", "software")
+            // No compiled-shader cache: the PowerVR driver takes cached program
+            // binaries back and draws garbage with them (build 247's second start).
+            put("QT_DISABLE_SHADER_DISK_CACHE", "1")
+            put("KDE_DEBUG", "1")
+            put("QT_LOGGING_RULES", "js=true;kf.service.*=false;kde.plasma.activitiesstats=false;qt.sql.qsqldatabase=false;org.kde.plasma.kicker=false") // a flood of lines keeps the app busy
+            // GTK programs: Wayland, and settings kept in memory (no dconf here).
+            put("GDK_BACKEND", "wayland")
+            put("GSETTINGS_BACKEND", "memory")
+            // GIO opens files and folders (Etherium's downloads, GIMP) through
+            // its gio-launch-desktop helper, which isn't where GLib was built.
+            put("GIO_LAUNCH_DESKTOP", File(libs, "libdd_gio-launch-desktop.so").path)
+            // Apps the desktop starts (bin/dolphin...) inherit all this.
+            put("PATH", "${bin.path}:${System.getenv("PATH") ?: "/system/bin"}")
+            put("DESKDROID_BIN", bin.path) // help in the terminal lists these apps
+            put("SHELL", "/system/bin/sh") // terminals (Konsole, Kate's, Dolphin's) start Android's shell
+            sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
+            ddmaskHostEnv(this)
+        }
+        // Plasma's splash screen (System Settings › Splash Screen), up until
+        // plasmashell says the desktop is ready.
+        if (File(libs, "libdd_ksplashqml.so").exists() && splashEnabled(config)) startSplash(libs, shellEnv)
         try {
             val p = ProcessBuilder(
                 "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
                 QtHost::class.java.name, libs, "libplasmashell.so",
                 "--no-respawn", "-p", "org.deskdroid.desktop"
-            ).redirectErrorStream(true).also { pb ->
-                pb.environment().apply {
-                    remove("LD_PRELOAD")
-                    put("CLASSPATH", applicationInfo.sourceDir)
-                    put("LD_LIBRARY_PATH", libs)
-                    ddmask(this, libs)
-                    put("HOME", filesDir.path)
-                    put("DESKDROID_USER_NAME", NativeDesk.userName(this@NativeDeskActivity))
-                    put("LANG", java.util.Locale.getDefault().let { "${it.language}_${it.country}.UTF-8" }) // the phone's language, for dates, times and text
-                    put("TMPDIR", cacheDir.path)
-                    put("XDG_RUNTIME_DIR", runtime.path)
-                    put("PULSE_SERVER", "unix:" + File(runtime, "pulse/native").path) // Linux programs: the sound server (startSound)
-                    put("XDG_DATA_DIRS", dataDirs(data))
-                    put("XDG_CONFIG_HOME", config.path)
-                    put("XDG_CONFIG_DIRS", kdeDefaultsDirs(config))
-                    put("XKB_CONFIG_ROOT", File(data, "share/X11/xkb").path)
-                    put("XCURSOR_PATH", File(data, "share/icons").path)
-                    put("FONTCONFIG_FILE", File(data, "fonts.conf").path)
-                    put("QT_QPA_FONTDIR", "/system/fonts")
-                    put("QT_QPA_PLATFORM", "wayland")
-                    put("WAYLAND_DISPLAY", "wayland-0")
-                    put("QT_PLUGIN_PATH", pluginPath(libs, data))
-                    put("QML_IMPORT_PATH", File(data, "qml").path)
-                    // DeskDroid's battery, CPU and RAM widgets read files/status.json.
-                    put("QML_XHR_ALLOW_FILE_READ", "1")
-                    // KDE's look instead of Android's (Qt picks Material there: white
-                    // windows, big controls): Plasma's platform theme (colors, fonts,
-                    // icons, file dialogs) and KDE's Qt Quick Controls style. A file
-                    // named android-style in the app's files folder turns it off.
-                    if (!File(filesDir, "android-style").exists()) {
-                        put("QT_QPA_PLATFORMTHEME", "kde")
-                        put("QT_QUICK_CONTROLS_STYLE", "org.kde.desktop")
-                    }
-                    if (gpu) put("QT_WAYLAND_CLIENT_BUFFER_INTEGRATION", "deskdroid-ahb") else put("QT_QUICK_BACKEND", "software")
-                    // No compiled-shader cache: the PowerVR driver takes cached program
-                    // binaries back and draws garbage with them (build 247's second start).
-                    put("QT_DISABLE_SHADER_DISK_CACHE", "1")
-                    put("KDE_DEBUG", "1")
-                    put("QT_LOGGING_RULES", "js=true;kf.service.*=false;kde.plasma.activitiesstats=false;qt.sql.qsqldatabase=false;org.kde.plasma.kicker=false") // a flood of lines keeps the app busy
-                    // GTK programs: Wayland, and settings kept in memory (no dconf here).
-                    put("GDK_BACKEND", "wayland")
-                    put("GSETTINGS_BACKEND", "memory")
-                    // GIO opens files and folders (Etherium's downloads, GIMP) through
-                    // its gio-launch-desktop helper, which isn't where GLib was built.
-                    put("GIO_LAUNCH_DESKTOP", File(libs, "libdd_gio-launch-desktop.so").path)
-                    // Apps the desktop starts (bin/dolphin...) inherit all this.
-                    put("PATH", "${bin.path}:${System.getenv("PATH") ?: "/system/bin"}")
-                    put("DESKDROID_BIN", bin.path) // help in the terminal lists these apps
-                    put("SHELL", "/system/bin/sh") // terminals (Konsole, Kate's, Dolphin's) start Android's shell
-                    sessionBus?.let { put("DBUS_SESSION_BUS_ADDRESS", it) }
-                    ddmaskHostEnv(this)
-                }
-            }.start()
+            ).redirectErrorStream(true).also { pb -> pb.environment().apply(shellEnv) }.start()
             apps += p
             Thread {
                 p.inputStream.bufferedReader().outputLines {
@@ -1262,10 +1266,35 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
+    /** ksplashqml (bin/ksplashqml) as a Wayland client of KWin, with the desktop's environment. */
+    private fun startSplash(libs: String, env: MutableMap<String, String>.() -> Unit) {
+        try {
+            val p = ProcessBuilder(
+                "/system/bin/app_process", "-Xnoimage-dex2oat", "/",
+                QtHost::class.java.name, libs, "libdd_ksplashqml.so"
+            ).redirectErrorStream(true).also { pb -> pb.environment().apply(env) }.start()
+            apps += p
+            Thread {
+                p.inputStream.bufferedReader().outputLines { AppLog.i("[ksplash] $it") }
+                AppLog.i("[ksplash] exited (${p.waitFor()})")
+            }.apply { isDaemon = true }.start()
+        } catch (e: Exception) {
+            AppLog.i("Native desktop test: couldn't start the splash screen: $e")
+        }
+    }
+
     private var sessionBus: String? = null
 
     /** Where Qt (flat, Android style) and KDE (by namespace, Linux style) find plugins. */
     private fun appsOnGpu() = NativeDesk.kwinTakesGpuBuffers && !File(filesDir, "app-cpu").exists()
+
+    /**
+     * Where KWin, the desktop and the Cursors page find cursor themes: the
+     * user's own (installed with Get New Cursors, in ~/.icons or
+     * ~/.local/share/icons) before the shipped ones (Breeze's).
+     */
+    private fun cursorPath(data: File) =
+        listOf(File(filesDir, ".icons"), File(filesDir, ".local/share/icons"), File(data, "share/icons")).joinToString(":") { it.path }
 
     private fun pluginPath(libs: String, data: File) = "${File(data, "plugins").path}:$libs"
 
@@ -1807,6 +1836,28 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             if (fixed != text) f.writeText(fixed)
         }
     }
+    /**
+     * Plasma's splash screen while the desktop starts (startSplash), DD Party
+     * Glass's by default: a system default in files/deskdroid-xdg, so the
+     * Splash Screen page and Global Theme (kdedefaults) still win.
+     */
+    private fun applySplashDefaults(config: File, data: File) {
+        val xdg = File(config.parentFile, "deskdroid-xdg").apply { mkdirs() }
+        val theme = if (File(data, "share/plasma/look-and-feel/$PARTY_LNF/contents/splash/Splash.qml").exists()) PARTY_LNF else "org.kde.breeze.desktop"
+        Tuning.writeIfChanged(File(xdg, "ksplashrc"), "[KSplash]\nEngine=KSplashQML\nTheme=$theme\n".toByteArray())
+    }
+
+    /** ksplashrc as KDE reads it: the user's file, then kdedefaults, then DeskDroid's default. */
+    private fun splashEnabled(config: File): Boolean {
+        val files = listOf(File(config, "ksplashrc"), File(config, "kdedefaults/ksplashrc"), File(config.parentFile, "deskdroid-xdg/ksplashrc"))
+        for (f in files) {
+            if (!f.exists()) continue
+            val engine = Regex("(?m)^Engine=(.*)$").find(f.readText())?.groupValues?.get(1)?.trim() ?: continue
+            return engine == "KSplashQML"
+        }
+        return true
+    }
+
     private fun kdeDefaults(config: File, name: String) =
         File(config, "kdedefaults/$name").let { if (it.exists()) it.readText() else "" }
     private val GTK_MARK = "# Written by DeskDroid to match Plasma's colors; delete this line to keep your own."

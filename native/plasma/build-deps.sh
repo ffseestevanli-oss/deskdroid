@@ -416,6 +416,44 @@ build_libpulse() {
   cp "$PREFIX/lib/pulseaudio/libpulsecommon-17.0.so" "$PREFIX/lib/"
 }
 
+# Notification sounds and System Settings › System Sounds: libcanberra (the
+# freedesktop sound-theme player KNotifications and the page use) playing
+# into the sound server through libpulse, with Ogg Vorbis for the themes'
+# .oga files. Its PulseAudio driver is built in, so it loads no modules
+# (libltdl, which it asks for regardless, isn't needed).
+build_libogg() {
+  local s; s="$(unpack https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.xz libogg-1.3.6.tar.xz)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF -DINSTALL_DOCS=OFF
+  test -e "$PREFIX/lib/pkgconfig/ogg.pc"
+}
+build_libvorbis() {
+  local s; s="$(unpack https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.xz libvorbis-1.3.7.tar.xz)"
+  cmake_cross "$s" -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF
+  test -e "$PREFIX/lib/pkgconfig/vorbisfile.pc"
+}
+build_libcanberra() {
+  local s; s="$(unpack http://0pointer.de/lennart/projects/libcanberra/libcanberra-0.30.tar.xz libcanberra-0.30.tar.xz)"
+  cp /usr/share/misc/config.sub /usr/share/misc/config.guess "$s/build-aux/"
+  perl -0pi -e 's/as_fn_error \$\? "Unable to find libltdl\." "\$LINENO" 5/:/ or die "ltdl check"' "$s/configure"
+  # Its own malloc.h hides the system's from Bionic's stdlib.h (which includes
+  # <malloc.h> for malloc() itself): it becomes ca-malloc.h, and malloc.h the system's.
+  mv "$s/src/malloc.h" "$s/src/ca-malloc.h"
+  echo '#include_next <malloc.h>' > "$s/src/malloc.h"
+  sed -i 's/#include "malloc.h"/#include "ca-malloc.h"/' "$s"/src/*.c "$s"/src/*.h
+  autotools_cross "$s" --disable-static --enable-pulse --disable-alsa --disable-oss --disable-gstreamer \
+    --disable-null --disable-gtk --disable-gtk3 --disable-tdb --disable-udev --disable-lynx --with-builtin=pulse \
+    --with-systemdsystemunitdir=no
+  test -e "$PREFIX/lib/pkgconfig/libcanberra.pc"
+  ! grep -q ltdl "$PREFIX/lib/pkgconfig/libcanberra.pc"
+}
+# Plasma's Ocean sound theme (share/sounds/ocean), the default one.
+build_ocean_sound_theme() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/ocean-sound-theme-$PLASMA_VERSION.tar.xz" "ocean-sound-theme-$PLASMA_VERSION.tar.xz")"
+  cmake -S "$s" -B "$s/_build" -DCMAKE_INSTALL_PREFIX="$PREFIX" -DECM_DIR="$PREFIX/share/ECM/cmake"
+  cmake --install "$s/_build"
+  test -e "$PREFIX/share/sounds/ocean/index.theme"
+}
+
 build_qtmultimedia() {
   # qt_src applies patches/qtmultimedia-everywhere-src (the demuxer's).
   local s; s="$(qt_src qtmultimedia)"
@@ -687,17 +725,19 @@ build_kitemviews() { kf kitemviews; }
 build_kcompletion() { kf kcompletion; }
 build_kbookmarks() { kf kbookmarks; }
 build_kconfigwidgets() { kf kconfigwidgets; }
-# No sound theme player (libcanberra) here: notifications are silent for now.
-# They go out over D-Bus as on Linux, not through Android's notification API.
+# Notification sounds play through libcanberra (build_libcanberra), from the
+# sound theme System Settings › System Sounds picks. Notifications go out
+# over D-Bus as on Linux, not through Android's notification API.
 build_knotifications() {
   local s f; s="$(kf_src knotifications)"
-  sed -i 's/find_package(Canberra REQUIRED)/find_package(Canberra)/' "$s/CMakeLists.txt"
+  grep -q "find_package(Canberra REQUIRED)" "$s/CMakeLists.txt"
   for f in knotificationpermission.cpp knotificationmanager.cpp knotification.cpp; do
     sed -i '0,/^#include.*/s//&\n#undef Q_OS_ANDROID/' "$s/src/$f"
     grep -q "^#undef Q_OS_ANDROID" "$s/src/$f"
   done
   unandroid "$s"
   kde_cmake "$s" -DWITH_X11=OFF -DUSE_DBUS=ON
+  "$BIN/llvm-readelf" -d "$PREFIX/lib/libKF6Notifications.so" | grep -q "libcanberra"
 }
 build_kjobwidgets() { kf kjobwidgets; }
 # Solid's Android build has no device backends besides the fake one; its
@@ -985,12 +1025,14 @@ build_software() {
 }
 inputs_software() { cat "$HERE"/software/*.* "$HERE"/software/qml/* "$HERE"/steamassistant/qml/* "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
 # Appearance & Style: plasma-workspace's Colors, Icons, Plasma Style,
-# Application Style, Fonts and Global Theme pages (workspacekcms/).
+# Application Style, Fonts, Cursors, Wallpaper, System Sounds and Global Theme pages
+# (workspacekcms/).
 build_kcms_workspace() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-workspace-$PLASMA_VERSION.tar.xz" "plasma-workspace-$PLASMA_VERSION.tar.xz")"
   unandroid "$s"
   python3 "$HERE/workspacekcms/patch.py" "$s"
   cp "$HERE/workspacekcms/fonts.cmake" "$s/kcms/fonts/CMakeLists.txt"
+  cp "$HERE/workspacekcms/cursortheme.cmake" "$s/kcms/cursortheme/CMakeLists.txt"
   # Colors › Edit Scheme starts kcolorschemeeditor: an app here, as a
   # library QtHost starts (bin/kcolorschemeeditor, apps/as-library.py).
   local e="$s/kcms/colors/editor/CMakeLists.txt"
@@ -1000,7 +1042,7 @@ build_kcms_workspace() {
   KEEP_GOING=1 kde_cmake "$s/_kcms" -DWORKSPACE_SRC="$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
   # No kcminit here (it applies the style at login on Linux).
   rm -f "$PREFIX/plugins/plasma/kcminit/kcm_style_init.so"
-  for k in colors icons desktoptheme style fonts lookandfeel; do
+  for k in colors icons desktoptheme style fonts lookandfeel cursortheme wallpaper soundtheme; do
     find "$PREFIX/plugins/plasma/kcms/systemsettings" -name "*kcm_$k.so" | grep -q .
   done
   # Breeze and Breeze Dark (global themes, plasmashell's) use the Breeze
@@ -1013,7 +1055,7 @@ build_kcms_workspace() {
   rm -f "$PREFIX/bin/kcolorschemeeditor" # an earlier build's program
 }
 # Again after plasmashell, whose look-and-feel packages it edits.
-inputs_kcms_workspace() { cat "$HERE"/workspacekcms/* "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; cat "$STAMPS/plasmashell" 2>/dev/null || true; }
+inputs_kcms_workspace() { cat "$HERE"/workspacekcms/*.* "$HERE"/workspacekcms/x11-shim/*.* "$HERE"/workspacekcms/x11-shim/*/*.h "$HERE"/workspacekcms/x11-shim/*/*/*.h "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; cat "$STAMPS/plasmashell" 2>/dev/null || true; }
 # Apps & Windows: KWin's pages (kwinkcms/), built against the installed KWin.
 build_kcms_kwin() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/kwin-$PLASMA_VERSION.tar.xz" "kwin-$PLASMA_VERSION.tar.xz")"
@@ -1029,13 +1071,27 @@ build_kcms_kwin() {
 }
 inputs_kcms_kwin() { cat "$HERE"/kwinkcms/*; }
 # Workspace › General Behavior and the Quick Settings start page:
+# The Global Theme's splash screen while the desktop starts (ksplash/):
+# plasma-workspace's ksplashqml as a library (bin/ksplashqml).
+build_ksplash() {
+  local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-workspace-$PLASMA_VERSION.tar.xz" "plasma-workspace-$PLASMA_VERSION.tar.xz")"
+  unandroid "$s"
+  python3 "$HERE/ksplash/patch.py" "$s"
+  perl -0pi -e 's/add_executable\(ksplashqml \$\{ksplashqml_SRCS\}\)/add_executable(ksplashqml)\ntarget_sources(ksplashqml PRIVATE \${ksplashqml_SRCS})/ or die "ksplashqml exe"' "$s/ksplash/ksplashqml/CMakeLists.txt"
+  python3 "$HERE/apps/as-library.py" "$s" ksplash/ksplashqml/CMakeLists.txt ksplashqml ksplash/ksplashqml/main.cpp
+  rm -rf "$s/_ksplash" && cp -r "$HERE/ksplash" "$s/_ksplash"
+  kde_cmake "$s/_ksplash" -DWORKSPACE_SRC="$s" -DCMAKE_CXX_FLAGS="-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__"
+  test -e "$PREFIX/lib/libksplashqml.so"
+}
+inputs_ksplash() { cat "$HERE"/ksplash/* "$HERE"/apps/as-library.py "$HERE"/kwin-nativedesk/qthost_entry.cpp; }
 # plasma-desktop's pages (desktopkcms/).
 build_kcms_desktop() {
   local s; s="$(unpack "https://download.kde.org/stable/plasma/$PLASMA_VERSION/plasma-desktop-$PLASMA_VERSION.tar.xz" "plasma-desktop-$PLASMA_VERSION.tar.xz")"
   unandroid "$s"
+  python3 "$HERE/desktopkcms/patch.py" "$s"
   rm -rf "$s/_kcms" && cp -r "$HERE/desktopkcms" "$s/_kcms"
   KEEP_GOING=1 kde_cmake "$s/_kcms" -DDESKTOP_SRC="$s"
-  for k in kcm_workspace kcm_landingpage; do
+  for k in kcm_workspace kcm_landingpage kcm_splashscreen kcm_keys kcm_access; do
     find "$PREFIX/plugins/plasma/kcms/systemsettings" -name "*$k.so" | grep -q .
   done
 }
@@ -1663,7 +1719,7 @@ inputs_plasmashell() { cat "$HERE"/plasmashell/* "$HERE"/apps/as-library.py "$HE
 
 ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm libxcvt hwdata
      libdisplay_info freetype fontconfig udev mtdev libevdev libinput xkeyboard_config xorgproto xcb_proto libxau libxcb gbm
-     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors ffmpeg libintl libsndfile libpulse qtmultimedia qtspeech qtwayland qttools deskdroid_ahb
+     qtbase qtdeclarative qtsvg qtshadertools qt5compat qtsensors ffmpeg libintl libsndfile libpulse libogg libvorbis libcanberra ocean_sound_theme qtmultimedia qtspeech qtwayland qttools deskdroid_ahb
      ecm plasma_wayland_protocols kconfig_host karchive kconfig kcoreaddons ki18n kwidgetsaddons kguiaddons kwindowsystem
      kdbusaddons kcolorscheme kidletime kauth kcrash kglobalaccel kpackage kservice kirigami ksvg
      kdecoration kwayland kiconthemes breeze
@@ -1674,7 +1730,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
      curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp
-     systemsettings kcm_componentchooser kcm_aboutphone kcm_gestures steam_assistant software kcms_workspace kcms_kwin kcms_desktop
+     systemsettings kcm_componentchooser kcm_aboutphone kcm_gestures steam_assistant software kcms_workspace kcms_kwin kcms_desktop ksplash
      qcoro purpose)
 
 # Files outside a recipe that it builds from, so changing them builds it again.

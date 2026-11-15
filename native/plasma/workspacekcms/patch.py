@@ -12,7 +12,17 @@ crashed System Settings (QAndroidStyle::pixelMetric).
 Plasma Style without plain Breeze ("default", which follows the colour
 scheme): DeskDroid offers Breeze Light and Breeze Dark, and Breeze Dark is
 the default. "default" stays installed: the other themes fall back to it.
-The Breeze global themes pick the matching one (build_kcms_workspace)."""
+The Breeze global themes pick the matching one (build_kcms_workspace).
+
+Cursors without X11 (x11-shim/): there's nothing to apply a theme to besides
+kcminputrc, which KWin watches, so applying doesn't ask for a new session.
+
+Wallpaper: its build lists config-workspace.h two folders up, which is one
+folder up in this build. It reads the desktop's settings from DeskDroid's
+shell (org.deskdroid.desktop), not Plasma's.
+
+System Sounds links Plasma's notification library, which isn't built here,
+for nothing it uses."""
 import pathlib
 import sys
 
@@ -51,3 +61,17 @@ edit(d + "themesmodel.cpp", """        const QString packageName = themeRoot.rig
         }
 """)
 edit(d + "desktopthemesettings.kcfg", "<default>default</default>", "<default>breeze-dark</default>")
+
+c = "kcms/cursortheme/xcursor/themeapplicator.cpp"
+edit(c, """    Q_UNUSED(theme)
+    Q_UNUSED(size)
+    return false;
+#endif""", """    Q_UNUSED(theme)
+    Q_UNUSED(size)
+    return true; // DeskDroid: KWin reads the theme from kcminputrc by itself
+#endif""")
+
+edit("kcms/wallpaper/wallpapermodule.cpp", 'u"/plasma-org.kde.plasma.desktop-appletsrc"', 'u"/plasma-org.deskdroid.desktop-appletsrc"')
+edit("kcms/wallpaper/CMakeLists.txt", "${CMAKE_CURRENT_BINARY_DIR}/../../config-workspace.h", "${CMAKE_CURRENT_BINARY_DIR}/../config-workspace.h")
+
+edit("kcms/soundtheme/CMakeLists.txt", "    PW::LibNotificationManager\n", "")
