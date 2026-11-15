@@ -133,7 +133,7 @@ PartyPage {
                     visible: !page.working && failure !== ""
                     type: Kirigami.MessageType.Error
                     text: "Couldn't install " + (page.hit.name || page.hit.id) + ": " + failure
-                        + "\nWhat flatpak said is in the saved log (\"Save log to Downloads\" in the DeskDroid app)."
+                        + "\nWhat flatpak said is in the saved log (Save log in the DD menu, or dd-log in the terminal)."
                 }
                 Flow {
                     Layout.fillWidth: true

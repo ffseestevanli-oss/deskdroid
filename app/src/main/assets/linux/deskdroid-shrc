@@ -58,6 +58,7 @@ help() {
 		"ping|check a host answers" "nc|raw network connections"
 	_deskdroid_list "DeskDroid" \
 		"android-open|open a file or link in an Android app" \
+		"dd-log|save DeskDroid's log (dd-log -h for more)" \
 		"clear|clear the screen" "exit|close this terminal" "help|this list"
 	if [ -n "$DESKDROID_BIN" ] && [ -d "$DESKDROID_BIN" ]; then
 		_line=
@@ -79,6 +80,77 @@ help() {
 	printf '\nAndroid runs this shell as an app, so commands that need root or\n'
 	printf 'system access (mount, su, apt, systemctl...) are not available.\n'
 }
+
+# dd-log: DeskDroid's log, the same as Save log in the app's Settings, without
+# leaving the desktop. The app saves it to Android's Downloads and to
+# ~/deskdroid-log.txt (LogExport.kt); this asks for it through android-open and
+# waits for the file. If the app doesn't answer (it's stuck), the log files the
+# app keeps in $HOME are put together here instead.
+#   dd-log        save it, and say where
+#   dd-log -p     save it and print it too (dd-log -p | grep ffmpeg)
+#   dd-log -l     open it in the pager (less, or more)
+_dd_log() {
+	_out="$HOME/deskdroid-log.txt"
+	_show=
+	case $1 in
+	-p|--print) _show=print ;;
+	-l|--less) _show=pager ;;
+	-h|--help)
+		printf 'dd-log      save DeskDroid'"'"'s log to Downloads and ~/deskdroid-log.txt\n'
+		printf 'dd-log -p   save it and print it\n'
+		printf 'dd-log -l   save it and open it in the pager\n'
+		return 0 ;;
+	'') ;;
+	*) printf 'dd-log: unknown option %s (try dd-log -h)\n' "$1" >&2; return 2 ;;
+	esac
+	# Printed into a pipe: the log itself, not the messages.
+	[ -n "$_show" ] || [ -t 1 ] || _show=print
+	# A marker from just before asking: a newer ~/deskdroid-log.txt is the answer.
+	_mark="$HOME/.dd-log-mark"
+	: > "$_mark" || return 1
+	sleep 1
+	_saved=
+	if command -v android-open >/dev/null 2>&1; then
+		android-open deskdroid:save-log
+		_i=0
+		while [ $_i -lt 40 ]; do
+			sleep 0.25 2>/dev/null || sleep 1
+			if [ "$_out" -nt "$_mark" ]; then _saved=app; break; fi
+			_i=$((_i + 1))
+		done
+	fi
+	rm -f "$_mark"
+	if [ -z "$_saved" ]; then
+		# The app didn't answer in 10 seconds: the log files themselves.
+		printf 'DeskDroid didn'"'"'t answer, so this is put together from the log files in ~\n' >&2
+		{
+			printf 'DeskDroid log, put together by dd-log (the app did not answer)\n'
+			date
+			for _f in session.log set-wallpaper.log ddmask.log glibc/exec.log software/flatpak.log \
+				x86/install.log x86/run/fex-check.log x86/run/fexserver.log x86/steam.log x86/apps.log \
+				"$HOME"/store/apps/*/run.log "$HOME"/store/apps/*/xwayland.log \
+				"$HOME"/flatpak-tmp/run/*/run.log "$HOME"/flatpak-tmp/run/*/xwayland.log; do
+				case $_f in /*) ;; *) _f="$HOME/$_f" ;; esac
+				[ -f "$_f" ] || continue
+				printf '\n== %s\n' "${_f#"$HOME"/}"
+				if [ "${_f##*/}" = session.log ]; then cat "$_f"; else tail -c 30000 "$_f"; fi
+			done
+		} > "$_out.tmp" && mv "$_out.tmp" "$_out" || return 1
+	fi
+	case $_show in
+	print) cat "$_out" ;;
+	pager)
+		if command -v less >/dev/null 2>&1; then less "$_out"; else more "$_out"; fi ;;
+	*)
+		if [ "$_saved" = app ]; then
+			printf 'Saved to ~/deskdroid-log.txt and to the phone'"'"'s Downloads folder\n'
+		else
+			printf 'Saved to ~/deskdroid-log.txt (not to Downloads: the app did not answer)\n'
+		fi
+		printf 'dd-log -l opens it here, dd-log -p prints it\n' ;;
+	esac
+}
+alias dd-log=_dd_log
 
 # The welcome, once per terminal (not again in a shell started from this one).
 if [ -z "$DESKDROID_WELCOMED" ]; then

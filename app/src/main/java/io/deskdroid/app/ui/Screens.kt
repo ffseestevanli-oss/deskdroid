@@ -686,71 +686,8 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.text("DeskDroid ${BuildConfig.VERSION_NAME} · GPL-3.0", 12f, Party.DIM))
     }
 
-    /**
-     * The desktop's helpers' own logs, at the end of the saved log: Set as Desktop
-     * Wallpaper's; ddmask's journal (how Linux programs started, which couldn't
-     * and why, the system calls Android blocked); the programs Flatpak couldn't
-     * start; and each store app's launcher log (store/apps/<app>/run.log, or
-     * flatpak-tmp/run/<app>/run.log for flatpak run), so an app that doesn't open
-     * says why.
-     */
-    private fun helperLogs(): String {
-        val files = c.filesDir
-        val logs = listOf("set-wallpaper.log", "ddmask.log", "glibc/exec.log").map { java.io.File(files, it) } +
-            // Agora's flatpak command runs (backend.cpp): what flatpak said.
-            listOf("software/flatpak.log").map { java.io.File(files, it) }.filter { it.exists() } +
-            // Steam through FEX (X86.kt, assets/x86): setup, the FEX check, FEX's server, Steam itself.
-            listOf("x86/install.log", "x86/run/fex-check.log", "x86/run/fexserver.log", "x86/steam.log", "x86/apps.log")
-                .map { java.io.File(files, it) }.filter { it.exists() } +
-            // Steam's own logs ($HOME/.local/share/Steam/logs): why its client stopped
-            // (bootstrap = the updater and starter, console = the client, webhelper = its UI).
-            listOf("bootstrap_log.txt", "console_log.txt", "stderr.txt", "webhelper.txt", "cef_log.txt")
-                .map { java.io.File(files, ".local/share/Steam/logs/$it") }.filter { it.exists() } +
-            (java.io.File(files, "store/apps").listFiles()?.sortedBy { it.name }
-                ?.flatMap { listOf(java.io.File(it, "run.log"), java.io.File(it, "xwayland.log")) }
-                ?.filter { it.exists() } ?: emptyList()) +
-            // Apps started with flatpak run (flatpak.sh hands them to adpk-run.sh), and
-            // the X server X11-only apps get.
-            (java.io.File(files, "flatpak-tmp/run").listFiles()?.sortedBy { it.name }
-                ?.flatMap { listOf(java.io.File(it, "run.log"), java.io.File(it, "xwayland.log")) }
-                ?.filter { it.exists() } ?: emptyList())
-        val blocked = java.io.File(files, "glibc/sigsys.log").takeIf { it.exists() }?.let { f ->
-            try {
-                "\n== system calls Android blocked (number: times)\n" + f.readLines().filter { it.isNotBlank() }
-                    .groupingBy { it.trim() }.eachCount().entries.joinToString(", ") { "${it.key}: ${it.value}" } + "\n"
-            } catch (e: Exception) { "\n== glibc/sigsys.log: ($e)\n" }
-        } ?: ""
-        return logs.joinToString("") { f ->
-            val name = f.relativeTo(files).path
-            if (!f.exists()) "\n== $name: none\n"
-            else "\n== $name\n" + try { f.readText().takeLast(if (name == "ddmask.log") 30_000 else 10_000) } catch (e: Exception) { "($e)" } + "\n"
-        } + blocked
-    }
-
-    /** Saves the log as a .txt in Downloads, like a browser download, so it can be attached anywhere. */
-    private fun saveLog() {
-        val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
-        val name = "deskdroid-log-$stamp.txt"
-        val text = "DeskDroid ${BuildConfig.VERSION_NAME}\n" +
-            "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}\n\n" +
-            AppLog.text() + "\n" + helperLogs()
-        val msg = try {
-            val values = android.content.ContentValues().apply {
-                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
-                put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
-                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
-            }
-            val uri = c.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: error("no Downloads entry")
-            c.contentResolver.openOutputStream(uri)!!.use { it.write(text.toByteArray()) }
-            AppLog.i("Log saved to Downloads/$name")
-            "Saved to Downloads/$name"
-        } catch (e: Exception) {
-            AppLog.i("Save log failed: $e")
-            "Couldn't save the log: ${e.message}"
-        }
-        android.widget.Toast.makeText(c, msg, android.widget.Toast.LENGTH_LONG).show()
-    }
+    /** Saves the log as a .txt in Downloads (and ~/deskdroid-log.txt for the desktop), LogExport. */
+    private fun saveLog() = io.deskdroid.app.LogExport.saveAndToast(c)
 
     // The last lines only: the whole log (thousands of lines) made this page slow
     // to open and scroll. Save log has all of it.
