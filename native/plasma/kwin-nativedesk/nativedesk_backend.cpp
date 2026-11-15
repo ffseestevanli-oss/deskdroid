@@ -1346,6 +1346,16 @@ void NativeDeskBackend::readMessages()
                 Workspace::self()->setShowingDesktop(!Workspace::self()->showingDesktop());
             } else if (m.action.action == NDESK_ACTION_BACK) {
                 back();
+            } else if (m.action.action == NDESK_ACTION_LAUNCHER) {
+                // A gesture (System Settings › Gestures): the start menu, as the Meta key opens it.
+                QDBusConnection::sessionBus().asyncCall(QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"),
+                    QStringLiteral("/PlasmaShell"), QStringLiteral("org.kde.PlasmaShell"), QStringLiteral("activateLauncherMenu")));
+            } else if (m.action.action == NDESK_ACTION_OVERVIEW) {
+                // A gesture: Overview, through its global shortcut (Meta+W).
+                QDBusMessage invoke = QDBusMessage::createMethodCall(QStringLiteral("org.kde.kglobalaccel"),
+                    QStringLiteral("/component/kwin"), QStringLiteral("org.kde.kglobalaccel.Component"), QStringLiteral("invokeShortcut"));
+                invoke << QStringLiteral("Overview");
+                QDBusConnection::sessionBus().asyncCall(invoke);
             }
             break;
         }

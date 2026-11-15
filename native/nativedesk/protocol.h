@@ -137,6 +137,8 @@ enum ndesk_action {
      * windows minimized meanwhile); the compositor slows down instead now
      * (nativeSetSleeping) and KWin isn't told. Not to be reused. */
     NDESK_ACTION_BACK = 4, /* the phone's Back: leave Plasma's edit mode, else Escape */
+    NDESK_ACTION_LAUNCHER = 5, /* a gesture: Plasma's start menu */
+    NDESK_ACTION_OVERVIEW = 6, /* a gesture: KWin's Overview */
 };
 
 enum ndesk_text {

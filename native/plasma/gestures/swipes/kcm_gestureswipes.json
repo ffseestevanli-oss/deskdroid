@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Description": "What a swipe in from a corner or an edge of the phone's screen does",
+        "Icon": "transform-move",
+        "Name": "Edge Swipes"
+    },
+    "X-KDE-Keywords": "gesture,gestures,swipe,edge,corner,bottom,left,right,top,keyboard,menu,dd menu,start menu,overview,back",
+    "X-KDE-System-Settings-Parent-Category": "gestures",
+    "X-KDE-Weight": 1
+}

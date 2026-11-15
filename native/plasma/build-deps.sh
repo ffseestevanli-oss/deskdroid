@@ -953,6 +953,17 @@ build_kcm_aboutphone() {
   find "$PREFIX/plugins" -name '*kcm_aboutphone*' | grep -q .
 }
 inputs_kcm_aboutphone() { cat "$HERE"/aboutphone/* "$HERE"/aboutphone/ui/*; }
+# Gestures (gestures/): DeskDroid's own System Settings category, with Edge
+# Swipes and Taps pages for the phone's touch gestures (app: Gestures.kt).
+build_kcm_gestures() {
+  local s="$WORK/src/gestures"
+  rm -rf "$s" && mkdir -p "$WORK/src" && cp -r "$HERE/gestures" "$s"
+  kde_cmake "$s"
+  find "$PREFIX/plugins" -name '*kcm_gestureswipes*' | grep -q .
+  find "$PREFIX/plugins" -name '*kcm_gesturetaps*' | grep -q .
+  test -e "$PREFIX/share/systemsettings/categories/settings-gestures.desktop"
+}
+inputs_kcm_gestures() { cat "$HERE"/gestures/*.* "$HERE"/gestures/CMakeLists.txt "$HERE"/gestures/swipes/* "$HERE"/gestures/taps/*; }
 # The Steam Installation Assistant (steamassistant/): DeskDroid's own app,
 # bin/steam-assistant, in the party look with the phone app's fonts.
 build_steam_assistant() {
@@ -1663,7 +1674,7 @@ ALL=(expat libffi wayland wayland_protocols xkbcommon dbus epoxy lcms2 libdrm li
      pcre2 glib pixman fribidi harfbuzz cairo pango gdk_pixbuf atk gtk3 breeze_gtk
      xz bzip2 libtiff libxml2 json_glib babl gegl gexiv2 json_c libmypaint mypaint_brushes libcroco librsvg libarchive
      curl libfyaml libxmlb appstream gobject_introspection poppler poppler_data gimp
-     systemsettings kcm_componentchooser kcm_aboutphone steam_assistant software kcms_workspace kcms_kwin kcms_desktop
+     systemsettings kcm_componentchooser kcm_aboutphone kcm_gestures steam_assistant software kcms_workspace kcms_kwin kcms_desktop
      qcoro purpose)
 
 # Files outside a recipe that it builds from, so changing them builds it again.
