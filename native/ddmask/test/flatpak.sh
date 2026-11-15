@@ -60,6 +60,13 @@ expect "programs started after the environment's memory is overwritten still go 
 out="$(run "$LOADER" "$APP/bin/probe")"
 expect "/proc/self/exe names the program, not the loader" "$out" "exe=$APP/bin/probe"
 
+# ...also when it runs from another name for the app's folder (Android's
+# /data/user/0 for /data/data): exec'd as it is, by its whole path.
+ln -s "$T/app" "$T/applink"
+out="$(run "$LOADER" "$T/applink/files/bin/probe" "exec:/proc/self/exe" /app/share/probe/data)"
+expect "...and exec'ing it starts the program again" "$out" "argv0=child exe=$T/(app|applink)/files/bin/probe" \
+  "/app/share/probe/data fopen=app-data"
+
 out="$(run sh -c 'exec probe /usr/share/probe/data' 2>&1 || true)"
 expect "PATH's /app/bin finds the app's program" "$out" "fopen=runtime-data"
 
