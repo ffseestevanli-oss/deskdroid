@@ -263,6 +263,8 @@ object NativeDesk {
     @Volatile var onMonitor = false
     // Lists the phone's apps for Plasma's menu again (set by watchAndroidApps).
     @Volatile var appsRefresher: Runnable? = null
+    /** The Private Space is in the app drawer, not Plasma's menus (Gestures.privateSpaceInDrawer), as the menu was last written. */
+    @Volatile var privateInDrawer = true
 
     fun setOnMonitor(c: android.content.Context, on: Boolean) {
         if (onMonitor == on) return
@@ -730,6 +732,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         setContentView(FrameLayout(this).apply {
             addView(surfaceView, FrameLayout.LayoutParams(-1, -1))
             addView(stats, FrameLayout.LayoutParams(-2, -2))
+            addView(buildAppDrawer(), FrameLayout.LayoutParams(-1, -1))
             addView(buildMenu(), FrameLayout.LayoutParams(-1, -1))
         })
         applyKeepAwake()
@@ -742,12 +745,14 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             sendSafeArea()
             sendKeyboard()
             padMenu()
+            padAppDrawer()
             fitSurface()
             v.onApplyWindowInsets(insets)
         }
         systemBars(false) // full screen, unless the menu's Android bars are on
         // System Settings › Gestures: read now and again whenever it's saved.
         Gestures.start(this)
+        NativeDesk.privateInDrawer = Gestures.privateSpaceInDrawer()
         Prefs.writeTouchMode(this) // the system tray's touch mode item
         Gestures.changed = onGesturesChanged
         window.decorView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> claimSideEdges() }
@@ -1586,6 +1591,11 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             val serial = users.getSerialNumberForUser(user)
             val private = user != me && Build.VERSION.SDK_INT >= 35 &&
                 runCatching { launcher.getLauncherUserInfo(user)?.userType == android.os.UserManager.USER_TYPE_PROFILE_PRIVATE }.getOrDefault(false)
+            // The Private Space lives in the app drawer's locked section instead (Gestures.PRIVATE_SPACE).
+            if (private && Gestures.privateSpaceInDrawer()) {
+                AppLog.i("Native desktop: profile $serial (private): in the app drawer, not the menu")
+                continue
+            }
             val (category, suffix) = when {
                 user == me -> "X-DeskDroid-Android" to ""
                 private -> "X-DeskDroid-Android-Private" to "@$serial"
@@ -2158,6 +2168,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onGenericMotionEvent(e: MotionEvent): Boolean {
         if (!started) return false
+        if (appDrawerOpen) return super.onGenericMotionEvent(e) // the mouse is the app drawer's
         if (e.actionMasked == MotionEvent.ACTION_SCROLL) {
             // A real wheel: its clicks, in 120ths (fractions from a smooth wheel).
             NativeDesk.nativeScroll(-e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 120f,
@@ -2213,7 +2224,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
 
     private fun captureMouse() {
         if (!wantCapture() || !hasWindowFocus() || surfaceView.hasPointerCapture() ||
-            menu.visibility == android.view.View.VISIBLE) return
+            menu.visibility == android.view.View.VISIBLE || appDrawerOpen) return
         if (!captureListening) {
             surfaceView.setOnCapturedPointerListener { _, e -> capturedMouse(e); true }
             captureListening = true
@@ -2246,6 +2257,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (e.repeatCount == 0) {
                 if (menu.visibility == android.view.View.VISIBLE) showMenu(false)
+                else if (appDrawerOpen) appDrawer?.close()
                 else if (started) NativeDesk.nativeAction(NativeDesk.ACTION_BACK)
             }
             return true
@@ -2253,6 +2265,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         // Volume keys set the phone's volume, which is the desktop's sound too
         // (there's no KDE mixer yet): Android's own volume slider shows.
         if (VolumeKeys.onKeyDown(this, keyCode, e)) return true
+        // The app drawer's: typing goes to its search box, the desktop gets nothing.
+        if (appDrawerOpen) return appDrawer?.typed(keyCode, e) == true || super.onKeyDown(keyCode, e)
         if (started) {
             if (!KeyEvent.isModifierKey(keyCode)) DeskInput.interrupted(click = false) // a real keyboard's key
             NativeDesk.physicalKey(keyCode, e, true)
@@ -2263,8 +2277,56 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) return true // handled in onKeyDown
         if (VolumeKeys.isVolumeKey(keyCode)) return true
+        if (appDrawerOpen) return super.onKeyUp(keyCode, e)
         if (started) NativeDesk.physicalKey(keyCode, e, false)
         return true
+    }
+
+    // ---- The app drawer (PhoneAppDrawer): the phone's apps, like a phone's
+    // home screen, with Work and the Private Space at the bottom. A swipe up
+    // from the bottom edge (System Settings › Gestures) or the DD menu's Apps
+    // opens it; a pull down, Back or Home puts it away. Android's bars show
+    // while it's up, and the desktop behind it gets no touches, keys or mouse.
+
+    private var appDrawer: PhoneAppDrawer? = null
+    private val appDrawerOpen get() = appDrawer?.isOpen == true
+
+    private fun buildAppDrawer(): android.view.View {
+        val d = PhoneAppDrawer(this, onDesktop = true) { appDrawerClosed() }
+        appDrawer = d
+        d.view.visibility = android.view.View.GONE
+        d.view.elevation = dp(12f)
+        return d.view
+    }
+
+    private fun showAppDrawer() {
+        val d = appDrawer ?: return
+        if (appDrawerOpen || !Gestures.switch(Gestures.APP_DRAWER_ON)) return
+        if (menu.visibility == android.view.View.VISIBLE) showMenu(false)
+        softKeyboard(false)
+        releaseMouse() // the mouse can reach the drawer
+        NativeDesk.releaseKeys()
+        systemBars(true)
+        padAppDrawer()
+        d.view.visibility = android.view.View.VISIBLE
+        d.show()
+    }
+
+    /** The drawer is put away (PhoneAppDrawer.close): the desktop is full screen and has the mouse again. */
+    private fun appDrawerClosed() {
+        appDrawer?.view?.visibility = android.view.View.GONE
+        if (menu.visibility != android.view.View.VISIBLE) systemBars(false)
+        surfaceView.requestFocus()
+        captureMouse()
+    }
+
+    /** The drawer between Android's bars and clear of the cutout and the phone's keyboard. */
+    private fun padAppDrawer() {
+        val v = appDrawer?.view ?: return
+        val i = if (Build.VERSION.SDK_INT >= 30)
+            lastInsets?.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()) else null
+        val ime = if (Build.VERSION.SDK_INT >= 30) lastInsets?.getInsets(WindowInsets.Type.ime())?.bottom ?: 0 else 0
+        v.setPadding(i?.left ?: 0, i?.top ?: 0, i?.right ?: 0, maxOf(i?.bottom ?: 0, ime))
     }
 
     // ---- The DD menu: a sheet that slides up from the bottom, where the
@@ -2416,7 +2478,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             addView(settings, FrameLayout.LayoutParams(-1, -2))
         }, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val actions = listOf(
+        val actions = listOfNotNull(
+            ui.tile("Apps", P.PURPLE) { showAppDrawer() }.takeIf { Gestures.switch(Gestures.APP_DRAWER_ON) },
             ui.tile("Keyboard", P.CYAN) { showMenu(false); toggleKeyboard() },
             ui.tile("Agora (Software)", P.GREEN) {
                 showMenu(false)
@@ -2558,7 +2621,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             held.forEach { it.recycle() }; held.clear()
             hold = 0
             downX = e.rawX; downY = e.rawY
-            if (started && menu.visibility != android.view.View.VISIBLE)
+            if (started && menu.visibility != android.view.View.VISIBLE && !appDrawerOpen)
                 gestureZone(e)?.let { holdZone = it; hold = 1; main.postDelayed(releaseHeld, SWIPE_MS) }
             if (hold == 0) return super.dispatchTouchEvent(e)
             held.add(MotionEvent.obtain(e))
@@ -2567,7 +2630,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         val end = act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL
         when (hold) {
             0 -> {
-                if (act == MotionEvent.ACTION_POINTER_DOWN && e.pointerCount == 3 && startThreeFingers(e)) return true
+                if (act == MotionEvent.ACTION_POINTER_DOWN && e.pointerCount == 3 && !appDrawerOpen && startThreeFingers(e)) return true
                 return super.dispatchTouchEvent(e)
             }
             -1 -> { if (end) hold = 0; return true }
@@ -2670,6 +2733,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     private fun runGesture(action: String) {
         AppLog.i("Gestures: $action")
         when (action) {
+            Gestures.APP_DRAWER -> showAppDrawer()
             Gestures.DD_MENU -> showMenu(true)
             Gestures.KEYBOARD ->
                 if (Build.VERSION.SDK_INT >= 30 && surfaceView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true) softKeyboard(false)
@@ -2700,7 +2764,18 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (Gestures.action(Gestures.RIGHT) != Gestures.NONE) rects += android.graphics.Rect(v.width - wide, top, v.width, top + band)
         if (v.systemGestureExclusionRects != rects) v.systemGestureExclusionRects = rects
     }
-    private val onGesturesChanged: () -> Unit = { main.post { claimSideEdges() } }
+    private val onGesturesChanged: () -> Unit = {
+        main.post {
+            claimSideEdges()
+            if (appDrawerOpen && !Gestures.switch(Gestures.APP_DRAWER_ON)) appDrawer?.close()
+            // The Private Space switched between the app drawer and Plasma's menus.
+            val inDrawer = Gestures.privateSpaceInDrawer()
+            if (inDrawer != NativeDesk.privateInDrawer) {
+                NativeDesk.privateInDrawer = inDrawer
+                NativeDesk.appsRefresher?.run()
+            }
+        }
+    }
 
     /**
      * Android shows its hidden bars for a swipe from anywhere along the
@@ -2710,7 +2785,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
      * Not while the DD menu is open (it shows the bars) or the bars are kept.
      */
     private val hideBars = Runnable {
-        if (Build.VERSION.SDK_INT >= 30 && !keepBars() && menu.visibility != android.view.View.VISIBLE)
+        if (Build.VERSION.SDK_INT >= 30 && !keepBars() && menu.visibility != android.view.View.VISIBLE && !appDrawerOpen)
             window.insetsController?.hide(WindowInsets.Type.systemBars())
     }
     private fun hideCornerBars() {
@@ -2753,6 +2828,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         super.onNewIntent(intent)
         if (intent.hasCategory(android.content.Intent.CATEGORY_HOME) && monitorHasDesktop()) { backToTouchpad(); return }
         // Home: every window minimized, and back again on the next press.
+        // Home with the app drawer up puts it away, as on a phone's home screen.
+        if (appDrawerOpen && intent.hasCategory(android.content.Intent.CATEGORY_HOME)) { appDrawer?.close(); return }
         if (inFront && started && intent.hasCategory(android.content.Intent.CATEGORY_HOME)) {
             showMenu(false)
             NativeDesk.nativeAction(NativeDesk.ACTION_SHOW_DESKTOP)
@@ -2818,7 +2895,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun showMenu(open: Boolean) {
-        systemBars(open)
+        if (open && appDrawerOpen) appDrawer?.close()
+        systemBars(open || appDrawerOpen)
         if (open) {
             softKeyboard(false) // the sheet takes the keyboard's place
             releaseMouse() // the mouse can reach the sheet
@@ -3406,6 +3484,7 @@ class PhoneTouchpadActivity : Activity() {
     private fun runGesture(action: String) {
         AppLog.i("Gestures (touchpad screen): $action")
         when (action) {
+            Gestures.APP_DRAWER -> showDrawer(true)
             Gestures.DD_MENU -> showMenu(true)
             Gestures.KEYBOARD -> toggleKeyboard()
             // Touchpad <-> Direct touch is for the phone's own desktop: this screen is always a touchpad.
