@@ -316,42 +316,62 @@ class InstallingScreen(a: Activity, n: Navigator) : Screen(a, n) {
     }
 }
 
+/**
+ * DDHome's first-launch checklist: everything DeskDroid needs to run stably,
+ * up front. A setting that's already on shows green with a check. Opened again
+ * later from Settings and Home's Setup row (then Done instead of Continue).
+ */
 class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
-    private lateinit var childStatus: TextView
-    private lateinit var batteryStatus: TextView
-    private lateinit var usageStatus: TextView
-    private lateinit var notesStatus: TextView
-    private lateinit var filesStatus: TextView
-    // Opened again later (Settings, or Home's warning): Back instead of the setup's Continue.
+    /** One checklist card. [actions] holds extra buttons, hidden once it's done. */
+    private inner class Item(
+        val check: Checks.Item,
+        val title: String,
+        val number: Int,
+        val onTap: () -> Unit,
+    ) {
+        lateinit var view: LinearLayout
+        lateinit var mark: TextView
+        lateinit var status: TextView
+        var actions: LinearLayout? = null
+    }
+
+    private val items = ArrayList<Item>()
+    private lateinit var summaryCard: LinearLayout
+    private lateinit var summaryTitle: TextView
+    private lateinit var summaryText: TextView
+    private lateinit var skipLink: TextView
+    private lateinit var launcherItem: Item
+    // The home-app request was shown once on this page: the next tap opens Default apps,
+    // since Android stops showing the request after it's declined twice.
+    private var askedHome = false
+    // Opened again later (Settings, or Home's Setup row): Done instead of the setup's Continue.
     private val again = Prefs.setupDone(a)
 
     override fun build() = page(listOf(Triple(0.85f, 0.2f, Party.GREEN))) {
         addView(ui.column(6) {
             addView(ui.row {
-                if (again) addView(ui.kicker("Battery + background"))
+                if (again) addView(ui.kicker("Setup checklist"))
                 else {
                     addView(ui.kicker("Setup · "))
-                    addView(ui.kicker("Battery", Party.GREEN))
+                    addView(ui.kicker("Checklist", Party.GREEN))
                 }
             })
-            addView(ui.heading("Don't let Android kill the party"))
-            addView(ui.text("Android shuts down apps that run lots of programs. A desktop does exactly that.", 14f, Party.MUTED))
+            addView(ui.heading("Get DeskDroid ready"))
+            addView(ui.text("Android stops apps that run lots of programs in the background, and a desktop does " +
+                "exactly that. Turn these on and DeskDroid runs like a real computer.", 14f, Party.MUTED))
         })
-        addView(ui.column(10) {
-            setPadding(c.dp(14), c.dp(14), c.dp(14), c.dp(14))
-            background = ChamferDrawable(c.dp(14f), fill = Party.CARD, stroke = Party.ORANGE, strokeWidth = c.dp(1.5f), cutTopLeft = false)
-            addView(ui.row(12) {
-                addView(ui.text("!", 20f, Party.BG).apply {
-                    typeface = Party.orbitron(c); gravity = Gravity.CENTER
-                    background = ChamferDrawable(0f, fill = Party.ORANGE, cutTopLeft = false, cutBottomRight = false)
-                    layoutParams = LinearLayout.LayoutParams(c.dp(32), c.dp(32))
-                })
-                addView(ui.weight(ui.column(2) {
-                    addView(ui.text("Child process limit", 15f, Party.TEXT, 700))
-                    childStatus = ui.text("", 13f, Party.MUTED)
-                    addView(childStatus)
-                }))
-            })
+
+        summaryCard = ui.column(4) {
+            setPadding(c.dp(14), c.dp(12), c.dp(14), c.dp(12))
+            summaryTitle = ui.text("", 15f, Party.TEXT, 700)
+            summaryText = ui.text("", 13f, Party.MUTED)
+            addView(summaryTitle)
+            addView(summaryText)
+        }
+        addView(summaryCard, LinearLayout.LayoutParams(-1, -2))
+
+        var n = 0
+        addItem(Item(Checks.Item.CHILD_PROCESSES, "Child process limit", ++n) { if (Checks.phantomFixIsToggle()) openDevOptions() else copyAdbCommand() }) {
             if (Checks.phantomFixIsToggle()) {
                 addView(ui.outlineButton("Open Developer options", Party.ORANGE, Party.ORANGE) { openDevOptions() },
                     LinearLayout.LayoutParams(-1, -2))
@@ -361,39 +381,22 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
                 addView(ui.text("Android 12 or 13: there's no switch for this, so it's fixed once with ADB " +
                     "(from a computer, or Wireless debugging with a local ADB app).", 12f, Party.MUTED))
             }
-        }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.accentRow(Party.CYAN, Party.CARD) {
-            addView(ui.weight(ui.column(2) {
-                addView(ui.text("Battery optimization", 15f, Party.TEXT, 700))
-                batteryStatus = ui.text("", 13f, Party.MUTED)
-                addView(batteryStatus)
-            }))
-            setOnClickListener { if (!Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c) else Checks.openAppInfo(c) }
-        }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.accentRow(Party.GREEN, Party.CARD) {
-            addView(ui.weight(ui.column(2) {
-                addView(ui.text("Background usage", 15f, Party.TEXT, 700))
-                usageStatus = ui.text("", 13f, Party.MUTED)
-                addView(usageStatus)
-            }))
-            setOnClickListener { Checks.openAppInfo(c) }
-        }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.accentRow(Party.PINK, Party.CARD) {
-            addView(ui.weight(ui.column(2) {
-                addView(ui.text("Status notification", 15f, Party.TEXT, 700))
-                notesStatus = ui.text("", 13f, Party.MUTED)
-                addView(notesStatus)
-            }))
-            setOnClickListener { fixNotifications() }
-        }, LinearLayout.LayoutParams(-1, -2))
-        addView(ui.accentRow(Party.PURPLE, Party.CARD) {
-            addView(ui.weight(ui.column(2) {
-                addView(ui.text("Share files with the desktop", 15f, Party.TEXT, 700))
-                filesStatus = ui.text("", 13f, Party.MUTED)
-                addView(filesStatus)
-            }))
-            setOnClickListener { if (!Storage.granted(c)) Storage.request(activity) }
-        }, LinearLayout.LayoutParams(-1, -2))
+        }
+        addItem(Item(Checks.Item.BATTERY, "Battery optimization", ++n) {
+            if (!Checks.batteryUnrestricted(c)) Checks.requestBatteryUnrestricted(c) else Checks.openAppInfo(c)
+        })
+        addItem(Item(Checks.Item.BACKGROUND, "Background usage", ++n) { Checks.openAppInfo(c) })
+        addItem(Item(Checks.Item.NOTIFICATIONS, "Status notification", ++n) { fixNotifications() })
+        addItem(Item(Checks.Item.DESKTOP_HELPER, "DeskDroid desktop helper", ++n) {
+            if (!Checks.desktopHelperOn(c)) io.deskdroid.app.PowerMenuService.turnOn(c,
+                "Tap \"DeskDroid desktop helper\" (it may be under Installed apps) and turn it on")
+        })
+        addItem(Item(Checks.Item.FILES, "Share files with the desktop", ++n) { if (!Storage.granted(c)) Storage.request(activity) })
+
+        addView(ui.text("RECOMMENDED", 12f, Party.MUTED, 700).apply { letterSpacing = 0.14f })
+        launcherItem = Item(Checks.Item.HOME_APP, "Make DeskDroid your home screen", ++n) { setHomeApp() }
+        addItem(launcherItem)
+
         addView(ui.switchRow("OPTIONAL", "Start on phone boot",
             "Desktop warms up in the background so it opens instantly. Uses some battery and about 1 GB of memory.",
             Prefs.autoStart(c)) { on ->
@@ -411,39 +414,94 @@ class KeepRunningScreen(a: Activity, n: Navigator) : Screen(a, n) {
         if (again) addView(ui.primaryButton("Done") { nav.back() }, LinearLayout.LayoutParams(-1, -2))
         else {
             addView(ui.primaryButton("Continue") { finish() }, LinearLayout.LayoutParams(-1, -2))
-            addView(ui.linkButton("Skip for now", Party.MUTED) { finish() }, LinearLayout.LayoutParams(-1, -2))
+            skipLink = ui.linkButton("Skip for now and test-drive", Party.MUTED) { finish() }
+            addView(skipLink, LinearLayout.LayoutParams(-1, -2))
         }
+    }
+
+    private fun LinearLayout.addItem(item: Item, actions: (LinearLayout.() -> Unit)? = null) {
+        item.view = ui.column(10) {
+            setPadding(c.dp(14), c.dp(14), c.dp(14), c.dp(14))
+            addView(ui.row(12) {
+                item.mark = ui.text(item.number.toString(), 16f, Party.TEXT).apply {
+                    typeface = Party.orbitron(c); gravity = Gravity.CENTER
+                }
+                addView(item.mark, LinearLayout.LayoutParams(c.dp(32), c.dp(32)))
+                addView(ui.weight(ui.column(2) {
+                    addView(ui.text(item.title, 15f, Party.TEXT, 700))
+                    item.status = ui.text("", 13f, Party.MUTED)
+                    addView(item.status)
+                }))
+            })
+            if (actions != null) {
+                item.actions = ui.column(6) { actions() }
+                addView(item.actions, LinearLayout.LayoutParams(-1, -2))
+            }
+            setOnClickListener { item.onTap() }
+        }
+        items += item
+        addView(item.view, LinearLayout.LayoutParams(-1, -2))
     }
 
     override fun onShow() = refresh()
 
     private fun refresh() {
-        childStatus.text = when (Checks.phantomProcesses(c)) {
-            Checks.State.OK -> "Fixed. Android won't stop the desktop for running too many programs."
+        for (item in items) {
+            val ok = Checks.met(c, item.check)
+            item.status.text = statusText(item.check, ok)
+            item.status.setTextColor(if (ok) Party.GREEN else Party.MUTED)
+            item.actions?.visibility = if (ok) View.GONE else View.VISIBLE
+            // Done: green outline and a check. To do: its number, outlined in orange
+            // (the home screen is a suggestion, so cyan).
+            val accent = if (ok) Party.GREEN else if (item.check == Checks.Item.HOME_APP) Party.CYAN else Party.ORANGE
+            item.view.background = ChamferDrawable(c.dp(14f), fill = Party.CARD,
+                stroke = if (ok) Party.GREEN else Party.BORDER, strokeWidth = c.dp(if (ok) 2f else 1.5f), cutTopLeft = false)
+            item.mark.text = if (ok) "✓" else item.number.toString()
+            item.mark.setTextColor(if (ok) Party.BG else accent)
+            item.mark.background = if (ok) ChamferDrawable(0f, fill = Party.GREEN, cutTopLeft = false, cutBottomRight = false)
+                else ChamferDrawable(0f, stroke = accent, strokeWidth = c.dp(1.5f), cutTopLeft = false, cutBottomRight = false)
+        }
+
+        val (done, total) = Checks.progress(c)
+        val all = done == total
+        summaryTitle.text = if (all) "✓  You're all set" else "$done of $total ready"
+        summaryTitle.setTextColor(if (all) Party.GREEN else Party.TEXT)
+        summaryText.text = if (all)
+            "Everything DeskDroid needs is on, so you'll have the optimal experience."
+        else "It's fine to skip these for a test drive, but without them Android will likely stop DeskDroid, " +
+            "so expect the desktop to crash and restart often."
+        summaryCard.background = ChamferDrawable(c.dp(14f), fill = if (all) 0xFF0C1F15.toInt() else Party.CARD,
+            stroke = if (all) Party.GREEN else Party.ORANGE, strokeWidth = c.dp(if (all) 2f else 1.5f), cutTopLeft = false)
+        if (!again) skipLink.visibility = if (all) View.GONE else View.VISIBLE
+    }
+
+    private fun statusText(check: Checks.Item, ok: Boolean): String = when (check) {
+        Checks.Item.CHILD_PROCESSES -> when (Checks.phantomProcesses(c)) {
+            Checks.State.OK -> "Off. Android won't stop the desktop for running too many programs."
             Checks.State.NOT_NEEDED -> "Not needed on this Android version."
             else -> if (Checks.phantomFixIsToggle())
                 "Turn on “Disable child process restrictions” in Developer options. We'll jump you straight there."
             else "Needs a one-time fix with ADB."
         }
-        val battery = Checks.batteryUnrestricted(c)
-        val notes = Checks.notificationsAllowed(c)
-        val restricted = Checks.backgroundRestricted(c)
-        batteryStatus.text = if (battery) "Off. Android won't put the desktop to sleep to save battery."
+        Checks.Item.BATTERY -> if (ok) "Off. Android won't put the desktop to sleep to save battery."
             else "On. Tap and choose Allow, or Android may stop the desktop while it runs in the background."
-        batteryStatus.setTextColor(if (battery) Party.GREEN else Party.ORANGE)
-        usageStatus.text = when {
-            restricted -> "Restricted. Tap, then App battery usage › Unrestricted."
-            battery -> "Unrestricted. To check: App battery usage in App info."
-            else -> "Tap, then App battery usage › Unrestricted (Allow background usage on)."
-        }
-        usageStatus.setTextColor(if (battery && !restricted) Party.GREEN else Party.MUTED)
-        notesStatus.text = if (notes) "Allowed. The desktop keeps a notification while it runs, so Android keeps it alive."
+        Checks.Item.BACKGROUND -> if (ok) "Allowed. To check: App battery usage in App info."
+            else "Restricted. Tap, then App battery usage › Unrestricted."
+        Checks.Item.NOTIFICATIONS -> if (ok) "Allowed. The desktop keeps a notification while it runs, so Android keeps it alive."
             else "Tap to allow it. Without it Android may stop the desktop sooner."
-        notesStatus.setTextColor(if (notes) Party.GREEN else Party.MUTED)
-        val files = Storage.granted(c)
-        filesStatus.text = if (files) "All set. Your phone's storage shows up on the desktop as a drive called Phone."
-            else "Tap to allow All files access, so the desktop can open and save files on your phone"
-        filesStatus.setTextColor(if (files) Party.GREEN else Party.MUTED)
+        Checks.Item.DESKTOP_HELPER -> if (ok) "On. Restart and power off from the desktop, Meta and Alt+Tab reach it, and it keeps the monitor."
+            else "An accessibility service for the desktop's power menu, keyboard shortcuts and monitor. Tap, then turn on DeskDroid desktop helper."
+        Checks.Item.FILES -> if (ok) "All set. Your phone's storage shows up on the desktop as a drive called Phone."
+            else "Tap to allow All files access, so the desktop can open and save files on your phone."
+        Checks.Item.HOME_APP -> if (ok) "DeskDroid is your home screen. Home takes you to the desktop, and Android keeps its home app running."
+            else "Home goes straight to your desktop, like a real computer, and Android keeps its home app running. " +
+                "Switch back anytime in Settings › Apps › Default apps."
+    }
+
+    private fun setHomeApp() {
+        if (Checks.isHomeApp(c)) return
+        if (askedHome || !Checks.requestHomeApp(activity)) Checks.openHomeSettings(c)
+        askedHome = true
     }
 
     private fun openDevOptions() {
@@ -536,7 +594,7 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
             addView(settingRow("Phone files", "") {
                 if (Storage.granted(c)) nav.go(SettingsScreen(activity, nav)) else Storage.request(activity)
             }.also { filesValue = it.getChildAt(it.childCount - 1) as TextView })
-            addView(settingRow("Battery", "") { nav.go(KeepRunningScreen(activity, nav)) }
+            addView(settingRow("Setup checklist", "") { nav.go(KeepRunningScreen(activity, nav)) }
                 .also { batteryValue = it.getChildAt(it.childCount - 1) as TextView })
         }, LinearLayout.LayoutParams(-1, -2))
         renderMonitor()
@@ -613,8 +671,9 @@ class HomeScreen(a: Activity, n: Navigator) : Screen(a, n) {
         refreshStatus()
         renderMonitor()
         filesValue?.text = if (Storage.granted(c)) "Shared ›" else "Not shared · tap to allow ›"
-        batteryValue?.text = if (Checks.batteryUnrestricted(c) && !Checks.backgroundRestricted(c)) "Unrestricted ›" else "Optimized · tap to fix ›"
-        batteryValue?.setTextColor(if (Checks.batteryUnrestricted(c) && !Checks.backgroundRestricted(c)) Party.MUTED else Party.ORANGE)
+        val (done, total) = Checks.progress(c)
+        batteryValue?.text = if (done == total) "All set ›" else "$done of $total · tap to fix ›"
+        batteryValue?.setTextColor(if (done == total) Party.MUTED else Party.ORANGE)
     }
 
     override fun onHide() {
@@ -661,7 +720,7 @@ class SettingsScreen(a: Activity, n: Navigator) : Screen(a, n) {
         addView(ui.text("While the desktop is on a monitor, the phone's touchpad turns pure black (pixels off on " +
             "OLED) after this long untouched. A tap wakes it and doesn't click.", 13f, Party.MUTED))
 
-        addView(ui.outlineButton("Battery + background", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
+        addView(ui.outlineButton("Setup checklist", Party.ORANGE, Party.ORANGE) { nav.go(KeepRunningScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
         addView(ui.outlineButton("GPU report", Party.CYAN, Party.CYAN) { nav.go(GpuReportScreen(activity, nav)) },
             LinearLayout.LayoutParams(-1, -2))
