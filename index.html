@@ -8,7 +8,7 @@
 <link rel="icon" href="img/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Chakra+Petch:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Chakra+Petch:wght@400;500;600&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#07060b; --bg2:#0e0c15; --card:#13101c; --line:#2a2236;
@@ -120,6 +120,52 @@ section{padding:90px 0}
 @media (max-width:900px){.screens{grid-template-columns:1fr}.dev{height:auto}}
 @media (max-width:560px){.launcher{grid-template-columns:1fr}}
 
+/* flavors */
+.flavors{display:grid;grid-template-columns:1.12fr 1fr;gap:22px;align-items:stretch}
+.flavor{position:relative;display:flex;flex-direction:column;gap:18px;padding:28px;min-width:0}
+.flavor .badge{align-self:flex-start;font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:6px 12px}
+.flavor h3{font-size:clamp(24px,2.6vw,32px)}
+.flavor .sub{color:var(--muted)}
+.flavor ul{list-style:none;display:grid;gap:10px}
+.flavor li{padding-left:22px;position:relative;color:var(--muted);font-size:15.5px}
+.flavor li b{color:var(--text);font-weight:600}
+.flavor li::before{content:"";position:absolute;left:0;top:9px;width:10px;height:10px}
+.flavor .foot{margin-top:auto;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.party{background:var(--card);clip-path:var(--chamfer)}
+.party-wrap{padding:3px;background:var(--rainbow);clip-path:var(--chamfer);filter:drop-shadow(0 20px 50px rgba(153,0,69,.35))}
+.party .badge{background:var(--magenta);color:#fff;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px))}
+.party li::before{background:var(--pink);clip-path:polygon(0 0,70% 0,100% 30%,100% 100%,30% 100%,0 70%)}
+.party .shot-in{border:1px solid var(--line)}
+/* Sober: Graphite */
+.sober{--gr-bg:#141416;--gr-sf:#1f1f22;--gr-ln:#2e2e33;--gr-tx:#e8e8ea;--gr-mu:#9a9aa2;--gr-ac:#8fa9c9;
+  --lt-bg:#e6e6ea;--lt-sf:#f7f7f9;--lt-ln:#cfcfd6;--lt-tx:#1d1d21;--lt-mu:#62626b;--lt-ac:#4d6d92;
+  background:var(--gr-bg);border:1px solid var(--gr-ln);border-radius:6px;font-family:"IBM Plex Sans","Chakra Petch",system-ui,sans-serif;color:var(--gr-tx)}
+.sober h3{font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:600;letter-spacing:-.01em}
+.sober .sub,.sober li{color:var(--gr-mu)}
+.sober li b{color:var(--gr-tx)}
+.sober li::before{border:1.5px solid var(--gr-ac);border-radius:2px}
+.sober .badge{border:1px solid var(--gr-ac);color:var(--gr-ac);font-family:"IBM Plex Mono",monospace;letter-spacing:.06em;border-radius:3px}
+.sober .mono{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--gr-mu)}
+.minis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mini{aspect-ratio:16/10;border-radius:4px;position:relative;overflow:hidden;border:1px solid var(--m-ln);background:var(--m-bg);background-image:radial-gradient(var(--m-dot) 1px,transparent 1px);background-size:12px 12px}
+.mini.dark{--m-bg:var(--gr-bg);--m-sf:var(--gr-sf);--m-ln:var(--gr-ln);--m-tx:var(--gr-tx);--m-ac:var(--gr-ac);--m-dot:#26262a}
+.mini.light{--m-bg:var(--lt-bg);--m-sf:var(--lt-sf);--m-ln:var(--lt-ln);--m-tx:var(--lt-tx);--m-ac:var(--lt-ac);--m-dot:#d4d4da}
+.mini .win{position:absolute;left:10%;top:20%;width:72%;height:56%;background:var(--m-sf);border:1px solid var(--m-ln);border-radius:3px;display:grid;grid-template-rows:12% 1fr}
+.mini .bar{border-bottom:1px solid var(--m-ln);display:flex;align-items:center;justify-content:flex-end;gap:3px;padding:0 5px}
+.mini .bar i{width:5px;height:5px;border-radius:50%;border:1px solid var(--m-ln)}
+.mini .bar i:last-child{background:var(--m-ac);border-color:var(--m-ac)}
+.mini .body{display:grid;grid-template-columns:28% 1fr}
+.mini .side{border-right:1px solid var(--m-ln);padding:6px 5px;display:grid;gap:4px;align-content:start}
+.mini .side span{height:4px;background:var(--m-ln);border-radius:1px}
+.mini .side span:first-child{background:var(--m-ac)}
+.mini .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px;align-content:start}
+.mini .grid span{aspect-ratio:5/4;border:1.2px solid var(--m-tx);opacity:.55;border-radius:2px}
+.mini .panel{position:absolute;left:4%;right:4%;bottom:5%;height:10%;background:var(--m-sf);border:1px solid var(--m-ln);border-radius:3px;display:flex;align-items:center;gap:4px;padding:0 4px}
+.mini .panel span{width:9px;height:60%;border:1px solid var(--m-tx);opacity:.5;border-radius:2px}
+.mini .panel span:first-child{background:var(--m-ac);border-color:var(--m-ac);opacity:1}
+.mini .lbl{position:absolute;right:6px;top:4px;font:500 10px/1 "IBM Plex Mono",monospace;color:var(--m-tx);opacity:.6}
+@media (max-width:900px){.flavors{grid-template-columns:1fr}}
+
 /* steam */
 .steam{background:linear-gradient(135deg,#140d24,#0a0710 60%);border:1px solid var(--line);padding:56px;position:relative;clip-path:var(--chamfer);overflow:hidden}
 .steam::after{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;background:radial-gradient(circle,rgba(139,92,255,.35),transparent 65%)}
@@ -166,7 +212,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
       <a href="#apps">Software</a>
       <a href="#screens">Any screen</a>
       <a href="#desk">At your desk</a>
-      <a href="#look">Look</a>
+      <a href="#flavors">Flavors</a>
       <a href="#steam">Steam</a>
     </div>
     <a class="btn" href="https://github.com/ffseestevanli-oss/deskdroid/releases/latest">Get the alpha</a>
@@ -338,6 +384,47 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
   </div>
   <div class="wrap" style="margin-top:40px">
     <div class="frame"><div class="frame-top"></div><img src="img/glass.webp" alt="DD Party Glass variant with Dolphin and Konsole" width="1600" height="900"></div>
+  </div>
+</section>
+
+<section id="flavors">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Choose your flavor</span>
+      <h2>Party, or Sober.</h2>
+      <p>DeskDroid comes in two editions with the same desktop, apps and features underneath. Pick the one that fits how you work.</p>
+    </div>
+    <div class="flavors">
+      <div class="party-wrap">
+        <div class="flavor party">
+          <span class="badge">Our pick · Available now</span>
+          <h3>DeskDroid <span class="grad">Party</span></h3>
+          <p class="sub">The DeskDroid you've seen on this page: loud, colourful and unmistakably ours.</p>
+          <div class="shot-in"><img src="img/desktop.webp" alt="DeskDroid Party desktop" width="1600" height="900"></div>
+          <ul>
+            <li><b>DD Party and DD Party Glass</b>, with rainbow accents and chamfered corners</li>
+            <li><b>The DD icon pack</b>, window borders, splash screen and terminal colours</li>
+            <li><b>A floating panel</b> with the rainbow bar, and Etherium skinned to match</li>
+          </ul>
+          <div class="foot"><a class="btn" href="https://github.com/ffseestevanli-oss/deskdroid/releases/latest">Download Party</a></div>
+        </div>
+      </div>
+      <div class="flavor sober">
+        <span class="badge">Coming soon</span>
+        <h3>DeskDroid Sober</h3>
+        <p class="sub">Every feature, none of the party. A quiet Graphite desktop for work, school and big screens.</p>
+        <div class="minis" aria-label="Sober's Graphite theme in dark and light">
+          <div class="mini dark"><span class="lbl">dark</span><div class="win"><div class="bar"><i></i><i></i><i></i></div><div class="body"><div class="side"><span></span><span></span><span></span><span></span></div><div class="grid"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div></div><div class="panel"><span></span><span></span><span></span><span></span></div></div>
+          <div class="mini light"><span class="lbl">light</span><div class="win"><div class="bar"><i></i><i></i><i></i></div><div class="body"><div class="side"><span></span><span></span><span></span><span></span></div><div class="grid"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div></div><div class="panel"><span></span><span></span><span></span><span></span></div></div>
+        </div>
+        <ul>
+          <li><b>Graphite skins, dark and light</b>, in calm greys with one steel-blue accent</li>
+          <li><b>The default KDE layout</b>, so every Plasma guide and tutorial matches</li>
+          <li><b>Agora in the same plain theme</b>, and no Party elements anywhere</li>
+        </ul>
+        <div class="foot"><span class="mono">A separate release · same apps, same features</span></div>
+      </div>
+    </div>
   </div>
 </section>
 
