@@ -101,6 +101,25 @@ section{padding:90px 0}
 .applist .chip{color:var(--text)}
 .note{color:var(--muted);font-size:14px;margin-top:18px}
 
+/* screens */
+.screens{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.screen{background:var(--card);padding:28px 26px;clip-path:var(--chamfer);display:flex;flex-direction:column;gap:12px;min-width:0}
+.dev{height:120px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:6px}
+.dev i{display:block;border:3px solid var(--accent);border-radius:14px;background:linear-gradient(160deg,rgba(153,0,69,.55),rgba(46,197,255,.18));position:relative}
+.dev i::after{content:"";position:absolute;left:10%;right:10%;bottom:8px;height:4px;background:var(--rainbow);border-radius:2px}
+.dev.phone i{width:62px;height:118px}
+.dev.tablet i{width:170px;height:116px}
+.dev.monitor i{width:190px;height:108px;border-radius:6px}
+.screen .tag{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.screen h3{font-size:20px}
+.screen p{color:var(--muted);font-size:15.5px}
+.launcher{margin-top:18px;background:var(--card);padding:30px 28px;clip-path:var(--chamfer);display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;border-top:3px solid var(--magenta)}
+.launcher img{width:72px;height:72px}
+.launcher h3{font-size:22px;margin-bottom:8px}
+.launcher p{color:var(--muted)}
+@media (max-width:900px){.screens{grid-template-columns:1fr}.dev{height:auto}}
+@media (max-width:560px){.launcher{grid-template-columns:1fr}}
+
 /* steam */
 .steam{background:linear-gradient(135deg,#140d24,#0a0710 60%);border:1px solid var(--line);padding:56px;position:relative;clip-path:var(--chamfer);overflow:hidden}
 .steam::after{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;background:radial-gradient(circle,rgba(139,92,255,.35),transparent 65%)}
@@ -145,6 +164,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
     <div class="links">
       <a href="#feats">Feats</a>
       <a href="#apps">Software</a>
+      <a href="#screens">Any screen</a>
       <a href="#desk">At your desk</a>
       <a href="#look">Look</a>
       <a href="#steam">Steam</a>
@@ -243,6 +263,43 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
       <span class="chip">Dolphin</span><span class="chip">Kate</span><span class="chip">Konsole</span><span class="chip">Gwenview</span><span class="chip">KCalc</span><span class="chip">System Settings</span><span class="chip">Etherium</span><span class="chip">VLC</span><span class="chip">Okular</span><span class="chip">Ark</span><span class="chip">Filelight</span><span class="chip">Kid3</span><span class="chip">KolourPaint</span><span class="chip">Strawberry</span><span class="chip">qBittorrent</span><span class="chip">KeePassXC</span><span class="chip">Kleopatra</span><span class="chip">KMyMoney</span><span class="chip">Marknote</span><span class="chip">Anki</span><span class="chip">Zotero</span><span class="chip">Betterbird</span><span class="chip">Evolution</span><span class="chip">Freeplane</span><span class="chip">Planify</span><span class="chip">PDF Arranger</span><span class="chip">ytDownloader</span><span class="chip">Sasha</span><span class="chip">+ your Android apps</span>
     </div>
     <p class="note">Big apps like Krita, Logseq and draw.io are packaged and being brought up next.</p>
+  </div>
+</section>
+
+<section id="screens">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Any screen</span>
+      <h2>One desktop. Phone, tablet or monitor.</h2>
+      <p>You don't need a dock to use DeskDroid. It runs right on the screen in your hand, and grows with the screen you give it.</p>
+    </div>
+    <div class="screens">
+      <div class="screen" style="--accent:var(--pink)">
+        <div class="dev phone"><i></i></div>
+        <span class="tag">On your phone</span>
+        <h3>Works on the built-in screen</h3>
+        <p>Use the full desktop with your fingers: real touch, edge-swipe gestures, and the phone's own keyboard with swipe typing. Windows move above the keyboard and stay clear of the camera cutout.</p>
+      </div>
+      <div class="screen" style="--accent:var(--c)">
+        <div class="dev tablet"><i></i></div>
+        <span class="tag">On a tablet</span>
+        <h3>A big screen deserves a real desktop</h3>
+        <p>A tablet's screen has room for side-by-side windows, a taskbar and a full app menu. Snap on a keyboard cover and it's a Linux laptop that still runs your Android apps.</p>
+      </div>
+      <div class="screen" style="--accent:var(--g)">
+        <div class="dev monitor"><i></i></div>
+        <span class="tag">On a monitor</span>
+        <h3>Plug in and get a PC</h3>
+        <p>Connect a display, keyboard and mouse. The desktop moves to the monitor with its own scale, and your phone becomes the touchpad.</p>
+      </div>
+    </div>
+    <div class="launcher">
+      <img src="img/logo.png" alt="">
+      <div>
+        <h3>Make it your home screen</h3>
+        <p>DeskDroid can replace your launcher. Press Home and you land on your Plasma desktop, with your Android apps in the Kickoff menu sorted by kind, ready to open next to your Linux apps.</p>
+      </div>
+    </div>
   </div>
 </section>
 
