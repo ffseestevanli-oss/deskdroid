@@ -138,7 +138,7 @@ section{padding:90px 0}
 .party .shot-in{border:1px solid var(--line)}
 /* Sober: Graphite */
 .sober{--gr-bg:#141416;--gr-sf:#1f1f22;--gr-ln:#2e2e33;--gr-tx:#e8e8ea;--gr-mu:#9a9aa2;--gr-ac:#8fa9c9;
-  --lt-bg:#e6e6ea;--lt-sf:#f7f7f9;--lt-ln:#cfcfd6;--lt-tx:#1d1d21;--lt-mu:#62626b;--lt-ac:#4d6d92;
+  
   background:var(--gr-bg);border:1px solid var(--gr-ln);border-radius:6px;font-family:"IBM Plex Sans","Chakra Petch",system-ui,sans-serif;color:var(--gr-tx)}
 .sober h3{font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:600;letter-spacing:-.01em}
 .sober .sub,.sober li{color:var(--gr-mu)}
@@ -164,6 +164,12 @@ section{padding:90px 0}
 .mini .panel span{width:9px;height:60%;border:1px solid var(--m-tx);opacity:.5;border-radius:2px}
 .mini .panel span:first-child{background:var(--m-ac);border-color:var(--m-ac);opacity:1}
 .mini .lbl{position:absolute;right:6px;top:4px;font:500 10px/1 "IBM Plex Mono",monospace;color:var(--m-tx);opacity:.6}
+.sober-shots{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sober-shots figure{display:grid;gap:6px}
+.sober-shots img{border:1px solid var(--gr-ln);border-radius:4px}
+.sober-shots figcaption{font:500 12px/1 "IBM Plex Mono",monospace;color:var(--gr-mu)}
+.sober-title{display:flex;align-items:center;gap:12px}
+.sober-title img{width:40px;height:40px}
 @media (max-width:900px){.flavors{grid-template-columns:1fr}}
 
 /* steam */
@@ -411,14 +417,15 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
       </div>
       <div class="flavor sober">
         <span class="badge">Coming soon</span>
-        <h3>DeskDroid Sober</h3>
+        <h3 class="sober-title"><img src="img/sober-logo.png" alt="" width="40" height="40">DeskDroid Sober</h3>
         <p class="sub">Every feature, none of the party. A quiet Graphite desktop for work, school and big screens.</p>
-        <div class="minis" aria-label="Sober's Graphite theme in dark and light">
-          <div class="mini dark"><span class="lbl">dark</span><div class="win"><div class="bar"><i></i><i></i><i></i></div><div class="body"><div class="side"><span></span><span></span><span></span><span></span></div><div class="grid"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div></div><div class="panel"><span></span><span></span><span></span><span></span></div></div>
-          <div class="mini light"><span class="lbl">light</span><div class="win"><div class="bar"><i></i><i></i><i></i></div><div class="body"><div class="side"><span></span><span></span><span></span><span></span></div><div class="grid"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div></div><div class="panel"><span></span><span></span><span></span><span></span></div></div>
+        <div class="sober-shots">
+          <figure><img src="img/sober-dark.webp" alt="Preview of DeskDroid Sober, Graphite dark" width="1200" height="675"><figcaption>Graphite dark</figcaption></figure>
+          <figure><img src="img/sober-light.webp" alt="Preview of DeskDroid Sober, Graphite light" width="1200" height="675"><figcaption>Graphite light</figcaption></figure>
         </div>
+        <p class="mono">Previews of the design. Sober isn't built yet.</p>
         <ul>
-          <li><b>Graphite skins, dark and light</b>, in calm greys with one steel-blue accent</li>
+          <li><b>Graphite skins, dark and light</b>, in calm greys with one steel-blue accent and IBM Plex Sans</li>
           <li><b>The default KDE layout</b>, so every Plasma guide and tutorial matches</li>
           <li><b>Agora in the same plain theme</b>, and no Party elements anywhere</li>
         </ul>
