@@ -69,6 +69,7 @@ public:
             {QStringLiteral("show_desktop"), QStringLiteral("Show the desktop")},
             {QStringLiteral("switch_window"), QStringLiteral("Switch to the previous window")},
             {QStringLiteral("back"), QStringLiteral("Back (Escape)")},
+            {QStringLiteral("app_drawer"), QStringLiteral("Open the app drawer")},
         };
         for (const auto &a : actions) {
             m_actionList << QVariantMap{{QStringLiteral("id"), a.first}, {QStringLiteral("label"), a.second}};

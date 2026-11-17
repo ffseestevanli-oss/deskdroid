@@ -37,14 +37,15 @@ object Gestures {
     const val SHOW_DESKTOP = "show_desktop" // every window minimized, or back
     const val SWITCH_WINDOW = "switch_window" // the window used before (Alt+Tab)
     const val BACK = "back"                 // the phone's Back: Escape, or out of edit mode
+    const val APP_DRAWER = "app_drawer"     // the phone's app drawer (PhoneAppDrawer), while the APP_DRAWER switch is on
 
-    val ACTIONS = setOf(NONE, DD_MENU, KEYBOARD, TOUCH_MODE, START_MENU, OVERVIEW, SHOW_DESKTOP, SWITCH_WINDOW, BACK)
+    val ACTIONS = setOf(NONE, DD_MENU, KEYBOARD, TOUCH_MODE, START_MENU, OVERVIEW, SHOW_DESKTOP, SWITCH_WINDOW, BACK, APP_DRAWER)
 
     /** Before anything is set: the corner swipes DeskDroid always had, a three-finger tap switches the touch mode. */
     val DEFAULTS = mapOf(
         BOTTOM_LEFT to KEYBOARD,
         BOTTOM_RIGHT to DD_MENU,
-        BOTTOM to NONE, // Android's own: its navigation bar
+        BOTTOM to APP_DRAWER, // swipe up for the app drawer, as on a phone's home screen
         LEFT to NONE,
         RIGHT to NONE,
         TOP to NONE,    // Android's own: its status bar
@@ -54,9 +55,20 @@ object Gestures {
     // On/off switches (the file's true/false values), also in System Settings › Gestures.
     const val MODE_INDICATOR = "mode_indicator" // the touch mode's icon in the system tray (org.deskdroid.touchmode reads it itself)
 
+    // The app drawer: off, the app_drawer action does nothing (its edge is Android's again) and the DD menu has no Apps tile.
+    const val APP_DRAWER_ON = "app_drawer_on"
+    // The Private Space as a locked section of the app drawer, and out of Plasma's menus and search (NativeDesk.writeAndroidApps).
+    // Off, the drawer leaves it out and Plasma's menus list it as before (Android Apps › Private Space).
+    const val PRIVATE_SPACE = "private_space"
+
     val SWITCH_DEFAULTS = mapOf(
         MODE_INDICATOR to true,
+        APP_DRAWER_ON to true,
+        PRIVATE_SPACE to true,
     )
+
+    /** The Private Space is in the app drawer only, not in Plasma's menus. */
+    fun privateSpaceInDrawer() = switch(APP_DRAWER_ON) && switch(PRIVATE_SPACE)
     @Volatile private var switches: Map<String, Boolean> = SWITCH_DEFAULTS
 
     /** An on/off switch from the file, or its default. */
@@ -67,7 +79,11 @@ object Gestures {
     /** Called on the watcher's thread after the file changed. */
     @Volatile var changed: (() -> Unit)? = null
 
-    fun action(gesture: String): String = actions[gesture] ?: NONE
+    fun action(gesture: String): String {
+        val a = actions[gesture] ?: NONE
+        // With the app drawer off, its gesture is no gesture: the touch goes on to the desktop (and Android).
+        return if (a == APP_DRAWER && !switch(APP_DRAWER_ON)) NONE else a
+    }
 
     /** Reads the file and keeps watching it (once per process). */
     @Synchronized fun start(c: Context) {
