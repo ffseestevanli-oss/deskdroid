@@ -172,6 +172,16 @@ section{padding:90px 0}
 .sober-title img{width:40px;height:40px}
 @media (max-width:900px){.flavors{grid-template-columns:1fr}}
 
+/* game */
+.game{margin-bottom:22px;display:grid;grid-template-columns:1.5fr 1fr;gap:0;background:var(--card);clip-path:var(--chamfer);position:relative}
+.game::before{content:"";position:absolute;left:0;top:0;width:100%;height:3px;background:var(--rainbow);z-index:1}
+.game img{width:100%;height:100%;object-fit:cover}
+.game .txt{padding:30px 28px;display:flex;flex-direction:column;gap:12px;justify-content:center;min-width:0}
+.game .tag{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--y);font-weight:600}
+.game h3{font-size:clamp(22px,2.6vw,30px)}
+.game p{color:var(--muted);font-size:15.5px}
+@media (max-width:900px){.game{grid-template-columns:1fr}}
+
 /* steam */
 .steam{background:linear-gradient(135deg,#140d24,#0a0710 60%);border:1px solid var(--line);padding:56px;position:relative;clip-path:var(--chamfer);overflow:hidden}
 .steam::after{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;background:radial-gradient(circle,rgba(139,92,255,.35),transparent 65%)}
@@ -260,6 +270,15 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
       <span class="eyebrow">Our best feats</span>
       <h2>Things a phone was never supposed to do.</h2>
       <p>None of this is a remote desktop or a Linux box hiding in a container. It all runs on the phone, today.</p>
+    </div>
+    <div class="game">
+      <img src="img/supertuxkart.webp" alt="SuperTuxKart mid-race in a window on the DeskDroid desktop" width="1600" height="841">
+      <div class="txt">
+        <span class="tag">New · First game running</span>
+        <h3>SuperTuxKart, racing on a phone's desktop</h3>
+        <p>A full 3D Linux game, running in a window on DeskDroid with GPU acceleration through virgl. Three laps against AI racers, with the taskbar right below the window.</p>
+        <p style="font-size:14px">Captured on DeskDroid build 1110.</p>
+      </div>
     </div>
     <div class="feats">
       <div class="feat big" style="--accent:var(--pink)">
