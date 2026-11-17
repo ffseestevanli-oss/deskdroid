@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeskDroid</title>
+<meta name="description" content="DeskDroid: a real KDE Plasma desktop on Android. Your computer in your pocket.">
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Chakra+Petch:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07060b; --bg2:#0e0c15; --card:#13101c; --line:#2a2236;
+  --text:#ece8f4; --muted:#a59cb8; --magenta:#990045; --pink:#ff4fd8;
+  --r:#FF3B5C; --o:#FF9F1C; --y:#FFE14D; --g:#3DFF8B; --c:#2EC5FF; --v:#8B5CFF;
+  --rainbow:linear-gradient(90deg,var(--r),var(--o),var(--y),var(--g),var(--c),var(--v),#FF4FD8);
+  --chamfer:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font:400 17px/1.6 "Chakra Petch",system-ui,sans-serif;overflow-x:hidden}
+img{max-width:100%;height:auto;display:block}
+a{color:inherit}
+h1,h2,h3,.brand{font-family:Orbitron,"Chakra Petch",sans-serif;letter-spacing:.02em;line-height:1.15}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+.rainbow-line{height:3px;background:var(--rainbow)}
+.grad{background:var(--rainbow);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* nav */
+nav{position:sticky;top:0;z-index:20;background:rgba(7,6,11,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:24px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;text-decoration:none}
+.brand img{width:34px;height:34px}
+nav .links{display:flex;gap:22px;margin-left:auto;font-size:15px}
+nav .links a{text-decoration:none;color:var(--muted)}
+nav .links a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;font-weight:600;text-decoration:none;clip-path:var(--chamfer);background:var(--magenta);color:#fff;transition:filter .15s}
+.btn:hover{filter:brightness(1.25)}
+.btn.ghost{background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
+nav .btn{padding:8px 16px;font-size:14px}
+
+/* hero */
+.hero{position:relative;padding:88px 0 60px;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:-20% -10% auto auto;width:780px;height:780px;background:radial-gradient(circle,rgba(153,0,69,.55),transparent 65%);z-index:-1}
+.hero::after{content:"";position:absolute;left:-200px;bottom:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(46,197,255,.18),transparent 65%);z-index:-1}
+.eyebrow{display:inline-block;font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--pink);margin-bottom:18px}
+.hero h1{font-size:clamp(38px,6.4vw,76px);font-weight:800;max-width:900px}
+.hero p.lead{font-size:clamp(18px,2vw,21px);color:var(--muted);max-width:680px;margin:22px 0 32px}
+.cta{display:flex;flex-wrap:wrap;gap:14px}
+.hero-shot{margin-top:56px;position:relative}
+.frame{background:#000;padding:10px;clip-path:var(--chamfer);box-shadow:0 30px 80px rgba(153,0,69,.35)}
+.frame-top{height:3px;background:var(--rainbow);margin:-10px -10px 10px}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.chip{font-size:14px;padding:6px 12px;border:1px solid var(--line);background:var(--bg2);color:var(--muted)}
+.chip b{color:var(--text);font-weight:600}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:0 0 20px}
+.stat{background:var(--bg2);padding:26px 22px}
+.stat .n{font-family:Orbitron;font-size:clamp(26px,3.4vw,38px);font-weight:800}
+.stat .l{color:var(--muted);font-size:14px}
+
+section{padding:90px 0}
+.sec-head{max-width:760px;margin-bottom:44px}
+.sec-head h2{font-size:clamp(28px,3.8vw,44px);font-weight:800;margin:8px 0 14px}
+.sec-head p{color:var(--muted);font-size:18px}
+
+/* feats */
+.feats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.feat{background:var(--card);padding:28px 26px;clip-path:var(--chamfer);position:relative}
+.feat::before{content:"";position:absolute;left:0;top:0;width:100%;height:3px;background:var(--accent,var(--magenta))}
+.feat .tag{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.feat h3{font-size:19px;margin:10px 0 10px}
+.feat p{color:var(--muted);font-size:15.5px}
+.feat.big{grid-column:span 2}
+.feat.big h3{font-size:24px}
+.feat.full{grid-column:1/-1}
+
+/* split */
+.split{display:grid;grid-template-columns:1.05fr 1fr;gap:56px;align-items:center}
+.split.rev{grid-template-columns:1fr 1.05fr}
+.split.rev .text{order:2}
+.list{list-style:none;display:grid;gap:14px;margin-top:22px}
+.list li{padding-left:28px;position:relative;color:var(--muted)}
+.list li b{color:var(--text);font-weight:600}
+.list li::before{content:"";position:absolute;left:0;top:9px;width:12px;height:12px;background:var(--c);clip-path:polygon(0 0,70% 0,100% 30%,100% 100%,30% 100%,0 70%)}
+.list li:nth-child(6n+2)::before{background:var(--g)}
+.list li:nth-child(6n+3)::before{background:var(--y)}
+.list li:nth-child(6n+4)::before{background:var(--o)}
+.list li:nth-child(6n+5)::before{background:var(--r)}
+.list li:nth-child(6n+6)::before{background:var(--v)}
+
+/* apps */
+.gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.shot{background:var(--card);border:1px solid var(--line);overflow:hidden}
+.shot img{aspect-ratio:16/10;object-fit:contain;width:100%;background:#000}
+.shot figcaption{padding:12px 16px;font-size:15px;display:flex;justify-content:space-between;gap:10px}
+.shot figcaption span{color:var(--muted);font-size:13px}
+.applist{display:flex;flex-wrap:wrap;gap:8px;margin-top:30px}
+.applist .chip{color:var(--text)}
+.note{color:var(--muted);font-size:14px;margin-top:18px}
+
+/* steam */
+.steam{background:linear-gradient(135deg,#140d24,#0a0710 60%);border:1px solid var(--line);padding:56px;position:relative;clip-path:var(--chamfer);overflow:hidden}
+.steam::after{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;background:radial-gradient(circle,rgba(139,92,255,.35),transparent 65%)}
+.soon{display:inline-block;font-family:Orbitron;font-size:12px;font-weight:600;letter-spacing:.14em;padding:6px 12px;background:var(--v);color:#fff;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px))}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:34px;position:relative;z-index:1}
+.step{background:rgba(255,255,255,.03);border:1px solid var(--line);padding:18px}
+.step .s{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
+.step.done .s{color:var(--g)}
+.step.wip .s{color:var(--y)}
+.step p{font-size:15px;color:var(--muted);margin-top:6px}
+
+footer{border-top:1px solid var(--line);padding:40px 0 60px;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center}
+
+@media (max-width:900px){
+  .feats{grid-template-columns:1fr 1fr}
+  .feat.big{grid-column:span 2}
+  .split,.split.rev{grid-template-columns:1fr;gap:32px}
+  .split.rev .text{order:0}
+  .gallery{grid-template-columns:1fr 1fr}
+  .stats{grid-template-columns:1fr 1fr}
+  .steps{grid-template-columns:1fr 1fr}
+  nav .links{display:none}
+  nav .btn{margin-left:auto}
+}
+@media (max-width:560px){
+  .wrap{padding:0 16px}
+  .feats,.gallery,.steps{grid-template-columns:1fr}
+  .feat.big,.feat.full{grid-column:auto}
+  section{padding:64px 0}
+  .stat .n{font-size:22px}
+  .hero{padding:56px 0 40px}
+  .steam{padding:32px 22px}
+}
+</style>
+</head>
+<body>
+<div class="rainbow-line"></div>
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="img/logo.png" alt="">DeskDroid</a>
+    <div class="links">
+      <a href="#feats">Feats</a>
+      <a href="#apps">Software</a>
+      <a href="#desk">At your desk</a>
+      <a href="#look">Look</a>
+      <a href="#steam">Steam</a>
+    </div>
+    <a class="btn" href="https://github.com/ffseestevanli-oss/deskdroid/releases">Get the alpha</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <span class="eyebrow">KDE Plasma 6 · on Android · no root</span>
+    <h1>Your Computer<br>in your <span class="grad">Pocket.</span></h1>
+    <p class="lead">DeskDroid is a real KDE Plasma desktop that runs on your Android phone. Plug in a monitor, a keyboard and a mouse, and your phone becomes a computer, with real Linux apps from Flathub, GPU acceleration and x86 apps through Box64 and FEX-Emu.</p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/ffseestevanli-oss/deskdroid/releases">Download the alpha</a>
+      <a class="btn ghost" href="#feats">See what it can do</a>
+    </div>
+    <div class="chips">
+      <span class="chip"><b>One app,</b> tap to start</span>
+      <span class="chip"><b>No proot,</b> no Linux image to download</span>
+      <span class="chip"><b>Free software,</b> GPL-3.0</span>
+    </div>
+    <div class="hero-shot">
+      <div class="frame"><div class="frame-top"></div><img src="img/desktop.webp" alt="DeskDroid desktop with Dolphin and Kate open, in the DD Party theme" width="1600" height="900"></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><div class="n grad">Plasma 6</div><div class="l">KWin, plasmashell and KDE apps built for Android</div></div>
+    <div class="stat"><div class="n">30+</div><div class="l">Flathub apps packaged and tested</div></div>
+    <div class="stat"><div class="n">700+</div><div class="l">commits and counting</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">root, proot or emulated desktop needed</div></div>
+  </div>
+</div>
+
+<section id="feats">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Our best feats</span>
+      <h2>Things a phone was never supposed to do.</h2>
+      <p>None of this is a remote desktop or a Linux box hiding in a container. It all runs on the phone, today.</p>
+    </div>
+    <div class="feats">
+      <div class="feat big" style="--accent:var(--pink)">
+        <span class="tag">Native Plasma</span>
+        <h3>KDE Plasma, compiled for Android itself</h3>
+        <p>KWin, plasmashell and the KDE apps are built with the Android NDK against Android's own libc and draw with your phone's own GPU driver. There's no proot, no chroot and no Linux system image. It's one app with a panel, windows, a file manager and the Kickoff menu, over your phone's wallpaper.</p>
+      </div>
+      <div class="feat" style="--accent:var(--g)">
+        <span class="tag">Flathub</span>
+        <h3>All of Flathub, in an app store</h3>
+        <p>Agora, DeskDroid's store, browses Flathub by category. Our ddmask layer runs desktop Linux apps on Android, so real Flatpak apps install and open.</p>
+      </div>
+      <div class="feat" style="--accent:var(--o)">
+        <span class="tag">GPU</span>
+        <h3>Adreno acceleration</h3>
+        <p>KWin runs on Adreno with GLES 3, and Linux apps' OpenGL goes to Android's GLES through virgl, the same driver the desktop uses.</p>
+      </div>
+      <div class="feat" style="--accent:var(--c)">
+        <span class="tag">x86 on ARM</span>
+        <h3>Box64 and FEX-Emu built in</h3>
+        <p>x86-64 programs run on your ARM phone: ddmask hands them to Box64, and x86-64 Flatpak apps run through FEX-Emu.</p>
+      </div>
+      <div class="feat" style="--accent:var(--y)">
+        <span class="tag">X11 too</span>
+        <h3>Xwayland inside KWin</h3>
+        <p>Older X11-only apps like VLC open as normal desktop windows next to Wayland apps, with their own taskbar icons.</p>
+      </div>
+      <div class="feat full" style="--accent:var(--v)">
+        <span class="tag">Sound</span>
+        <h3>PipeWire, EasyEffects, ViPER</h3>
+        <p>A full PipeWire and WirePlumber sound server. Every Linux app's sound can go through EasyEffects or ViPER FX on its way to your speakers.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="apps" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Software that runs today</span>
+      <h2>Real desktop apps. Not "mobile versions".</h2>
+      <p>These are the same Flathub builds people run on Linux PCs, installed with one tap from Agora and launched from the Plasma menu. Screenshots are from our test runs.</p>
+    </div>
+    <div class="gallery">
+      <figure class="shot"><img src="img/libreoffice.webp" alt="LibreOffice start center"><figcaption>LibreOffice <span>Office suite</span></figcaption></figure>
+      <figure class="shot"><img src="img/kdenlive.webp" alt="Kdenlive quick setup"><figcaption>Kdenlive <span>Video editor</span></figcaption></figure>
+      <figure class="shot"><img src="img/inkscape.webp" alt="Inkscape welcome screen"><figcaption>Inkscape <span>Vector drawing</span></figcaption></figure>
+      <figure class="shot"><img src="img/audacity.webp" alt="Audacity"><figcaption>Audacity <span>Audio editor</span></figcaption></figure>
+      <figure class="shot"><img src="img/easyeffects.webp" alt="EasyEffects"><figcaption>EasyEffects <span>System-wide audio effects</span></figcaption></figure>
+      <figure class="shot"><img src="img/haruna.webp" alt="Haruna video player"><figcaption>Haruna <span>Video player</span></figcaption></figure>
+    </div>
+    <div class="applist">
+      <span class="chip">Dolphin</span><span class="chip">Kate</span><span class="chip">Konsole</span><span class="chip">Gwenview</span><span class="chip">KCalc</span><span class="chip">System Settings</span><span class="chip">Etherium</span><span class="chip">VLC</span><span class="chip">Okular</span><span class="chip">Ark</span><span class="chip">Filelight</span><span class="chip">Kid3</span><span class="chip">KolourPaint</span><span class="chip">Strawberry</span><span class="chip">qBittorrent</span><span class="chip">KeePassXC</span><span class="chip">Kleopatra</span><span class="chip">KMyMoney</span><span class="chip">Marknote</span><span class="chip">Anki</span><span class="chip">Zotero</span><span class="chip">Betterbird</span><span class="chip">Evolution</span><span class="chip">Freeplane</span><span class="chip">Planify</span><span class="chip">PDF Arranger</span><span class="chip">ytDownloader</span><span class="chip">Sasha</span><span class="chip">+ your Android apps</span>
+    </div>
+    <p class="note">Big apps like Krita, Logseq and draw.io are packaged and being brought up next.</p>
+  </div>
+</section>
+
+<section id="desk">
+  <div class="wrap split">
+    <div class="text">
+      <span class="eyebrow">At your desk</span>
+      <h2 style="font-size:clamp(28px,3.8vw,44px);font-weight:800;margin:8px 0 14px">Plug in a monitor. Get a PC.</h2>
+      <p style="color:var(--muted);font-size:18px">Use DeskDroid on the phone screen, or connect a display and peripherals and work like you would on a laptop. Your Android apps come along too.</p>
+      <ul class="list">
+        <li><b>External monitors</b> with their own scale. The desktop takes over the screen instead of Android's desktop mode.</li>
+        <li><b>Your phone becomes the touchpad</b>, with edge swipes, a menu button and a screen that goes dark when idle.</li>
+        <li><b>Keyboard and mouse</b>, or real touch with a corner-swipe navbar. Gboard and SwiftKey swipe typing work in desktop text fields.</li>
+        <li><b>Android apps in Kickoff</b>, sorted by kind, and files open in Android apps through Open With.</li>
+        <li><b>Android widgets on the desktop</b>, plus a shared clipboard and media keys.</li>
+        <li><b>Battery, network and power profiles</b> in the tray: Power Save, Balanced and Performance.</li>
+      </ul>
+    </div>
+    <div class="frame"><div class="frame-top"></div><img src="img/settings.webp" alt="Kickoff menu and System Settings on DeskDroid" width="1600" height="900"></div>
+  </div>
+</section>
+
+<section id="look" style="padding-top:20px">
+  <div class="wrap split rev">
+    <div class="text">
+      <span class="eyebrow">DD Party</span>
+      <h2 style="font-size:clamp(28px,3.8vw,44px);font-weight:800;margin:8px 0 14px">A desktop with <span class="grad">a personality.</span></h2>
+      <p style="color:var(--muted);font-size:18px">DeskDroid's own look: near-black surfaces, magenta, rainbow accents and chamfered corners, with a matching icon pack, window borders, splash screen, terminal and editor colours. It also installs on any Plasma 6 PC, with a Glass variant that blurs everything behind it.</p>
+      <ul class="list">
+        <li><b>A full icon pack</b> for folders, file types, apps and devices.</li>
+        <li><b>GTK apps match</b> through a DD Party build of Breeze GTK.</li>
+        <li><b>Etherium</b>, our browser, wears it too.</li>
+      </ul>
+    </div>
+    <div class="frame"><div class="frame-top"></div><img src="img/icons.webp" alt="The DD Party icon pack"></div>
+  </div>
+  <div class="wrap" style="margin-top:40px">
+    <div class="frame"><div class="frame-top"></div><img src="img/glass.webp" alt="DD Party Glass variant with Dolphin and Konsole" width="1600" height="900"></div>
+  </div>
+</section>
+
+<section id="etherium" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="sec-head" style="margin-bottom:28px">
+      <span class="eyebrow">Etherium</span>
+      <h2>A full desktop browser, on your terms.</h2>
+      <p>Etherium is our own build of Firefox 160 for DeskDroid. No Mozilla account, no Sync, less data collection, and sound that plays through the desktop's sound server so your effects hear it.</p>
+    </div>
+    <div class="frame"><div class="frame-top"></div><img src="img/etherium-bar.webp" alt="Etherium's tab bar and address bar in DD Party style"></div>
+  </div>
+</section>
+
+<section id="steam">
+  <div class="wrap">
+    <div class="steam">
+      <span class="soon">COMING SOON</span>
+      <h2 style="font-size:clamp(30px,4.4vw,52px);font-weight:800;margin:18px 0 14px;position:relative;z-index:1">Steam, <span class="grad">in your pocket.</span></h2>
+      <p style="color:var(--muted);font-size:18px;max-width:720px;position:relative;z-index:1">We're bringing the Steam desktop client to DeskDroid, running x86 through FEX-Emu on your phone. A built-in Steam Installation Assistant sets everything up for you. It isn't ready yet, but a lot of the road is already paved.</p>
+      <div class="steps">
+        <div class="step done"><div class="s">Done</div><p>FEX-Emu built natively and installed by the assistant</p></div>
+        <div class="step done"><div class="s">Done</div><p>Steam Installation Assistant, a guide and maintenance tool</p></div>
+        <div class="step done"><div class="s">Done</div><p>Xwayland for Steam's windows, and Steam's logs in Save log</p></div>
+        <div class="step wip"><div class="s">In progress</div><p>Login, store and library, then games on the phone's GPU</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0;text-align:center">
+  <div class="wrap">
+    <h2 style="font-size:clamp(28px,4vw,46px);font-weight:800">Carry your computer with you.</h2>
+    <p style="color:var(--muted);font-size:18px;margin:14px auto 28px;max-width:560px">DeskDroid is in alpha. Expect rough edges, and expect it to get better every week.</p>
+    <a class="btn" href="https://github.com/ffseestevanli-oss/deskdroid/releases">Download the alpha</a>
+  </div>
+</section>
+
+<div class="rainbow-line"></div>
+<footer>
+  <div class="wrap">
+    <span class="brand"><img src="img/logo.png" alt="" style="width:28px;height:28px">DeskDroid</span>
+    <span>Free software under GPL-3.0. Not affiliated with KDE, Mozilla or Valve.</span>
+  </div>
+</footer>
+</body>
+</html>
