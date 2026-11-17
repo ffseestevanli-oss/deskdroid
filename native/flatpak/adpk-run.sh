@@ -509,7 +509,7 @@ kwin_x() {
     lpid="$( { tr -cd '0-9' < "$lock"; } 2>/dev/null)"
     [ -n "$lpid" ] && kill -0 "$lpid" 2>/dev/null || continue
     export DISPLAY=":$n"
-    echo "$SID: X11 only: KWin's X server on :$n" >&2
+    echo "$SID: ${1:-X11 only}: KWin's X server on :$n" >&2
     return 0
   done
   return 1
@@ -585,7 +585,14 @@ start_x() {
 }
 xsockets="$(sed -n '/^\[Context\]/,/^\[/{s/^sockets *= *//p}' "$meta" | head -n 1)"
 case ";$xsockets;" in
-  *";x11;"*) case ";$xsockets;" in *";wayland;"*|*";fallback-x11;"*) ;; *) kwin_x || start_x ;; esac ;;
+  *";x11;"*) case ";$xsockets;" in
+    # Both, as Flatpak gives them: the app draws on Wayland, and whatever in
+    # it only speaks X11 (Minecraft's GLFW from Prism Launcher, Java's AWT,
+    # Wine) has KWin's X server. Never the X server in a window of its own.
+    *";wayland;"*) kwin_x "X11 too" || true ;;
+    *";fallback-x11;"*) ;;
+    *) kwin_x || start_x ;;
+  esac ;;
 esac
 export PATH=/app/bin:/usr/bin
 echo "$SID: starting $prog $* (${FPID:-?}, ${RTPKG:-${RT:-no runtime}}, $gpu)" >&2
