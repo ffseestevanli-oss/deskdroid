@@ -9,11 +9,11 @@ class GestureTaps : public GestureModule
 public:
     GestureTaps(QObject *parent, const KPluginMetaData &data)
         : GestureModule(parent, data,
-                        QStringLiteral("Tap the phone's screen three times quickly, in one place."),
+                        QStringLiteral("Tap the phone's screen with three fingers at once."),
                         {
-                            {QStringLiteral("triple_tap"), QStringLiteral("Triple tap"),
-                             QStringLiteral("The first two taps still reach the desktop as clicks. Choose Do nothing to keep triple clicks for selecting "
-                                            "a line of text."),
+                            {QStringLiteral("three_finger_tap"), QStringLiteral("Three-finger tap"),
+                             QStringLiteral("Put three fingers down together and lift them. The desktop doesn't get the touch, so nothing is "
+                                            "clicked."),
                              QStringLiteral("touch_mode")},
                         })
     {

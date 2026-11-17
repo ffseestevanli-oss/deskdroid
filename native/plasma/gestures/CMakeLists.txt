@@ -1,5 +1,5 @@
 # DeskDroid: System Settings › Gestures. The phone's touch gestures on the
-# desktop: swipes in from the corners and edges (Edge Swipes) and a triple
+# desktop: swipes in from the corners and edges (Edge Swipes) and a three-finger
 # tap (Taps). The pages save $HOME/gestures.json, which the app watches
 # (app/.../Gestures.kt) and applies to the next touch.
 cmake_minimum_required(VERSION 3.16)

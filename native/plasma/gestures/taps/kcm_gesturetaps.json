@@ -1,10 +1,10 @@
 {
     "KPlugin": {
-        "Description": "What a triple tap on the phone's screen does",
+        "Description": "What a three-finger tap on the phone's screen does",
         "Icon": "input-touchscreen",
         "Name": "Taps"
     },
-    "X-KDE-Keywords": "gesture,gestures,tap,triple tap,touch,touchpad,direct touch,mouse mode,touch mode",
+    "X-KDE-Keywords": "gesture,gestures,tap,three finger tap,three-finger tap,touch,touchpad,direct touch,mouse mode,touch mode",
     "X-KDE-System-Settings-Parent-Category": "gestures",
     "X-KDE-Weight": 2
 }

@@ -27,6 +27,12 @@ public:
                             {QStringLiteral("top"), QStringLiteral("Top edge"),
                              QStringLiteral("Swipe down from the edge. With Do nothing, Android's status bar comes down."),
                              QStringLiteral("none")},
+                        },
+                        // Phone features, on or off (Gestures.kt's switches).
+                        {
+                            {QStringLiteral("mode_indicator"), QStringLiteral("Show the touch mode in the system tray"),
+                             QStringLiteral("A mouse pointer in Touchpad mode, a finger on a screen in Direct touch. Click it to switch."),
+                             true},
                         })
     {
     }

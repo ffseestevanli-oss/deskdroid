@@ -1,8 +1,10 @@
 // DeskDroid: System Settings › Gestures. Each page (Edge Swipes, Taps) is a
 // GestureModule with its own gestures; both save into $HOME/gestures.json,
 // which the app reads (app/src/main/java/io/deskdroid/app/Gestures.kt):
-//   {"bottom_left": "keyboard", "bottom_right": "dd_menu", ..., "triple_tap": "touch_mode"}
-// The gesture and action ids and the defaults here match Gestures.kt.
+//   {"bottom_left": "keyboard", "bottom_right": "dd_menu", ..., "three_finger_tap": "touch_mode",
+//    "mode_indicator": true}
+// Gestures map to actions; switches (SwitchInfo) are on/off features shown as
+// checkboxes under them. The ids and the defaults here match Gestures.kt.
 #pragma once
 
 #include <KPluginMetaData>
@@ -25,6 +27,13 @@ struct GestureInfo {
     QString defaultAction;
 };
 
+struct SwitchInfo {
+    QString id;
+    QString label;
+    QString hint;
+    bool defaultOn;
+};
+
 class GestureModule : public KQuickConfigModule
 {
     Q_OBJECT
@@ -32,13 +41,20 @@ class GestureModule : public KQuickConfigModule
     Q_PROPERTY(QVariantList gestures MEMBER m_gestureList CONSTANT)
     Q_PROPERTY(QVariantList actions MEMBER m_actionList CONSTANT)
     Q_PROPERTY(QVariantMap assigned READ assigned NOTIFY assignedChanged)
+    Q_PROPERTY(QVariantList switches MEMBER m_switchList CONSTANT)
+    Q_PROPERTY(QVariantMap switched READ switched NOTIFY assignedChanged)
 
 public:
-    GestureModule(QObject *parent, const KPluginMetaData &data, const QString &intro, const QList<GestureInfo> &gestures)
+    GestureModule(QObject *parent, const KPluginMetaData &data, const QString &intro, const QList<GestureInfo> &gestures,
+                  const QList<SwitchInfo> &switches = {})
         : KQuickConfigModule(parent, data)
         , m_intro(intro)
         , m_gestures(gestures)
+        , m_switches(switches)
     {
+        for (const SwitchInfo &s : switches) {
+            m_switchList << QVariantMap{{QStringLiteral("id"), s.id}, {QStringLiteral("label"), s.label}, {QStringLiteral("hint"), s.hint}};
+        }
         setButtons(Default | Apply);
         for (const GestureInfo &g : gestures) {
             m_gestureList << QVariantMap{{QStringLiteral("id"), g.id}, {QStringLiteral("label"), g.label}, {QStringLiteral("hint"), g.hint}};
@@ -69,6 +85,24 @@ public:
         return m;
     }
 
+    QVariantMap switched() const
+    {
+        QVariantMap m;
+        for (auto it = m_on.cbegin(); it != m_on.cend(); ++it) {
+            m.insert(it.key(), it.value());
+        }
+        return m;
+    }
+
+    Q_INVOKABLE void setSwitch(const QString &id, bool on)
+    {
+        if (!m_on.contains(id) || m_on.value(id) == on) {
+            return;
+        }
+        m_on[id] = on;
+        changed();
+    }
+
     Q_INVOKABLE void assign(const QString &gesture, const QString &action)
     {
         if (!m_assigned.contains(gesture) || !m_actionIds.contains(action) || m_assigned.value(gesture) == action) {
@@ -86,7 +120,13 @@ public:
             const QString a = o.value(g.id).toString();
             m_assigned[g.id] = m_actionIds.contains(a) ? a : g.defaultAction;
         }
+        m_on.clear();
+        for (const SwitchInfo &s : std::as_const(m_switches)) {
+            const QJsonValue v = o.value(s.id);
+            m_on[s.id] = v.isBool() ? v.toBool() : s.defaultOn;
+        }
         m_saved = m_assigned;
+        m_savedOn = m_on;
         changed();
     }
 
@@ -97,11 +137,15 @@ public:
         for (auto it = m_assigned.cbegin(); it != m_assigned.cend(); ++it) {
             o.insert(it.key(), it.value());
         }
+        for (auto it = m_on.cbegin(); it != m_on.cend(); ++it) {
+            o.insert(it.key(), it.value());
+        }
         QSaveFile f(path());
         if (f.open(QIODevice::WriteOnly)) {
             f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
             if (f.commit()) {
                 m_saved = m_assigned;
+                m_savedOn = m_on;
             }
         }
         changed();
@@ -111,6 +155,9 @@ public:
     {
         for (const GestureInfo &g : std::as_const(m_gestures)) {
             m_assigned[g.id] = g.defaultAction;
+        }
+        for (const SwitchInfo &s : std::as_const(m_switches)) {
+            m_on[s.id] = s.defaultOn;
         }
         changed();
     }
@@ -139,7 +186,10 @@ private:
         for (const GestureInfo &g : std::as_const(m_gestures)) {
             isDefault = isDefault && m_assigned.value(g.id) == g.defaultAction;
         }
-        setNeedsSave(m_assigned != m_saved);
+        for (const SwitchInfo &s : std::as_const(m_switches)) {
+            isDefault = isDefault && m_on.value(s.id) == s.defaultOn;
+        }
+        setNeedsSave(m_assigned != m_saved || m_on != m_savedOn);
         setRepresentsDefaults(isDefault);
         Q_EMIT assignedChanged();
     }
@@ -151,4 +201,8 @@ private:
     QStringList m_actionIds;
     QMap<QString, QString> m_assigned;
     QMap<QString, QString> m_saved;
+    QList<SwitchInfo> m_switches;
+    QVariantList m_switchList;
+    QMap<QString, bool> m_on;
+    QMap<QString, bool> m_savedOn;
 };
