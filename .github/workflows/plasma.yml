@@ -5,10 +5,8 @@ name: Native Plasma deps
 # cached between runs, and saved even when a package fails, so each run only
 # builds what's new or changed.
 on:
-  pull_request:
-    paths:
-      - native/plasma/**
-      - .github/workflows/plasma.yml
+  # Manual only: builds run in the project's cloud build (tools/cloud-build.sh),
+  # so pushes, pull requests and schedules no longer start hours of CI.
   workflow_dispatch:
 
 # A newer push makes an older run pointless.

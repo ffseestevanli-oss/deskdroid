@@ -1,10 +1,9 @@
 name: Rootfs images
 
 on:
+  # Manual only: builds run in the project's cloud build (tools/cloud-build.sh),
+  # so pushes, pull requests and schedules no longer start hours of CI.
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['rootfs/**']
 
 permissions:
   contents: write

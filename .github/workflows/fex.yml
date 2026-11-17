@@ -6,12 +6,9 @@ name: FEX-Emu
 # release, which the app (X86.kt) and the proot desktop's deskdroid-fex script
 # download the first time Steam or an x86 app starts.
 on:
+  # Manual only: builds run in the project's cloud build (tools/cloud-build.sh),
+  # so pushes, pull requests and schedules no longer start hours of CI.
   workflow_dispatch:
-  push:
-    branches: [main, claude/project-thread-99adt8]
-    paths: ['fex/**', '.github/workflows/fex.yml']
-  pull_request:
-    paths: ['fex/**', '.github/workflows/fex.yml']
 
 permissions:
   contents: write

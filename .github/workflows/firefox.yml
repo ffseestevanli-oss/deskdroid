@@ -5,10 +5,8 @@ name: Firefox
 # against the GTK stack from the Plasma deps cache; a compiler cache keeps
 # later runs short.
 on:
-  pull_request:
-    paths:
-      - native/firefox/**
-      - .github/workflows/firefox.yml
+  # Manual only: builds run in the project's cloud build (tools/cloud-build.sh),
+  # so pushes, pull requests and schedules no longer start hours of CI.
   workflow_dispatch:
 
 jobs:
