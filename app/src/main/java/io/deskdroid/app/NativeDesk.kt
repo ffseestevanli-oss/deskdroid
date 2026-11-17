@@ -35,10 +35,9 @@ private val KWIN_GRAPHICS_LINES = listOf(
 private const val EDGE_DP = 56f // how far up from the bottom a corner swipe may start
 private const val SIDE_DP = 20f // how far in from an edge an edge swipe may start (Gestures)
 private const val SWIPE_MS = 500L // a swipe in from an edge or corner is clear by then, or it isn't one
-private const val TAP_MS = 250L // a tap is shorter (triple tap)
-private const val TAP_GAP_MS = 350L // and the next one follows sooner
+private const val THREE_DOWN_MS = 250L // a three-finger tap's third finger lands this soon after the first
+private const val THREE_TAP_MS = 500L // and all three are up again this soon
 private const val TAP_SLOP_DP = 16f // a tap moves less
-private const val TAP_NEAR_DP = 48f // and lands this close to the one before
 
 /**
  * Native desktop test: the first step towards running Plasma as Android code
@@ -418,6 +417,13 @@ object NativeDesk {
                     Handler(Looper.getMainLooper()).post { openPhoneSettings(c, path.removePrefix("deskdroid:settings:")) }
                     return
                 }
+                // The system tray's touch mode item: Touchpad <-> Direct touch.
+                if (path == "deskdroid:touchmode:toggle") {
+                    Handler(Looper.getMainLooper()).post {
+                        Prefs.setTouchMode(c, if (Prefs.touchMode(c) == "direct") "touchpad" else "direct")
+                    }
+                    return
+                }
                 // The Battery item's power profiles (PowerProfile.kt).
                 if (path.startsWith("deskdroid:power:")) {
                     PowerProfile.set(c, path.removePrefix("deskdroid:power:"))
@@ -742,6 +748,7 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         systemBars(false) // full screen, unless the menu's Android bars are on
         // System Settings › Gestures: read now and again whenever it's saved.
         Gestures.start(this)
+        Prefs.writeTouchMode(this) // the system tray's touch mode item
         Gestures.changed = onGesturesChanged
         window.decorView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> claimSideEdges() }
     }
@@ -2517,28 +2524,28 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
     // ---- Touch gestures (in every touch mode; System Settings › Gestures
     // sets what each does, Gestures.kt): swipes in from the bottom corners
     // (keyboard and DD menu unless changed), the bottom, left, right and top
-    // edges, and a triple tap (Touchpad <-> Direct touch unless changed).
-    // A touch that starts where a gesture could begin is held back until it's
-    // clearly that gesture or clearly not; if not, it goes to the desktop as
-    // it happened. Only gestures with an action hold anything back. Android's
+    // edges, and a three-finger tap (Touchpad <-> Direct touch unless changed).
+    // A touch that starts where a swipe could begin is held back until it's
+    // clearly that swipe or clearly not; if not, it goes to the desktop as it
+    // happened. Only gestures with an action hold anything back. Android's
     // navigation bar comes up for a swipe from the bottom it doesn't get: one
     // that a gesture revealed is put away again (the menu shows its own).
-    private var hold = 0 // 0 passing through, 1 maybe an edge swipe, 2 maybe a third tap, -1 gesture done (rest of the touch ignored)
+    // A third finger landing soon after the first takes the touch from the
+    // desktop (it gets a cancel, so no click); if all three lift soon without
+    // moving, that's the three-finger tap, and otherwise nothing.
+    private var hold = 0 // 0 passing through, 1 maybe an edge swipe, 3 three fingers down, -1 gesture done (rest of the touch ignored)
     private var holdZone = ""
     private var downX = 0f
     private var downY = 0f
-    private var multiTouch = false
     private val held = ArrayList<MotionEvent>()
-    // The taps just before this touch, for the triple tap.
-    private var taps = 0
-    private var lastTapUp = 0L
-    private var lastTapX = 0f
-    private var lastTapY = 0f
+    // Three fingers: where each was when the third landed (by pointer id), and whether that's still a tap.
+    private val threeAt = HashMap<Int, android.graphics.PointF>()
+    private var threeTap = false
     // A finger that rests where a gesture could start, without moving: once
     // it's clearly not a gesture, the desktop gets it (a press and hold).
     private val releaseHeld = Runnable {
-        if (hold <= 0) return@Runnable
-        if (hold == 1) hideCornerBars()
+        if (hold != 1) return@Runnable
+        hideCornerBars()
         hold = 0
         replayHeld()
     }
@@ -2549,39 +2556,28 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
         if (act == MotionEvent.ACTION_DOWN) {
             main.removeCallbacks(releaseHeld)
             held.forEach { it.recycle() }; held.clear()
-            hold = 0; multiTouch = false
+            hold = 0
             downX = e.rawX; downY = e.rawY
-            if (started && menu.visibility != android.view.View.VISIBLE) {
-                if (taps >= 2 && e.eventTime - lastTapUp < TAP_GAP_MS && nearLastTap(e) &&
-                        Gestures.action(Gestures.TRIPLE_TAP) != Gestures.NONE) {
-                    hold = 2
-                    main.postDelayed(releaseHeld, TAP_MS)
-                } else {
-                    gestureZone(e)?.let { holdZone = it; hold = 1; main.postDelayed(releaseHeld, SWIPE_MS) }
-                }
-            }
+            if (started && menu.visibility != android.view.View.VISIBLE)
+                gestureZone(e)?.let { holdZone = it; hold = 1; main.postDelayed(releaseHeld, SWIPE_MS) }
             if (hold == 0) return super.dispatchTouchEvent(e)
             held.add(MotionEvent.obtain(e))
             return true
         }
-        if (act == MotionEvent.ACTION_POINTER_DOWN) multiTouch = true
         val end = act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL
         when (hold) {
-            0 -> { if (end) countTap(e); return super.dispatchTouchEvent(e) }
+            0 -> {
+                if (act == MotionEvent.ACTION_POINTER_DOWN && e.pointerCount == 3 && startThreeFingers(e)) return true
+                return super.dispatchTouchEvent(e)
+            }
             -1 -> { if (end) hold = 0; return true }
-            2 -> {
-                val tap = !multiTouch && act != MotionEvent.ACTION_CANCEL && !movedFromDown(e, TAP_SLOP_DP) &&
-                    e.eventTime - e.downTime < TAP_MS
-                if (tap && act == MotionEvent.ACTION_UP) {
-                    gestureDone()
-                    taps = 0
-                    runGesture(Gestures.action(Gestures.TRIPLE_TAP))
+            3 -> {
+                if (e.pointerCount > 3 || e.eventTime - e.downTime > THREE_TAP_MS || fingersMoved(e)) threeTap = false
+                if (act == MotionEvent.ACTION_UP) {
                     hold = 0
-                    return true
-                }
-                if (tap) { held.add(MotionEvent.obtain(e)); return true }
-                taps = 0
-                return replayWith(e)
+                    if (threeTap) runGesture(Gestures.action(Gestures.THREE_FINGER_TAP))
+                } else if (act == MotionEvent.ACTION_CANCEL) hold = 0
+                return true
             }
         }
         // hold == 1: maybe a swipe in from holdZone.
@@ -2599,8 +2595,36 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             across > dp(32f) || e.eventTime - e.downTime > SWIPE_MS
         if (!notASwipe) { held.add(MotionEvent.obtain(e)); return true }
         hideCornerBars()
-        if (end) countTap(e)
         return replayWith(e)
+    }
+
+    /**
+     * A third finger just landed: if it's soon enough after the first for a
+     * three-finger tap, and that tap has an action, the desktop's touch is
+     * cancelled (no click, no drag) and the rest of it is watched here.
+     */
+    private fun startThreeFingers(e: MotionEvent): Boolean {
+        if (!started || menu.visibility == android.view.View.VISIBLE ||
+                e.eventTime - e.downTime > THREE_DOWN_MS ||
+                Gestures.action(Gestures.THREE_FINGER_TAP) == Gestures.NONE) return false
+        val cancel = MotionEvent.obtain(e)
+        cancel.action = MotionEvent.ACTION_CANCEL
+        super.dispatchTouchEvent(cancel)
+        cancel.recycle()
+        hold = 3
+        threeTap = true
+        threeAt.clear()
+        for (i in 0 until e.pointerCount) threeAt[e.getPointerId(i)] = android.graphics.PointF(e.getX(i), e.getY(i))
+        return true
+    }
+
+    /** One of the three fingers moved further than a tap does. */
+    private fun fingersMoved(e: MotionEvent): Boolean {
+        for (i in 0 until e.pointerCount) {
+            val p = threeAt[e.getPointerId(i)] ?: return true // a finger that wasn't there
+            if (kotlin.math.hypot(e.getX(i) - p.x, e.getY(i) - p.y) > dp(TAP_SLOP_DP)) return true
+        }
+        return false
     }
 
     /** The held touch was a gesture: the desktop never sees it. */
@@ -2640,22 +2664,6 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
             if (y > bottom - dp(SIDE_DP)) Gestures.BOTTOM else null,
         )
         return zones.firstOrNull { Gestures.action(it) != Gestures.NONE }
-    }
-
-    private fun movedFromDown(e: MotionEvent, slopDp: Float) =
-        kotlin.math.hypot(e.rawX - downX, e.rawY - downY) > dp(slopDp)
-
-    private fun nearLastTap(e: MotionEvent) =
-        kotlin.math.hypot(e.rawX - lastTapX, e.rawY - lastTapY) < dp(TAP_NEAR_DP)
-
-    /** A touch the desktop got just ended: a tap counts towards a triple tap. */
-    private fun countTap(e: MotionEvent) {
-        val tap = e.actionMasked == MotionEvent.ACTION_UP && !multiTouch &&
-            !movedFromDown(e, TAP_SLOP_DP) && e.eventTime - e.downTime < TAP_MS
-        if (!tap) { taps = 0; return }
-        taps = if (taps > 0 && e.eventTime - lastTapUp < TAP_GAP_MS && nearLastTap(e)) taps + 1 else 1
-        lastTapUp = e.eventTime
-        lastTapX = e.rawX; lastTapY = e.rawY
     }
 
     /** What a gesture does (Gestures' actions). */
@@ -2960,7 +2968,8 @@ open class NativeDeskActivity : Activity(), SurfaceHolder.Callback {
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    val tap = travel < TAP_SLOP && e.eventTime - downAt < TAP_MS
+                    // A cancel (a three-finger tap took the touch) releases, never clicks.
+                    val tap = e.actionMasked == MotionEvent.ACTION_UP && travel < TAP_SLOP && e.eventTime - downAt < TAP_MS
                     when {
                         middle -> NativeDesk.nativePointer(px, py, 0)
                         // Tap, tap: the second touch's press, its release, then one more
@@ -3321,7 +3330,7 @@ class PhoneTouchpadActivity : Activity() {
     // DD menu unless changed, the bottom left corner the keyboard. A touch that
     // starts where a swipe could begin is held back until it's clearly that
     // swipe or clearly not; if not, the touchpad gets it as it happened. The
-    // triple tap stays a triple click here.
+    // three-finger tap isn't one here: the touch mode is always Touchpad.
     private var hold = 0 // 0 passing through, 1 maybe a swipe, -1 swipe done (rest of the touch ignored)
     private var holdZone = ""
     private var downX = 0f

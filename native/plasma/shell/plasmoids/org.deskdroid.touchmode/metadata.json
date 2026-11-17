@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Category": "System Information",
+        "Description": "Whether the phone's screen is a touchpad or a touchscreen. Click to switch",
+        "EnabledByDefault": true,
+        "FormFactors": [
+            "desktop"
+        ],
+        "Icon": "input-touchscreen",
+        "Id": "org.deskdroid.touchmode",
+        "License": "GPL-2.0+",
+        "Name": "Touch Mode"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-NotificationAreaCategory": "Hardware"
+}

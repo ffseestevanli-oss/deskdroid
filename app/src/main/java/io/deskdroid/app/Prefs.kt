@@ -36,7 +36,14 @@ object Prefs {
     fun touchMode(c: Context) = prefs(c).getString("touch_mode", "touchpad")!!.let { if (it == "touch") "direct" else it }
     val TOUCH_MODES = listOf("touchpad", "direct")
     val TOUCH_MODE_LABELS = listOf("Touchpad", "Direct touch")
-    fun setTouchMode(c: Context, mode: String) = prefs(c).edit().putString("touch_mode", mode).apply()
+    fun setTouchMode(c: Context, mode: String) {
+        prefs(c).edit().putString("touch_mode", mode).apply()
+        writeTouchMode(c)
+    }
+    /** files/touch-mode ("touchpad" or "direct"): the system tray's touch mode item (org.deskdroid.touchmode) shows it. */
+    fun writeTouchMode(c: Context) {
+        try { java.io.File(c.filesDir, "touch-mode").writeText(touchMode(c)) } catch (e: Exception) { AppLog.i("Touch mode file: $e") }
+    }
 
     /** Desktop scale: 1 = native pixels (default), 0 = from the display's density. */
     fun scale(c: Context) = prefs(c).getFloat("scale", 1f)

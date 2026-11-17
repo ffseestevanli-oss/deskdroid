@@ -56,6 +56,43 @@ KCM.SimpleKCM {
                     }
                 }
             }
+
+            // Phone features, on or off (gesturemodule.h's switches).
+            Item {
+                Kirigami.FormData.isSection: true
+                visible: kcm.switches.length > 0
+            }
+            Repeater {
+                model: kcm.switches
+                delegate: ColumnLayout {
+                    id: sw
+                    required property var modelData
+                    required property int index
+                    Kirigami.FormData.label: index === 0 ? "Phone features:" : ""
+                    spacing: Kirigami.Units.smallSpacing
+
+                    QQC2.CheckBox {
+                        id: box
+                        text: sw.modelData.label
+                        checked: kcm.switched[sw.modelData.id] === true
+                        onToggled: kcm.setSwitch(sw.modelData.id, checked)
+                        Connections {
+                            target: kcm
+                            function onAssignedChanged() { box.checked = kcm.switched[sw.modelData.id] === true }
+                        }
+                    }
+                    QQC2.Label {
+                        Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+                        Layout.leftMargin: box.indicator.width + box.spacing
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                        text: sw.modelData.hint
+                        visible: text.length > 0
+                        wrapMode: Text.WordWrap
+                        opacity: 0.7
+                        font: Kirigami.Theme.smallFont
+                    }
+                }
+            }
         }
     }
 }
