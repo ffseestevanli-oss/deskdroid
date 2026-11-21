@@ -120,6 +120,35 @@ section{padding:90px 0}
 @media (max-width:900px){.screens{grid-template-columns:1fr}.dev{height:auto}}
 @media (max-width:560px){.launcher{grid-template-columns:1fr}}
 
+/* touch: gestures, app drawer, dd menu */
+.gestures{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.gest{background:var(--card);border:1px solid var(--line);padding:20px 20px 18px;display:grid;grid-template-columns:54px 1fr;gap:14px;align-items:start;min-width:0}
+.gest h3{font-size:16px;margin-bottom:4px}
+.gest p{color:var(--muted);font-size:14.5px}
+.fing{width:54px;height:54px;border:1px solid var(--line);background:var(--bg2);position:relative;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px))}
+.fing i{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+.fing b{position:absolute;background:var(--accent);opacity:.5}
+.kcm{margin-top:16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:14px;color:var(--muted)}
+.kcm code{font:500 13px/1 "IBM Plex Mono",monospace;color:var(--text);background:var(--bg2);border:1px solid var(--line);padding:7px 10px}
+.phone-row{display:grid;grid-template-columns:1fr 300px;gap:56px;align-items:center;margin-top:90px}
+.phone-row.rev{grid-template-columns:300px 1fr}
+.phone-row.rev .text{order:2}
+.handset{width:100%;max-width:300px;justify-self:center;background:#000;border:3px solid #2a2236;border-radius:34px;padding:10px;box-shadow:0 30px 80px rgba(153,0,69,.35);position:relative}
+.handset .scr{border-radius:24px;overflow:hidden;aspect-ratio:9/20;position:relative}
+.handset img{width:100%;height:100%;object-fit:cover;object-position:top}
+.drawer{background:linear-gradient(180deg,rgba(19,16,28,.86),rgba(7,6,11,.94)),radial-gradient(circle at 30% 10%,#990045,transparent 60%),radial-gradient(circle at 80% 70%,#2EC5FF,transparent 55%),#0e0c15;padding:34px 14px 14px;display:flex;flex-direction:column;gap:12px;height:100%}
+.drawer .search{height:30px;border-radius:15px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-size:12px;color:var(--muted);display:flex;align-items:center;padding:0 12px}
+.drawer .apps{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 8px}
+.drawer .apps span{width:68%;justify-self:center;aspect-ratio:1;border-radius:50%;background:var(--ic);opacity:.9;box-shadow:0 10px 0 -7px rgba(255,255,255,.25)}
+.drawer .apps{gap:18px 6px!important}
+.drawer .ps{margin-top:auto;border:1px solid rgba(46,197,255,.5);background:rgba(46,197,255,.08);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;font-size:12px}
+.drawer .ps b{font-weight:600}
+.drawer .ps em{font-style:normal;color:var(--c);border:1px solid var(--c);padding:3px 8px;font-size:11px}
+.drawer .pager{display:flex;justify-content:center;gap:12px;font-size:10.5px;color:var(--muted)}
+.drawer .pager b{color:var(--text)}
+@media (max-width:900px){.gestures{grid-template-columns:1fr 1fr}.phone-row,.phone-row.rev{grid-template-columns:1fr;gap:32px;margin-top:64px}.phone-row.rev .text{order:0}.handset{max-width:260px}}
+@media (max-width:560px){.gestures{grid-template-columns:1fr}}
+
 /* flavors */
 .flavors{display:grid;grid-template-columns:1.12fr 1fr;gap:22px;align-items:stretch}
 .flavor{position:relative;display:flex;flex-direction:column;gap:18px;padding:28px;min-width:0}
@@ -227,6 +256,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
       <a href="#feats">Feats</a>
       <a href="#apps">Software</a>
       <a href="#screens">Any screen</a>
+      <a href="#touch">Touch</a>
       <a href="#desk">At your desk</a>
       <a href="#flavors">Flavors</a>
       <a href="#steam">Steam</a>
@@ -370,6 +400,89 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
         <h3>Make it your home screen</h3>
         <p>DeskDroid can replace your launcher. Press Home and you land on your Plasma desktop, with your Android apps in the Kickoff menu sorted by kind, ready to open next to your Linux apps.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<section id="touch" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Made for touch</span>
+      <h2>Gestures that make a desktop feel at home on a phone.</h2>
+      <p>DeskDroid's touch input goes straight into KWin, Plasma's window manager. Use the screen directly like a tablet, or as a touchpad with a pointer. Every gesture can be changed or turned off in Plasma's own System Settings.</p>
+    </div>
+    <div class="gestures">
+      <div class="gest" style="--accent:var(--pink)">
+        <div class="fing"><b style="left:0;top:14px;width:3px;height:26px"></b><i style="left:8px;top:22px"></i></div>
+        <div><h3>Edge swipes</h3><p>Swipe in from an edge or corner. Each one gets its own action, like the corner-swipe navbar or opening the app drawer from the bottom.</p></div>
+      </div>
+      <div class="gest" style="--accent:var(--c)">
+        <div class="fing"><i style="left:10px;top:12px"></i><i style="left:22px;top:9px"></i><i style="left:34px;top:12px"></i><b style="left:26px;top:24px;width:2px;height:20px"></b></div>
+        <div><h3>Three-finger swipes</h3><p>Swipe down to minimize every window, and down again to bring them back. Swipe up to maximize the window you're using.</p></div>
+      </div>
+      <div class="gest" style="--accent:var(--g)">
+        <div class="fing"><i style="left:10px;top:20px"></i><i style="left:22px;top:17px"></i><i style="left:34px;top:20px"></i><b style="left:8px;top:38px;width:38px;height:2px"></b></div>
+        <div><h3>Hold three fingers to grab</h3><p>Rest three fingers on a window, then move them to drag it. Push it to a screen edge to snap it into place.</p></div>
+      </div>
+      <div class="gest" style="--accent:var(--y)">
+        <div class="fing"><i style="left:10px;top:22px"></i><i style="left:22px;top:22px"></i><i style="left:34px;top:22px"></i></div>
+        <div><h3>Three-finger tap</h3><p>Switches between Direct touch and Touchpad mode. A tray icon shows which one you're in: a finger or a pointer.</p></div>
+      </div>
+      <div class="gest" style="--accent:var(--o)">
+        <div class="fing"><i style="left:15px;top:22px"></i><i style="left:29px;top:22px"></i></div>
+        <div><h3>Two-finger tap</h3><p>Right-clicks in Touchpad mode, or does whatever you assign to it, such as moving or resizing a window.</p></div>
+      </div>
+      <div class="gest" style="--accent:var(--v)">
+        <div class="fing"><i style="left:12px;top:30px"></i><i style="left:32px;top:14px;opacity:.6"></i></div>
+        <div><h3>Enhanced Touchpad Mode</h3><p>While one finger moves the pointer, a second finger clicks, double-clicks, drags and right-clicks, like the buttons on a laptop touchpad.</p></div>
+      </div>
+    </div>
+    <div class="kcm"><span>Set them up in</span><code>System Settings › Gestures › Edge Swipes</code><code>Taps</code><span>with actions for the app drawer, overview, maximize, minimize, snap, full screen and close.</span></div>
+
+    <div class="phone-row">
+      <div class="text">
+        <span class="eyebrow">App Drawer</span>
+        <h2 style="font-size:clamp(26px,3.4vw,40px);font-weight:800;margin:8px 0 14px">All your phone apps, <span class="grad">one swipe away.</span></h2>
+        <p style="color:var(--muted);font-size:18px">Swipe up on the desktop to open a full app drawer. The desktop blurs and shrinks behind it, and the drawer follows your finger.</p>
+        <ul class="list">
+          <li><b>Search and A to Z,</b> like your phone's launcher. With a keyboard plugged in, just start typing.</li>
+          <li><b>Private Space</b> sits locked at the bottom. Unlock it with your phone's lock screen, and its apps stay out of Plasma's menu and search.</li>
+          <li><b>Work profile apps</b> get their own section with a Pause button.</li>
+          <li><b>Smart about scrolling:</b> a swipe on a window scrolls the window. The drawer only opens from the bare desktop or the bottom edge.</li>
+          <li><b>The DD Menu is its second page,</b> and its quick-access dock is pinned to the bottom.</li>
+        </ul>
+      </div>
+      <div class="handset" aria-label="Illustration of the DeskDroid app drawer">
+        <div class="scr">
+          <div class="drawer">
+            <div class="search">Search apps</div>
+            <div class="apps">
+              <span style="--ic:#FF3B5C"></span><span style="--ic:#FF9F1C"></span><span style="--ic:#3DFF8B"></span><span style="--ic:#2EC5FF"></span>
+              <span style="--ic:#8B5CFF"></span><span style="--ic:#FF4FD8"></span><span style="--ic:#FFE14D"></span><span style="--ic:#ece8f4"></span>
+              <span style="--ic:#2EC5FF"></span><span style="--ic:#990045"></span><span style="--ic:#3DFF8B"></span><span style="--ic:#FF9F1C"></span>
+              <span style="--ic:#FFE14D"></span><span style="--ic:#8B5CFF"></span><span style="--ic:#FF3B5C"></span><span style="--ic:#2EC5FF"></span>
+              <span style="--ic:#FF4FD8"></span><span style="--ic:#3DFF8B"></span><span style="--ic:#ece8f4"></span><span style="--ic:#FF9F1C"></span>
+            </div>
+            <div class="ps"><b>🔒 Private Space</b><em>Unlock</em></div>
+            <div class="pager"><b>App drawer</b><span>DeskDroid Menu</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phone-row rev">
+      <div class="text">
+        <span class="eyebrow">DD Menu</span>
+        <h2 style="font-size:clamp(26px,3.4vw,40px);font-weight:800;margin:8px 0 14px">Every switch, <span class="grad">under frosted glass.</span></h2>
+        <p style="color:var(--muted);font-size:18px">The DD Menu is DeskDroid's control center. It fills the screen with dark glass over a blurred view of your desktop, and a swipe down closes it.</p>
+        <ul class="list">
+          <li><b>Scale with − and +.</b> Step the desktop's size up or down, or tap the number to go back to Auto. On a monitor, it sets the monitor's own scale.</li>
+          <li><b>Quick switches</b> for touch mode, scrolling, the mouse, Android's bars, the keyboard and keeping the screen awake.</li>
+          <li><b>Shortcuts</b> to the app drawer, the keyboard, Agora and Save log, plus Restart desktop and Lock private profile.</li>
+          <li><b>Debug Mode log tiles:</b> alongside Save log, Steam logs and More logs each gather everything into one zip on your Desktop, ready to attach to a bug report. Turn it on or off in DD Home › Settings.</li>
+        </ul>
+      </div>
+      <div class="handset"><div class="scr"><img src="img/ddmenu.webp" alt="The DD Menu on a phone, with touch, scroll, mouse, panel and keyboard switches, the Scale stepper and shortcut tiles" width="640" height="1428" loading="lazy"></div></div>
     </div>
   </div>
 </section>
