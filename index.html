@@ -136,16 +136,6 @@ section{padding:90px 0}
 .handset{width:100%;max-width:300px;justify-self:center;background:#000;border:3px solid #2a2236;border-radius:34px;padding:10px;box-shadow:0 30px 80px rgba(153,0,69,.35);position:relative}
 .handset .scr{border-radius:24px;overflow:hidden;aspect-ratio:9/20;position:relative}
 .handset img{width:100%;height:100%;object-fit:cover;object-position:top}
-.drawer{background:linear-gradient(180deg,rgba(19,16,28,.86),rgba(7,6,11,.94)),radial-gradient(circle at 30% 10%,#990045,transparent 60%),radial-gradient(circle at 80% 70%,#2EC5FF,transparent 55%),#0e0c15;padding:34px 14px 14px;display:flex;flex-direction:column;gap:12px;height:100%}
-.drawer .search{height:30px;border-radius:15px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-size:12px;color:var(--muted);display:flex;align-items:center;padding:0 12px}
-.drawer .apps{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 8px}
-.drawer .apps span{width:68%;justify-self:center;aspect-ratio:1;border-radius:50%;background:var(--ic);opacity:.9;box-shadow:0 10px 0 -7px rgba(255,255,255,.25)}
-.drawer .apps{gap:18px 6px!important}
-.drawer .ps{margin-top:auto;border:1px solid rgba(46,197,255,.5);background:rgba(46,197,255,.08);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;font-size:12px}
-.drawer .ps b{font-weight:600}
-.drawer .ps em{font-style:normal;color:var(--c);border:1px solid var(--c);padding:3px 8px;font-size:11px}
-.drawer .pager{display:flex;justify-content:center;gap:12px;font-size:10.5px;color:var(--muted)}
-.drawer .pager b{color:var(--text)}
 @media (max-width:900px){.gestures{grid-template-columns:1fr 1fr}.phone-row,.phone-row.rev{grid-template-columns:1fr;gap:32px;margin-top:64px}.phone-row.rev .text{order:0}.handset{max-width:260px}}
 @media (max-width:560px){.gestures{grid-template-columns:1fr}}
 
@@ -452,22 +442,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
           <li><b>The DD Menu is its second page,</b> and its quick-access dock is pinned to the bottom.</li>
         </ul>
       </div>
-      <div class="handset" aria-label="Illustration of the DeskDroid app drawer">
-        <div class="scr">
-          <div class="drawer">
-            <div class="search">Search apps</div>
-            <div class="apps">
-              <span style="--ic:#FF3B5C"></span><span style="--ic:#FF9F1C"></span><span style="--ic:#3DFF8B"></span><span style="--ic:#2EC5FF"></span>
-              <span style="--ic:#8B5CFF"></span><span style="--ic:#FF4FD8"></span><span style="--ic:#FFE14D"></span><span style="--ic:#ece8f4"></span>
-              <span style="--ic:#2EC5FF"></span><span style="--ic:#990045"></span><span style="--ic:#3DFF8B"></span><span style="--ic:#FF9F1C"></span>
-              <span style="--ic:#FFE14D"></span><span style="--ic:#8B5CFF"></span><span style="--ic:#FF3B5C"></span><span style="--ic:#2EC5FF"></span>
-              <span style="--ic:#FF4FD8"></span><span style="--ic:#3DFF8B"></span><span style="--ic:#ece8f4"></span><span style="--ic:#FF9F1C"></span>
-            </div>
-            <div class="ps"><b>🔒 Private Space</b><em>Unlock</em></div>
-            <div class="pager"><b>App drawer</b><span>DeskDroid Menu</span></div>
-          </div>
-        </div>
-      </div>
+      <div class="handset"><div class="scr"><img src="img/app-drawer.webp" alt="The DeskDroid app drawer on a phone, with search, an A to Z app grid, the Private Space section and the dock" width="640" height="1428" loading="lazy"></div></div>
     </div>
 
     <div class="phone-row rev">
