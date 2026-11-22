@@ -212,6 +212,18 @@ section{padding:90px 0}
 .step.wip .s{color:var(--y)}
 .step p{font-size:15px;color:var(--muted);margin-top:6px}
 
+/* games */
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.presets .chip{color:var(--text)}
+.cap{font-size:13px;color:var(--muted);margin-top:10px}
+.mini-feats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:22px}
+@media (max-width:900px){.mini-feats{grid-template-columns:1fr}}
+/* manual */
+.manual-cta{display:grid;grid-template-columns:1fr auto;gap:28px;align-items:center;background:var(--card);padding:34px 32px;clip-path:var(--chamfer);border-top:3px solid var(--c)}
+.manual-cta h2{font-size:clamp(24px,3vw,34px);font-weight:800;margin:6px 0 10px}
+.manual-cta p{color:var(--muted)}
+@media (max-width:700px){.manual-cta{grid-template-columns:1fr}}
+
 footer{border-top:1px solid var(--line);padding:40px 0 60px;color:var(--muted);font-size:14px}
 footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center}
 
@@ -249,7 +261,8 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
       <a href="#touch">Touch</a>
       <a href="#desk">At your desk</a>
       <a href="#flavors">Flavors</a>
-      <a href="#steam">Steam</a>
+      <a href="#games">Games</a>
+      <a href="manual.html">Manual</a>
     </div>
     <a class="btn" href="https://github.com/ffseestevanli-oss/deskdroid/releases/latest">Get the alpha</a>
   </div>
@@ -263,6 +276,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
     <div class="cta">
       <a class="btn" href="https://github.com/ffseestevanli-oss/deskdroid/releases/latest">Download the alpha</a>
       <a class="btn ghost" href="#feats">See what it can do</a>
+      <a class="btn ghost" href="manual.html">User manual</a>
     </div>
     <div class="chips">
       <span class="chip"><b>One app,</b> tap to start</span>
@@ -309,12 +323,12 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
       <div class="feat" style="--accent:var(--g)">
         <span class="tag">Flathub</span>
         <h3>All of Flathub, in an app store</h3>
-        <p>Agora, DeskDroid's store, browses Flathub by category. Our ddmask layer runs desktop Linux apps on Android, so real Flatpak apps install and open.</p>
+        <p>Agora, DeskDroid's store, browses Flathub by category next to the DeskDroid Repo of our own apps, installs the runtimes an app needs, and tells you when updates are waiting. Our ddmask layer runs desktop Linux apps on Android.</p>
       </div>
       <div class="feat" style="--accent:var(--o)">
         <span class="tag">GPU</span>
-        <h3>Adreno acceleration</h3>
-        <p>KWin runs on Adreno with GLES 3, and Linux apps' OpenGL goes to Android's GLES through virgl, the same driver the desktop uses.</p>
+        <h3>Adreno and PowerVR acceleration</h3>
+        <p>KWin runs on the phone's own GPU driver, and DeskDroid HD gives Linux apps desktop OpenGL on Adreno and PowerVR, with an FPS counter in Display Settings.</p>
       </div>
       <div class="feat" style="--accent:var(--c)">
         <span class="tag">x86 on ARM</span>
@@ -351,7 +365,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
       <figure class="shot"><img src="img/haruna.webp" alt="Haruna playing a video on DeskDroid"><figcaption>Haruna <span>Video player</span></figcaption></figure>
     </div>
     <div class="applist">
-      <span class="chip">Dolphin</span><span class="chip">Kate</span><span class="chip">Konsole</span><span class="chip">Gwenview</span><span class="chip">KCalc</span><span class="chip">System Settings</span><span class="chip">Etherium</span><span class="chip">VLC</span><span class="chip">Okular</span><span class="chip">Ark</span><span class="chip">Filelight</span><span class="chip">Kid3</span><span class="chip">KolourPaint</span><span class="chip">Strawberry</span><span class="chip">qBittorrent</span><span class="chip">KeePassXC</span><span class="chip">Kleopatra</span><span class="chip">KMyMoney</span><span class="chip">Marknote</span><span class="chip">Anki</span><span class="chip">Zotero</span><span class="chip">Betterbird</span><span class="chip">Evolution</span><span class="chip">Freeplane</span><span class="chip">Planify</span><span class="chip">PDF Arranger</span><span class="chip">ytDownloader</span><span class="chip">Sasha</span><span class="chip">+ your Android apps</span>
+      <span class="chip">Dolphin</span><span class="chip">Kate</span><span class="chip">Konsole</span><span class="chip">Gwenview</span><span class="chip">KCalc</span><span class="chip">System Settings</span><span class="chip">Etherium</span><span class="chip">VLC</span><span class="chip">Okular</span><span class="chip">Ark</span><span class="chip">Filelight</span><span class="chip">Kid3</span><span class="chip">KolourPaint</span><span class="chip">Strawberry</span><span class="chip">qBittorrent</span><span class="chip">KeePassXC</span><span class="chip">Kleopatra</span><span class="chip">KMyMoney</span><span class="chip">Marknote</span><span class="chip">Anki</span><span class="chip">Zotero</span><span class="chip">Betterbird</span><span class="chip">Evolution</span><span class="chip">Freeplane</span><span class="chip">Planify</span><span class="chip">PDF Arranger</span><span class="chip">ytDownloader</span><span class="chip">Sasha</span><span class="chip">Discord</span><span class="chip">+ your Android apps</span>
     </div>
     <p class="note">Big apps like Krita, Logseq and draw.io are packaged and being brought up next.</p>
   </div>
@@ -408,7 +422,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
       </div>
       <div class="gest" style="--accent:var(--c)">
         <div class="fing"><i style="left:10px;top:12px"></i><i style="left:22px;top:9px"></i><i style="left:34px;top:12px"></i><b style="left:26px;top:24px;width:2px;height:20px"></b></div>
-        <div><h3>Three-finger swipes</h3><p>Swipe down to minimize every window, and down again to bring them back. Swipe up to maximize the window you're using.</p></div>
+        <div><h3>Three-finger swipes</h3><p>Swipe down to minimize the window in front: it squashes into its taskbar button. Swipe up to maximize it. Prefer the old way? Pick Minimize all windows.</p></div>
       </div>
       <div class="gest" style="--accent:var(--g)">
         <div class="fing"><i style="left:10px;top:20px"></i><i style="left:22px;top:17px"></i><i style="left:34px;top:20px"></i><b style="left:8px;top:38px;width:38px;height:2px"></b></div>
@@ -453,7 +467,8 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
         <ul class="list">
           <li><b>Scale with − and +.</b> Step the desktop's size up or down, or tap the number to go back to Auto. On a monitor, it sets the monitor's own scale.</li>
           <li><b>Quick switches</b> for touch mode, scrolling, the mouse, Android's bars, the keyboard and keeping the screen awake.</li>
-          <li><b>Shortcuts</b> to the app drawer, the keyboard, Agora and Save log, plus Restart desktop and Lock private profile.</li>
+          <li><b>Shortcuts</b> to the app drawer, the keyboard, Agora and Game controls, plus Restart desktop and Lock private profile.</li>
+          <li><b>Power profile</b> right in the menu, and a switch to follow Android's Battery Saver.</li>
           <li><b>Debug Mode log tiles:</b> alongside Save log, Steam logs and More logs each gather everything into one zip on your Desktop, ready to attach to a bug report. Turn it on or off in DD Home › Settings.</li>
         </ul>
       </div>
@@ -474,7 +489,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
         <li><b>Keyboard and mouse</b>, or real touch with a corner-swipe navbar. Gboard and SwiftKey swipe typing work in desktop text fields.</li>
         <li><b>Android apps in Kickoff</b>, sorted by kind, and files open in Android apps through Open With.</li>
         <li><b>Android widgets on the desktop</b>, plus a shared clipboard and media keys.</li>
-        <li><b>Battery, network and power profiles</b> in the tray: Power Save, Balanced and Performance.</li>
+        <li><b>Power profiles</b> from the battery icon or the DD Menu: Power Save, Balanced and Performance set the frame rate, the CPU cores and a per-app CPU cap. With the screen off, the desktop winds down by itself while your music keeps playing.</li>
       </ul>
     </div>
     <div class="frame"><div class="frame-top"></div><img src="img/desk-real.webp" alt="Two Dolphin windows and Etherium on the DeskDroid desktop" width="1600" height="717"></div>
@@ -553,6 +568,49 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
   </div>
 </section>
 
+<section id="games" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">New · Game controls</span>
+      <h2>A gamepad for games that want <span class="grad">a keyboard and mouse.</span></h2>
+      <p>No keyboard plugged in? Swipe two thumbs up from the bottom corners together and an on-screen gamepad appears over the desktop. Three fingers down hide it again. It's also a tile in the DD Menu.</p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="frame"><div class="frame-top"></div><img src="img/game-controls.webp" alt="Design preview of DeskDroid's game controls: a WASD joystick on the left, game buttons on the right and a drag-to-look area" width="1600" height="720" loading="lazy"></div>
+        <p class="cap">Design preview of the WASD Default layout.</p>
+      </div>
+      <div class="text">
+        <ul class="list">
+          <li><b>A WASD joystick</b> that holds the keys like fingers on a keyboard. Push past its rim, or double-tap it, to run.</li>
+          <li><b>Mouse look:</b> drag on the open part of the screen to turn the camera, even in games that lock the pointer. A tap fires.</li>
+          <li><b>Move anything</b> in edit mode. Every preset remembers its own layout.</li>
+          <li><b>Presets</b> with each game's own default keys:</li>
+        </ul>
+        <div class="presets"><span class="chip">WASD · Default</span><span class="chip">Garry's Mod</span><span class="chip">Minecraft</span><span class="chip">SuperTuxKart</span><span class="chip">ReTux</span></div>
+        <p class="note">Coming in build 1135.</p>
+      </div>
+    </div>
+    <div class="mini-feats">
+      <div class="feat" style="--accent:var(--pink)">
+        <span class="tag">Windows games</span>
+        <h3>Wine for games</h3>
+        <p>A Wine runtime in Agora's DeskDroid Repo runs Windows games through Box64, with one-tap launchers. The Sims 3 launcher is the first.</p>
+      </div>
+      <div class="feat" style="--accent:var(--c)">
+        <span class="tag">Native ARM64</span>
+        <h3>Discord, without emulation</h3>
+        <p>Discord's own web app in Electron's official ARM64 build, packaged for DeskDroid. Nothing runs through an emulator. Being tested on phones now.</p>
+      </div>
+      <div class="feat" style="--accent:var(--g)">
+        <span class="tag">Linux games</span>
+        <h3>From Flathub</h3>
+        <p>SuperTuxKart, ReTux and Minecraft through Prism Launcher install from Agora and draw with the phone's GPU.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="steam">
   <div class="wrap">
     <div class="steam">
@@ -565,6 +623,19 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;
         <div class="step done"><div class="s">Done</div><p>Xwayland for Steam's windows, and Steam's logs in Save log</p></div>
         <div class="step wip"><div class="s">In progress</div><p>Login, store and library, then games on the phone's GPU</p></div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="manual-cta">
+      <div>
+        <span class="eyebrow" style="margin-bottom:0">User manual</span>
+        <h2>Everything DeskDroid can do, step by step.</h2>
+        <p>Setup, gestures, the app drawer and DD Menu, monitors, power profiles, Agora, game controls and troubleshooting. The same manual is built into System Settings › About This Phone.</p>
+      </div>
+      <a class="btn" href="manual.html">Read the manual</a>
     </div>
   </div>
 </section>

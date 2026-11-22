@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>User Manual · DeskDroid</title>
+<meta name="description" content="The DeskDroid user manual: setup, the desktop, gestures, the app drawer and DD Menu, monitors, power profiles, Agora, game controls and troubleshooting.">
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Chakra+Petch:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07060b; --bg2:#0e0c15; --card:#13101c; --line:#2a2236;
+  --text:#ece8f4; --muted:#a59cb8; --magenta:#990045; --pink:#ff4fd8;
+  --r:#FF3B5C; --o:#FF9F1C; --y:#FFE14D; --g:#3DFF8B; --c:#2EC5FF; --v:#8B5CFF;
+  --rainbow:linear-gradient(90deg,var(--r),var(--o),var(--y),var(--g),var(--c),var(--v),#FF4FD8);
+  --chamfer:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+body{background:var(--bg);color:var(--text);font:400 17px/1.65 "Chakra Petch",system-ui,sans-serif;overflow-x:hidden}
+img{max-width:100%;height:auto;display:block}
+a{color:var(--c)}
+h1,h2,h3,.brand{font-family:Orbitron,"Chakra Petch",sans-serif;letter-spacing:.02em;line-height:1.2}
+.rainbow-line{height:3px;background:var(--rainbow)}
+.grad{background:var(--rainbow);-webkit-background-clip:text;background-clip:text;color:transparent}
+nav{position:sticky;top:0;z-index:20;background:rgba(7,6,11,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav .wrap{max-width:1280px;margin:0 auto;padding:0 24px;display:flex;align-items:center;gap:24px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;text-decoration:none;color:var(--text)}
+.brand img{width:34px;height:34px}
+.brand span{color:var(--muted);font-family:"Chakra Petch";font-weight:500;font-size:15px;letter-spacing:0}
+nav .links{display:flex;gap:22px;margin-left:auto;font-size:15px}
+nav .links a{text-decoration:none;color:var(--muted)}
+nav .links a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;font-size:14px;font-weight:600;text-decoration:none;clip-path:var(--chamfer);background:var(--magenta);color:#fff}
+.btn:hover{filter:brightness(1.25)}
+.layout{max-width:1280px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:270px minmax(0,1fr);gap:56px}
+aside{position:sticky;top:64px;align-self:start;max-height:calc(100vh - 64px);overflow-y:auto;padding:32px 0 40px;scrollbar-width:thin}
+aside .k{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--pink);font-weight:600;margin-bottom:12px}
+aside ol{list-style:none;counter-reset:ch}
+aside > ol > li{counter-increment:ch}
+aside a{display:block;text-decoration:none;color:var(--muted);font-size:15px;padding:5px 10px;border-left:2px solid transparent}
+aside > ol > li > a::before{content:counter(ch,decimal-leading-zero);font:500 12px "IBM Plex Mono",monospace;color:#5d5270;margin-right:10px}
+aside a:hover{color:var(--text)}
+aside a.on{color:var(--text);border-left-color:var(--pink);background:linear-gradient(90deg,rgba(153,0,69,.25),transparent)}
+aside ul{list-style:none;margin:2px 0 6px 30px}
+aside ul a{font-size:13.5px;padding:3px 10px}
+main{padding:48px 0 100px;min-width:0;max-width:820px}
+.hero{padding-bottom:28px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.hero .eyebrow{display:inline-block;font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--pink);margin-bottom:14px}
+.hero h1{font-size:clamp(34px,5vw,56px);font-weight:800}
+.hero p{color:var(--muted);font-size:18.5px;margin-top:16px}
+.hero .meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:10px}
+.chip{font-size:13.5px;padding:5px 11px;border:1px solid var(--line);background:var(--bg2);color:var(--muted)}
+section{padding-top:44px}
+section > h2{font-size:clamp(24px,3vw,32px);font-weight:800;margin-bottom:16px;display:flex;align-items:baseline;gap:14px}
+section > h2 .n{font:500 14px "IBM Plex Mono",monospace;color:var(--pink)}
+h3{font-size:18px;margin:30px 0 10px}
+p{margin:12px 0}
+main p,main li{color:#d6d0e2}
+main b{color:var(--text);font-weight:600}
+ul,ol{margin:12px 0 12px 22px}
+main li{margin:6px 0;padding-left:4px}
+main ul li::marker{color:var(--pink)}
+main ol li::marker{color:var(--c);font-family:Orbitron;font-size:14px}
+code{font:500 14px "IBM Plex Mono",monospace;background:var(--bg2);border:1px solid var(--line);padding:1px 6px;color:var(--text);white-space:nowrap}
+.tip{margin:20px 0;padding:16px 20px;background:var(--card);border-left:3px solid var(--y);clip-path:polygon(0 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%);color:#d6d0e2}
+.tbl{margin:18px 0;overflow-x:auto;border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th{text-align:left;font-family:Orbitron;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--bg2);padding:12px 14px;border-bottom:1px solid var(--line)}
+td{padding:11px 14px;border-top:1px solid var(--line);vertical-align:top;color:#d6d0e2}
+td:first-child{color:var(--text);font-weight:500;min-width:150px}
+tr:hover td{background:rgba(255,255,255,.02)}
+figure{margin:24px auto;max-width:300px;background:#000;border:3px solid var(--line);border-radius:28px;padding:8px;box-shadow:0 24px 60px rgba(153,0,69,.3)}
+figure img{border-radius:20px}
+figcaption{text-align:center;font-size:13px;color:var(--muted);padding:8px 4px 2px}
+footer{border-top:1px solid var(--line);padding:36px 24px 56px;color:var(--muted);font-size:14px;text-align:center}
+#menu-btn{display:none}
+@media (max-width:980px){
+  .layout{grid-template-columns:1fr;gap:0}
+  aside{position:fixed;inset:64px 0 0 0;max-height:none;background:rgba(7,6,11,.97);z-index:15;padding:24px;display:none}
+  aside.open{display:block}
+  #menu-btn{display:inline-flex;margin-left:auto;background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
+  nav .links{display:none}
+  nav .btn.get{display:none}
+}
+</style>
+</head>
+<body>
+<div class="rainbow-line"></div>
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="img/logo.png" alt="">DeskDroid <span>Manual</span></a>
+    <div class="links">
+      <a href="index.html">Home</a>
+      <a href="index.html#feats">Feats</a>
+      <a href="index.html#touch">Touch</a>
+      <a href="index.html#games">Games</a>
+    </div>
+    <a class="btn get" href="https://github.com/ffseestevanli-oss/deskdroid/releases/latest">Get the alpha</a>
+    <button class="btn" id="menu-btn" type="button" aria-controls="toc" aria-expanded="false">Contents</button>
+  </div>
+</nav>
+<div class="layout">
+  <aside id="toc">
+    <div class="k">Contents</div>
+    <ol>
+      <li><a href="#getting-started">Getting started</a><ul><li><a href="#getting-started-what-you-need">What you need</a></li><li><a href="#getting-started-install-deskdroid">Install DeskDroid</a></li><li><a href="#getting-started-the-setup-checklist">The setup checklist</a></li><li><a href="#getting-started-dd-home">DD Home</a></li></ul></li>
+      <li><a href="#the-desktop">The desktop</a><ul><li><a href="#the-desktop-the-panel">The panel</a></li><li><a href="#the-desktop-windows">Windows</a></li><li><a href="#the-desktop-files">Files</a></li><li><a href="#the-desktop-the-clipboard">The clipboard</a></li><li><a href="#the-desktop-system-settings">System Settings</a></li><li><a href="#the-desktop-the-terminal">The terminal</a></li></ul></li>
+      <li><a href="#touch-and-gestures">Touch and gestures</a><ul><li><a href="#touch-and-gestures-touch-modes">Touch modes</a></li><li><a href="#touch-and-gestures-gestures">Gestures</a></li><li><a href="#touch-and-gestures-the-phone-keyboard">The phone keyboard</a></li><li><a href="#touch-and-gestures-keyboard-and-mouse">Keyboard and mouse</a></li></ul></li>
+      <li><a href="#app-drawer">App drawer</a></li>
+      <li><a href="#dd-menu">DD Menu</a><ul><li><a href="#dd-menu-settings-in-the-dd-menu">Settings in the DD Menu</a></li><li><a href="#dd-menu-tiles-and-buttons">Tiles and buttons</a></li></ul></li>
+      <li><a href="#monitors-and-peripherals">Monitors and peripherals</a><ul><li><a href="#monitors-and-peripherals-use-a-monitor">Use a monitor</a></li><li><a href="#monitors-and-peripherals-android-s-desktop-mode-and-dex">Android's desktop mode and DeX</a></li><li><a href="#monitors-and-peripherals-playing-without-a-keyboard">Playing without a keyboard</a></li></ul></li>
+      <li><a href="#display-and-graphics">Display and graphics</a></li>
+      <li><a href="#power-and-battery">Power and battery</a><ul><li><a href="#power-and-battery-power-profiles">Power profiles</a></li><li><a href="#power-and-battery-with-the-screen-off">With the screen off</a></li></ul></li>
+      <li><a href="#sound">Sound</a></li>
+      <li><a href="#apps-and-agora">Apps and Agora</a><ul><li><a href="#apps-and-agora-agora-the-app-store">Agora, the app store</a></li><li><a href="#apps-and-agora-install-from-a-file">Install from a file</a></li><li><a href="#apps-and-agora-android-apps">Android apps</a></li><li><a href="#apps-and-agora-x86-programs">x86 programs</a></li></ul></li>
+      <li><a href="#deskdroid-s-own-apps">DeskDroid's own apps</a><ul><li><a href="#deskdroid-s-own-apps-etherium">Etherium</a></li><li><a href="#deskdroid-s-own-apps-sasha">Sasha</a></li><li><a href="#deskdroid-s-own-apps-viper-fx">ViPER FX</a></li><li><a href="#deskdroid-s-own-apps-discord">Discord</a></li><li><a href="#deskdroid-s-own-apps-steam">Steam</a></li></ul></li>
+      <li><a href="#gaming">Gaming</a><ul><li><a href="#gaming-game-controls">Game controls</a></li><li><a href="#gaming-windows-games-with-wine">Windows games with Wine</a></li><li><a href="#gaming-linux-games">Linux games</a></li></ul></li>
+      <li><a href="#look-and-feel">Look and feel</a><ul><li><a href="#look-and-feel-dd-party">DD Party</a></li><li><a href="#look-and-feel-widgets">Widgets</a></li><li><a href="#look-and-feel-android-s-bars-and-the-cutout">Android's bars and the cutout</a></li></ul></li>
+      <li><a href="#privacy-and-security">Privacy and security</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a><ul><li><a href="#troubleshooting-save-a-log">Save a log</a></li><li><a href="#troubleshooting-common-problems">Common problems</a></li><li><a href="#troubleshooting-report-a-bug">Report a bug</a></li></ul></li>
+      <li><a href="#glossary">Glossary</a></li>
+    </ol>
+  </aside>
+  <main>
+    <header class="hero">
+      <span class="eyebrow">User manual</span>
+      <h1>DeskDroid User <span class="grad">Manual</span></h1>
+      <p>DeskDroid is a real KDE Plasma 6 desktop that runs on your Android phone. Use it right on the phone's screen with your fingers, or plug in a monitor, keyboard and mouse and use your phone like a computer. Linux apps from Flathub, DeskDroid's own apps and your Android apps all sit side by side on one desktop.</p>
+<p>This manual covers everything from the first start to troubleshooting. DeskDroid is in alpha and changes every week, so a few screens may look a little different from what's written here. The newest copy of this manual is always on the DeskDroid website.</p>
+<div class="tip"><b>Tip:</b> You can open this manual on the desktop at any time from <b>System Settings › System › About This Phone › Open the user manual</b>.</div>
+      <div class="meta"><span class="chip">16 chapters</span><span class="chip">Also in System Settings › About This Phone</span></div>
+    </header>
+    <section id="getting-started">
+      <h2><span class="n">01</span>Getting started</h2>
+<h3 id="getting-started-what-you-need">What you need</h3>
+<ul><li>An Android phone or tablet running Android 10 or newer, with a 64-bit (ARM64) processor.</li><li>Enough free storage for DeskDroid (the APK is about 250 MB, and it unpacks to more on first start), plus room for the apps you install. Big Flathub apps and their runtimes can take several hundred MB each.</li><li>Optional: a USB-C display adapter or dock, a keyboard and a mouse. Bluetooth keyboards and mice work too.</li></ul>
+<p>DeskDroid doesn't need root, and there's no Linux image to download. Everything is inside the one app.</p>
+<h3 id="getting-started-install-deskdroid">Install DeskDroid</h3>
+<ol><li>Download the newest APK from the DeskDroid releases page on GitHub (the <b>Download the alpha</b> button on the website).</li><li>Open the APK on your phone. If Android asks, allow your browser or file manager to install apps.</li><li>Open <b>DeskDroid</b>. The first time, it shows the setup checklist.</li></ol>
+<p>To update, install a newer APK over the old one. Your desktop, files and apps stay where they are.</p>
+<h3 id="getting-started-the-setup-checklist">The setup checklist</h3>
+<p>Android stops apps that run lots of programs in the background, and a desktop does exactly that. The checklist turns on what DeskDroid needs to run like a real computer. Tap each card to fix it. A card turns green once it's done.</p>
+<div class="tbl"><table><thead><tr><th>Item</th><th>What it does</th></tr></thead><tbody><tr><td>Child process limit</td><td>Stops Android from killing desktop programs when there are many of them. On Android 14 and newer, it's a switch in Developer options. On Android 12 and 13, it's fixed once with an ADB command, which the card copies for you.</td></tr><tr><td>Battery optimization</td><td>Lets DeskDroid run without Android putting it to sleep to save battery.</td></tr><tr><td>Background usage</td><td>Lets the desktop keep running when you switch to another app.</td></tr><tr><td>Status notification</td><td>The notification that keeps the desktop running.</td></tr><tr><td>DeskDroid desktop helper</td><td>An accessibility service that keeps Android's taskbar off the desktop, takes a monitor back from Android's desktop mode or DeX, and passes the Meta key and Alt+Tab to the desktop.</td></tr><tr><td>Share files with the desktop</td><td>All files access, so the desktop's Documents, Downloads, Pictures, Music and Videos are your phone's own folders.</td></tr><tr><td>Make DeskDroid your home screen</td><td>Recommended. Pressing Home takes you to your desktop.</td></tr></tbody></table></div>
+<p>There are also a few switches at the bottom:</p>
+<ul><li><b>Start on phone boot</b> warms the desktop up in the background so it opens instantly. It uses some battery and about 1 GB of memory.</li><li><b>Lock my desktop</b> asks for your fingerprint or PIN to open DeskDroid.</li><li><b>GPU for Linux apps</b> (experimental) lets Flathub apps draw with the phone's GPU. Turn it off if an app won't open. It applies the next time the desktop starts.</li></ul>
+<p>Android will make some of these permissions look scary. DeskDroid doesn't collect any data: the permissions are only used to make its features work. You can open the checklist again any time from DD Home's <b>Setup checklist</b> row.</p>
+<h3 id="getting-started-dd-home">DD Home</h3>
+<p>DD Home is the screen you see when you open the DeskDroid app (or when DeskDroid isn't your launcher).</p>
+<ul><li><b>Play on</b> picks where the desktop runs: <b>This phone</b> or <b>Monitor</b>.</li><li><b>Start desktop</b> starts the desktop. If DeskDroid is your home screen, it says <b>Go to desktop</b>. If the desktop is already running, it says <b>Desktop is running · tap to return</b>.</li><li><b>Quick settings</b> has the touch mode, your phone files and the setup checklist.</li><li>The <b>⚙</b> button opens Settings: touch mode, how fast the phone's touchpad screen goes black on a monitor, the setup checklist, the GPU report, phone files, Debug Mode and Save log.</li></ul>
+    </section>
+    <section id="the-desktop">
+      <h2><span class="n">02</span>The desktop</h2>
+<p>DeskDroid's desktop is KDE Plasma 6, the same desktop people use on Linux PCs, built for Android.</p>
+<h3 id="the-desktop-the-panel">The panel</h3>
+<p>The panel at the bottom of the screen has:</p>
+<ul><li><b>The start menu</b> on the left. Find any app by typing its name, or browse by category. Your Android apps are in it too, sorted by kind, and the power and session buttons are at the bottom.</li><li><b>The taskbar</b> with a button for each open window. Tap one to bring its window forward, or to minimize it if it's already in front.</li><li><b>The system tray</b> with the clock, battery, network, volume, notifications and the touch mode icon (a finger for Direct touch, a pointer for Touchpad).</li></ul>
+<h3 id="the-desktop-windows">Windows</h3>
+<p>Windows work as on a PC: drag the title bar to move one, drag an edge or corner to resize it, and use the buttons on the right of the title bar to minimize, maximize or close. Drag a window to a screen edge to snap it to that half of the screen.</p>
+<p>On the phone's screen, windows move up out of the way of the phone keyboard in portrait, and stay clear of the camera cutout in landscape.</p>
+<h3 id="the-desktop-files">Files</h3>
+<p>Dolphin is the file manager. With <b>Share files with the desktop</b> on, your Documents, Downloads, Pictures, Music and Videos folders are the phone's own, so a file you save on the desktop shows up in your Android apps and the other way round. The rest of the desktop's home folder (settings and app data) stays private to DeskDroid.</p>
+<p>To open a file in an Android app, right-click it and use <b>Open With</b>. In Konsole, <code>android-open &lt;file or link&gt;</code> does the same.</p>
+<h3 id="the-desktop-the-clipboard">The clipboard</h3>
+<p>The desktop and the phone share one clipboard. Copy text in a desktop app and paste it in an Android app, or the other way round.</p>
+<h3 id="the-desktop-system-settings">System Settings</h3>
+<p>System Settings is Plasma's own settings app, with DeskDroid's own pages added:</p>
+<ul><li><b>System › About This Phone</b>: your phone's Android version, memory, kernel and DeskDroid build, plus this manual.</li><li><b>Display &amp; Monitor › Display Settings</b>: scaling and graphics.</li><li><b>Gestures › Edge Swipes</b> and <b>Taps</b>: what each gesture does.</li><li><b>Input &amp; Output › Mouse &amp; Touchpad › Touchpad</b>: Enhanced Touchpad Mode.</li><li>Appearance, Wallpaper, Cursors, System Sounds, Splash Screen, Shortcuts and Accessibility work as on any Plasma desktop.</li></ul>
+<h3 id="the-desktop-the-terminal">The terminal</h3>
+<p>Konsole is a terminal. Type <code>help</code> for a list of commands. DeskDroid adds a few of its own:</p>
+<ul><li><code>android-open</code> opens a file or link in an Android app.</li><li><code>dd-log</code> saves DeskDroid's log (<code>dd-log -h</code> for more).</li><li><code>dd-power</code> shows what's using power right now.</li></ul>
+    </section>
+    <section id="touch-and-gestures">
+      <h2><span class="n">03</span>Touch and gestures</h2>
+<h3 id="touch-and-gestures-touch-modes">Touch modes</h3>
+<p>DeskDroid has two ways to use the phone's screen. Switch between them with a three-finger tap, the DD Menu, or DD Home's Settings.</p>
+<ul><li><b>Direct touch</b>: tap and drag right where you want, like a tablet.</li><li><b>Touchpad</b>: the screen is a laptop touchpad. One finger moves the pointer, a tap clicks, a two-finger tap right-clicks, and two fingers scroll.</li></ul>
+<p><b>Enhanced Touchpad Mode</b> (on by default) works like the buttons on a laptop touchpad. While one finger rests on the screen, a second finger's tap clicks and its hold holds the left button down for dragging. Three taps right-click. Two taps then a hold holds the right button. Turn it on or off in <b>System Settings › Input &amp; Output › Mouse &amp; Touchpad › Touchpad</b>.</p>
+<h3 id="touch-and-gestures-gestures">Gestures</h3>
+<p>These are the defaults. Each one can be changed or turned off in <b>System Settings › Gestures</b>.</p>
+<div class="tbl"><table><thead><tr><th>Gesture</th><th>What it does</th></tr></thead><tbody><tr><td>Swipe up from the bottom edge</td><td>Opens the app drawer</td></tr><tr><td>Swipe up from anywhere on the bare desktop</td><td>Opens the app drawer (Direct touch only)</td></tr><tr><td>Swipe up from the bottom-left corner</td><td>Shows or hides the phone keyboard</td></tr><tr><td>Three-finger tap</td><td>Switches between Direct touch and Touchpad</td></tr><tr><td>Three fingers swiped up</td><td>Maximizes the window you're using</td></tr><tr><td>Three fingers swiped down</td><td>Minimizes the front window into its taskbar button</td></tr><tr><td>Hold three fingers on a window</td><td>Grabs the window: move your fingers to drag it, and push it to an edge to snap it</td></tr><tr><td>Two thumbs swiped up from both bottom corners at once</td><td>Shows the game controls (from build 1135)</td></tr></tbody></table></div>
+<p>Other gestures you can set up: swipes in from the left, right and top edges, from the bottom-right corner, three fingers left or right, and a two-finger tap. Each one can open the DD Menu, the keyboard, the start menu, the Overview or the app drawer, switch touch mode, show the desktop, minimize all windows, switch to the last window, go back, move or resize a window, maximize, minimize, snap, go full screen or close a window.</p>
+<div class="tip"><b>Tip:</b> Three fingers down used to minimize every window. Since build 1134 it minimizes only the front window, which squashes into its taskbar button. If you prefer the old way, pick <b>Minimize all windows</b> for that gesture. It minimizes everything, and the same swipe brings it all back.</div>
+<p>The Gestures pages also have switches for the touch mode tray icon, the app drawer, opening the drawer from anywhere, the Private Space section, and how far up from the very bottom a bottom-edge swipe may start.</p>
+<h3 id="touch-and-gestures-the-phone-keyboard">The phone keyboard</h3>
+<p>Swipe up from the bottom-left corner to show or hide the phone's keyboard, or use the <b>Keyboard</b> tile in the DD Menu. In the DD Menu you can also choose:</p>
+<ul><li><b>Keyboard spawning</b>: <b>Manual</b> (only when you ask for it) or <b>Automatic</b> (whenever a text field gets focus).</li><li><b>Phone keyboard typing</b>: <b>Plain keys</b>, or <b>Swipe &amp; autocorrect</b> for swipe typing, autocorrect and suggestions from Gboard, SwiftKey and other keyboards.</li></ul>
+<p>The phone's Back gesture or button acts as Escape on the desktop.</p>
+<h3 id="touch-and-gestures-keyboard-and-mouse">Keyboard and mouse</h3>
+<p>Plug in a USB keyboard and mouse, or pair Bluetooth ones, and they work like on a PC. With the desktop helper on, the Meta (Windows) key opens the start menu and Alt+Tab switches windows instead of going to Android.</p>
+<p>In the DD Menu:</p>
+<ul><li><b>Mouse</b>: <b>Captured</b> keeps the pointer inside the desktop. <b>Free</b> lets it leave for Android.</li><li><b>Scroll behavior</b>: <b>Wheel</b> scrolls in steps like a mouse wheel. <b>Touchpad</b> scrolls smoothly.</li></ul>
+<p>Headset and Bluetooth play/pause buttons control whatever is playing on the desktop, even with the screen off.</p>
+    </section>
+    <section id="app-drawer">
+      <h2><span class="n">04</span>App drawer</h2>
+<p>Swipe up on the desktop to open the app drawer, a phone-style list of all your Android apps. The desktop blurs and shrinks behind it, and the drawer follows your finger. Pull it down to close it.</p>
+<ul><li><b>Search and A to Z</b>, like your phone's launcher. With a keyboard plugged in, just start typing.</li><li><b>Private Space</b> sits locked at the bottom. Unlock it with your phone's lock screen. Its apps stay out of Plasma's menu and search.</li><li><b>Work profile apps</b> get their own section with a Pause button.</li><li><b>Smart about scrolling</b>: a swipe on a window scrolls the window. With a window in front, the drawer only opens from near the bottom edge.</li><li><b>The DD Menu is its second page.</b> Swipe sideways to reach it. The pager at the bottom shows which page you're on, and the DD Menu's quick-access dock is pinned to the bottom of the apps page.</li></ul>
+<figure><img src="img/app-drawer.webp" alt="The DeskDroid app drawer on a phone" loading="lazy"><figcaption>The DeskDroid app drawer on a phone</figcaption></figure>
+    </section>
+    <section id="dd-menu">
+      <h2><span class="n">05</span>DD Menu</h2>
+<p>The DD Menu is DeskDroid's control center. It's the app drawer's second page: swipe up to open the drawer, then swipe sideways. It fills the screen with frosted glass over your desktop, and a swipe down closes it.</p>
+<figure><img src="img/ddmenu.webp" alt="The DD Menu" loading="lazy"><figcaption>The DD Menu</figcaption></figure>
+<h3 id="dd-menu-settings-in-the-dd-menu">Settings in the DD Menu</h3>
+<div class="tbl"><table><thead><tr><th>Section</th><th>Choices</th></tr></thead><tbody><tr><td>Touchscreen mode</td><td>Touchpad or Direct touch</td></tr><tr><td>Scroll behavior</td><td>Wheel or Touchpad</td></tr><tr><td>Mouse</td><td>Captured or Free</td></tr><tr><td>Panel display behavior</td><td>Full screen or Dodge cutouts, and Hide or Show Android bars</td></tr><tr><td>Keyboard spawning</td><td>Manual or Automatic</td></tr><tr><td>Phone keyboard typing</td><td>Plain keys or Swipe &amp; autocorrect</td></tr><tr><td>Display options</td><td>Screen may sleep or Keep awake, Full power or Save power when off, and the Scale stepper</td></tr><tr><td>Power profile</td><td>Power Save, Balanced or Performance, and whether Android's Battery Saver switches to Power Save</td></tr></tbody></table></div>
+<p><b>Scale</b> makes the whole desktop bigger or smaller. Tap − or +, or tap the number to go back to Auto. On a monitor, it sets that monitor's own scale.</p>
+<h3 id="dd-menu-tiles-and-buttons">Tiles and buttons</h3>
+<ul><li><b>Apps</b> opens the app drawer.</li><li><b>Keyboard</b> shows or hides the phone keyboard.</li><li><b>Agora (Software)</b> opens the app store.</li><li><b>Game controls</b> shows the on-screen gamepad (from build 1135).</li><li><b>Save log</b>, <b>Steam logs</b> and <b>More logs</b> show when Debug Mode is on. See Troubleshooting.</li><li><b>Restart desktop</b> restarts Plasma and all desktop apps.</li><li><b>End session</b> stops the desktop (only when DeskDroid isn't your home screen).</li><li><b>Lock private profile</b> locks your Private Space again while it's open.</li></ul>
+    </section>
+    <section id="monitors-and-peripherals">
+      <h2><span class="n">06</span>Monitors and peripherals</h2>
+<h3 id="monitors-and-peripherals-use-a-monitor">Use a monitor</h3>
+<ol><li>Connect the monitor with a USB-C display adapter or dock.</li><li>In DD Home, set <b>Play on</b> to <b>Monitor</b>, then tap <b>Start desktop</b>.</li></ol>
+<p>The desktop goes full screen on the monitor, and the phone becomes its touchpad, with edge swipes and a <b>MENU</b> button for the DD Menu. To save power, the phone's touchpad screen goes pure black after it sits untouched for a while (30 seconds by default, set in DD Home › Settings). A tap wakes it without clicking anything.</p>
+<p>Each monitor keeps its own scale. DeskDroid recognizes the monitor and remembers the scale you picked for it.</p>
+<h3 id="monitors-and-peripherals-android-s-desktop-mode-and-dex">Android's desktop mode and DeX</h3>
+<p>Phones with Samsung DeX or Android's own desktop mode may try to take over the monitor. With <b>Keep Android's desktop off the monitor</b> on (DD Home, with Play on set to Monitor) and the desktop helper turned on, DeskDroid draws above Android's taskbar and takes the monitor back by itself. <b>Take back the monitor</b> (or <b>Exit DeX and take the monitor</b>) does it right away.</p>
+<h3 id="monitors-and-peripherals-playing-without-a-keyboard">Playing without a keyboard</h3>
+<p>For games that need a keyboard and mouse when you have neither plugged in, use the on-screen game controls (see Gaming).</p>
+    </section>
+    <section id="display-and-graphics">
+      <h2><span class="n">07</span>Display and graphics</h2>
+<p>Open <b>System Settings › Display &amp; Monitor › Display Settings</b>.</p>
+<ul><li><b>Scaling</b>: the phone screen's scale (Automatic follows the phone's screen density) and each monitor's scale. <b>Reset all scaling</b> goes back to the defaults.</li><li><b>Graphics backend</b>: how Linux apps reach the phone's GPU. It applies to apps opened after the change. <b>DeskDroid HD</b> gives Linux apps desktop OpenGL on the phone's own driver, including PowerVR GPUs.</li><li><b>Show an FPS counter in Linux apps</b>, to see how fast a game or app is drawing.</li><li><b>Legacy Graphics Compatibility Fall back</b> makes Linux apps use Android GLES (virgl) as in earlier builds. Try it if an app draws wrong or won't open.</li></ul>
+<p>The <b>GPU report</b> in DD Home › Settings shows what your phone's GPU drivers offer. Share it when you report a graphics problem.</p>
+    </section>
+    <section id="power-and-battery">
+      <h2><span class="n">08</span>Power and battery</h2>
+<h3 id="power-and-battery-power-profiles">Power profiles</h3>
+<p>Pick a profile from the battery icon in the system tray (the active one has a check mark) or from the DD Menu. A profile applies to everything on the desktop: KWin, Plasma, Linux apps, Windows apps and Flatpaks.</p>
+<div class="tbl"><table><thead><tr><th>Profile</th><th>Frame rate</th><th>CPU cores</th><th>App CPU cap</th></tr></thead><tbody><tr><td>Performance</td><td>The screen's full rate</td><td>All</td><td>None</td></tr><tr><td>Balanced (default)</td><td>60 per second</td><td>All but the fastest</td><td>None</td></tr><tr><td>Power Save</td><td>30 per second</td><td>The efficient cores</td><td>1 core per app</td></tr></tbody></table></div>
+<p>Power Save also turns Plasma's animations off. Light work like music, downloads or a text editor never reaches the CPU cap. The sound server, sound effects, whatever is playing sound and the terminal are never slowed.</p>
+<p>In the DD Menu, <b>Power Save with Battery Saver</b> switches the desktop to Power Save while Android's Battery Saver is on.</p>
+<h3 id="power-and-battery-with-the-screen-off">With the screen off</h3>
+<p>With <b>Save power when off</b> (the default, in the DD Menu's Display options), the desktop winds down while the screen is off: windows stop drawing, apps get a tenth of a core, and animations stop. Music and downloads keep going without skips, and your profile comes back when you turn the screen on. Pick <b>Full power when off</b> to keep everything running at full speed.</p>
+<p>To see what's using power, run <code>dd-power</code> in Konsole. It also writes <code>~/power.log</code>.</p>
+    </section>
+    <section id="sound">
+      <h2><span class="n">09</span>Sound</h2>
+<p>The desktop has a full PipeWire sound server, like a modern Linux PC. Every Linux app's sound goes through it to your phone's speakers, headphones or Bluetooth.</p>
+<ul><li><b>EasyEffects</b> (from Agora) adds system-wide equalizers, limiters and other effects.</li><li><b>ViPER FX</b> is DeskDroid's own sound effects app, in Agora's DeskDroid Repo.</li><li><b>Now playing</b>: Bluetooth headphones, car stereos and watches show the desktop's song, and a media notification appears on the lock screen.</li><li><b>Media buttons</b> on a headset or Bluetooth device play and pause the desktop's player, even with the screen off.</li></ul>
+    </section>
+    <section id="apps-and-agora">
+      <h2><span class="n">10</span>Apps and Agora</h2>
+<h3 id="apps-and-agora-agora-the-app-store">Agora, the app store</h3>
+<p>Agora is DeskDroid's app store. Open it from the start menu, or the DD Menu's <b>Agora (Software)</b> tile.</p>
+<ul><li><b>DeskDroid Repo</b> has apps built for DeskDroid itself: KDE apps compiled for Android, DeskDroid's own apps like Sasha, ViPER FX, Etherium and the Wine runtime for games, and themes.</li><li><b>Flathub</b> has Flathub's own ARM64 Linux builds, repackaged without changes. Browse by category or search. DeskDroid's compatibility layer, ddmask, translates what they ask of Linux into what Android allows while they run. Apps marked x86-64 only are translated as they run through FEX-Emu, which is slower.</li><li><b>Dependencies</b> are the runtimes Flathub apps share (KDE, GNOME, Freedesktop and Mesa for graphics). Installing an app installs the runtimes it needs first.</li><li><b>Updates</b>: Agora checks for new versions each time it opens. An app with a newer version shows <b>Update</b>, and the tabs count the updates waiting.</li></ul>
+<p>The first start of a newly installed app can take a while, because it lays out its files once.</p>
+<h3 id="apps-and-agora-install-from-a-file">Install from a file</h3>
+<p>An <code>.adpk</code> is a DeskDroid package, like a <code>.deb</code> or <code>.rpm</code>: one file with the app, its menu entry and icons. Double-click one in Dolphin, or use <b>Install from a file…</b> in Agora. Install packages only from people you trust.</p>
+<h3 id="apps-and-agora-android-apps">Android apps</h3>
+<p>Your Android apps are in the start menu (sorted by kind), the app drawer, and the desktop's search. They open in their own windows next to your Linux apps. <b>Android widgets</b> can go on the desktop too: they're in Plasma's <b>Add Widgets</b> list with the Plasma widgets.</p>
+<h3 id="apps-and-agora-x86-programs">x86 programs</h3>
+<p>x86-64 programs run on your ARM phone. ddmask hands x86-64 Linux programs to Box64, and x86-64 Flatpak apps run through FEX-Emu. Windows programs run through Wine (see Gaming).</p>
+    </section>
+    <section id="deskdroid-s-own-apps">
+      <h2><span class="n">11</span>DeskDroid's own apps</h2>
+<h3 id="deskdroid-s-own-apps-etherium">Etherium</h3>
+<p>Etherium is DeskDroid's own build of Firefox. It has no Mozilla account or Sync and less data collection, and its sound plays through the desktop's sound server so your effects hear it. It supports WebGPU and shows what's playing to Bluetooth devices. Install it from Agora's DeskDroid Repo.</p>
+<h3 id="deskdroid-s-own-apps-sasha">Sasha</h3>
+<p>Sasha is DeskDroid's music player. Sasha DD Edition wears the DD Party look. Install it from Agora's DeskDroid Repo.</p>
+<h3 id="deskdroid-s-own-apps-viper-fx">ViPER FX</h3>
+<p>ViPER FX is a sound effects app for the whole desktop, with a limiter and level meters. Install it from Agora's DeskDroid Repo.</p>
+<h3 id="deskdroid-s-own-apps-discord">Discord</h3>
+<p>Discord comes as a native ARM64 package: Discord's own web app inside Electron's official ARM64 build, with nothing running through emulation. It needs the Freedesktop and Mesa runtimes, which Agora installs with it. It's still being tested on phones. If it closes in its first minute, it tries again in safer modes and remembers what worked, so the first start can take a couple of tries. Screen sharing doesn't work yet.</p>
+<h3 id="deskdroid-s-own-apps-steam">Steam</h3>
+<p>Steam is coming to DeskDroid, running through FEX-Emu. The <b>Steam Installation Assistant</b> in the start menu sets it up and has maintenance tools. Steam isn't ready for everyday use yet. Login, the store and the library are still in progress.</p>
+    </section>
+    <section id="gaming">
+      <h2><span class="n">12</span>Gaming</h2>
+<h3 id="gaming-game-controls">Game controls</h3>
+<p>From build 1135, DeskDroid has an on-screen gamepad for games that want a keyboard and mouse, such as Wine games, Steam games and native Linux games.</p>
+<ul><li><b>Show it</b>: swipe two thumbs up from both bottom corners at the same time, or tap <b>Game controls</b> in the DD Menu.</li><li><b>Hide it</b>: swipe three fingers down. While the controls are showing, that swipe hides them instead of minimizing the window.</li></ul>
+<p>The <b>joystick</b> on the left holds W, A, S and D (or the arrow keys) like fingers on a keyboard. Push past its edge, or double-tap it, to hold Shift or Ctrl to run. <b>Buttons</b> hold their keys while your finger stays on them. The rest of the screen is the <b>mouse</b>: in shooters and first-person games, dragging there turns the camera and a tap fires; in other games, a tap clicks where your finger is.</p>
+<p>The bar at the top has <b>ESC</b> and other quick keys, the preset's name (tap it to switch presets), a <b>keyboard</b> button, <b>hide</b>, and <b>edit</b>. In edit mode, drag any control to where your thumbs like it. Each preset remembers its own layout, and <b>Reset layout</b> puts it back.</p>
+<div class="tbl"><table><thead><tr><th>Preset</th><th>Made for</th></tr></thead><tbody><tr><td>WASD · Default</td><td>Most keyboard and mouse games: WASD, Shift to run, Space to jump, mouse buttons</td></tr><tr><td>Garry's Mod</td><td>Sprint, crouch, use, reload, the Q spawn menu and C context menu (they stay open until tapped again), undo, noclip, flashlight, chat</td></tr><tr><td>Minecraft</td><td>Sprint, sneak (stays on until tapped again), inventory, drop, swap hands, hotbar, chat, change view</td></tr><tr><td>SuperTuxKart</td><td>Steer with the stick, gas and brake buttons, fire, nitro, drift, look back, rescue</td></tr><tr><td>ReTux</td><td>Move, jump, action (grab, throw, run), sneak, menu and pause</td></tr></tbody></table></div>
+<h3 id="gaming-windows-games-with-wine">Windows games with Wine</h3>
+<p><b>Wine for games</b> (in Agora's DeskDroid Repo) runs Windows games through Wine and Box64. Game launchers set up particular games for you. <b>The Sims 3</b> launcher asks for your game folder and starts the game.</p>
+<h3 id="gaming-linux-games">Linux games</h3>
+<p>Games from Flathub, like SuperTuxKart, ReTux and Minecraft through Prism Launcher, install from Agora and use the phone's GPU.</p>
+    </section>
+    <section id="look-and-feel">
+      <h2><span class="n">13</span>Look and feel</h2>
+<h3 id="look-and-feel-dd-party">DD Party</h3>
+<p>DD Party is DeskDroid's own look: near-black surfaces, magenta, rainbow accents and chamfered corners, with a matching icon pack, window borders, splash screen, and terminal and editor colours. GTK apps match through a DD Party build of Breeze GTK, and Etherium wears it too. <b>DD Party Glass</b> blurs everything behind windows and panels. Change themes in <b>System Settings › Appearance</b>, as on any Plasma desktop.</p>
+<h3 id="look-and-feel-widgets">Widgets</h3>
+<p>Right-click the desktop and choose <b>Add Widgets</b> (or enter edit mode) to add Plasma widgets and Android widgets. Widgets only move in edit mode. The <b>Widget Pager</b> is a stack of widgets you swipe through, one per page: drag desktop widgets into it.</p>
+<h3 id="look-and-feel-android-s-bars-and-the-cutout">Android's bars and the cutout</h3>
+<p>In the DD Menu's <b>Panel display behavior</b>, choose <b>Hide Android bars</b> (swipe in from an edge to see them, and they hide again) or <b>Show Android bars</b>. Choose <b>Full screen</b> or <b>Dodge cutouts</b> to keep the panel clear of the camera cutout.</p>
+    </section>
+    <section id="privacy-and-security">
+      <h2><span class="n">14</span>Privacy and security</h2>
+<ul><li>DeskDroid doesn't collect any data. Its permissions are only used to make its features work.</li><li><b>Lock my desktop</b> (in the setup checklist) asks for your fingerprint or PIN to open DeskDroid.</li><li>Your <b>Private Space</b> stays locked in the app drawer, out of Plasma's menu and search. <b>Lock private profile</b> in the DD Menu locks it again.</li><li>The desktop's settings and app data stay private to DeskDroid. Only the shared folders are visible to other apps.</li><li>DeskDroid is free software under the GPL-3.0. Its source code is on GitHub.</li></ul>
+    </section>
+    <section id="troubleshooting">
+      <h2><span class="n">15</span>Troubleshooting</h2>
+<h3 id="troubleshooting-save-a-log">Save a log</h3>
+<p>When something goes wrong, a log shows what happened. Save one in any of these ways:</p>
+<ul><li>The <b>Save log</b> tile in the DD Menu (with Debug Mode on).</li><li><b>Save log to Downloads</b> in DD Home › Settings.</li><li><code>dd-log</code> in Konsole.</li></ul>
+<p>The log goes to your phone's Downloads folder as <code>deskdroid-log-&lt;date&gt;.txt</code>, and to <code>~/deskdroid-log.txt</code> on the desktop.</p>
+<p><b>Debug Mode</b> (DD Home › Settings, on by default) adds two more tiles to the DD Menu. <b>Steam logs</b> zips every Steam log into <code>Desktop/steam_logs.zip</code>. <b>More logs</b> zips the graphics layer's logs, plus any paths you paste, into <code>Desktop/logs.zip</code>.</p>
+<h3 id="troubleshooting-common-problems">Common problems</h3>
+<div class="tbl"><table><thead><tr><th>Problem</th><th>Try this</th></tr></thead><tbody><tr><td>The desktop closes by itself or apps disappear</td><td>Open the setup checklist and make sure every item is green, especially Child process limit and Battery optimization.</td></tr><tr><td>A Linux app won't open</td><td>Make sure its runtimes are installed in Agora. Look at <code>store/apps/&lt;app&gt;/run.log</code>. Turn off <b>GPU for Linux apps</b> in the setup checklist, or turn on <b>Legacy Graphics Compatibility Fall back</b> in Display Settings, then restart the desktop.</td></tr><tr><td>An app draws wrong or is very slow</td><td>Try the other graphics backend in Display Settings and check the GPU report. Switch to Balanced or Performance if you're on Power Save.</td></tr><tr><td>Everything is too big or too small</td><td>Use the Scale stepper in the DD Menu, or Display Settings.</td></tr><tr><td>The monitor shows Android's desktop instead of DeskDroid</td><td>Turn on the desktop helper, then tap <b>Take back the monitor</b> in DD Home.</td></tr><tr><td>The phone keyboard doesn't type into an app</td><td>Switch <b>Phone keyboard typing</b> to Plain keys in the DD Menu.</td></tr><tr><td>The desktop is stuck</td><td><b>Restart desktop</b> in the DD Menu restarts Plasma and every desktop app.</td></tr></tbody></table></div>
+<h3 id="troubleshooting-report-a-bug">Report a bug</h3>
+<p>Report problems on the DeskDroid GitHub page's Issues tab. Say what you did, what you expected and what happened, and attach a saved log. For graphics problems, add the GPU report.</p>
+    </section>
+    <section id="glossary">
+      <h2><span class="n">16</span>Glossary</h2>
+<div class="tbl"><table><thead><tr><th>Word</th><th>Meaning</th></tr></thead><tbody><tr><td>.adpk</td><td>A DeskDroid package file for one app</td></tr><tr><td>Agora</td><td>DeskDroid's app store</td></tr><tr><td>Box64</td><td>Runs x86-64 Linux programs on ARM</td></tr><tr><td>DD Home</td><td>The DeskDroid app's own screen on the phone</td></tr><tr><td>DD Menu</td><td>DeskDroid's control center, the app drawer's second page</td></tr><tr><td>ddmask</td><td>DeskDroid's compatibility layer that lets Linux apps run on Android</td></tr><tr><td>DeskDroid HD</td><td>DeskDroid's graphics layer for desktop OpenGL</td></tr><tr><td>FEX-Emu</td><td>Runs x86-64 programs and Flatpak apps on ARM</td></tr><tr><td>Flathub</td><td>The biggest store of Linux apps, packaged as Flatpaks</td></tr><tr><td>KWin</td><td>Plasma's window manager</td></tr><tr><td>Plasma</td><td>KDE's desktop: the panel, start menu, widgets and settings</td></tr><tr><td>Runtime</td><td>A shared set of libraries that Flathub apps need</td></tr><tr><td>Wine</td><td>Runs Windows programs</td></tr></tbody></table></div>
+    </section>
+  </main>
+</div>
+<div class="rainbow-line"></div>
+<footer>DeskDroid is free software under GPL-3.0. Not affiliated with KDE, Mozilla, Valve or Discord. · <a href="index.html">Back to the home page</a></footer>
+<script>
+(function(){
+  var links=[].slice.call(document.querySelectorAll('aside > ol > li > a'));
+  var secs=links.map(function(a){return document.getElementById(a.getAttribute('href').slice(1));});
+  function spy(){
+    var y=window.scrollY+120,cur=0;
+    secs.forEach(function(s,i){if(s&&s.offsetTop<=y)cur=i;});
+    links.forEach(function(a,i){a.classList.toggle('on',i===cur);});
+  }
+  window.addEventListener('scroll',spy,{passive:true});spy();
+  var btn=document.getElementById('menu-btn'),toc=document.getElementById('toc');
+  btn.addEventListener('click',function(){var o=toc.classList.toggle('open');btn.setAttribute('aria-expanded',o);});
+  toc.addEventListener('click',function(e){if(e.target.tagName==='A'){toc.classList.remove('open');btn.setAttribute('aria-expanded',false);}});
+})();
+</script>
+</body>
+</html>
